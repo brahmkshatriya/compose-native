@@ -1,0 +1,5 @@
+headers = linux_desktop.h
+headerFilter = linux_desktop.h
+package = linuxdesktop
+compilerOpts = -Isrc/nativeInterop/cinterop/include
+linkerOpts = -ldbus-1 -lstdc++

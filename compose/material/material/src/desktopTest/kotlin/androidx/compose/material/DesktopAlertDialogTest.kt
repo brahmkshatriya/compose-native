@@ -1,0 +1,184 @@
+/*
+ * Copyright 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package androidx.compose.material
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.IntrinsicMeasurable
+import androidx.compose.ui.layout.IntrinsicMeasureScope
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.layout.MeasurePolicy
+import androidx.compose.ui.layout.MeasureResult
+import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onParent
+import androidx.compose.ui.test.runDesktopComposeUiTest
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.navigationevent.DirectNavigationEventInput
+import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
+import com.google.common.truth.Truth.assertThat
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.JUnit4
+
+@RunWith(JUnit4::class)
+class DesktopAlertDialogTest {
+
+    @get:Rule
+    val rule = createComposeRule()
+
+    @Test
+    fun alignedToCenter_inPureWindow() {
+        val rootSize = IntSize(1024, 768) // default value
+        val dialogSize = IntSize(150, 150)
+        var location = Offset.Zero
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
+                AlertDialog(
+                    onDismissRequest = {},
+                    title = { Text("AlertDialog") },
+                    text = { Text("Apply?") },
+                    confirmButton = { Button(onClick = {}) { Text("Apply") } },
+                    modifier = Modifier.size(dialogSize.width.dp, dialogSize.height.dp)
+                        .onGloballyPositioned { location = it.positionInRoot() }
+                )
+            }
+        }
+        rule.runOnIdle {
+           assertThat(location).isEqualTo(calculateCenterPosition(rootSize, dialogSize))
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun `back event invokes onDismissRequest`() {
+        val dialogSize = IntSize(150, 150)
+        val navEventInput = DirectNavigationEventInput()
+
+        var dismissCount = 0
+        rule.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
+                val owner = LocalNavigationEventDispatcherOwner.current
+                LaunchedEffect(owner) {
+                    owner?.navigationEventDispatcher?.addInput(navEventInput)
+                }
+                AlertDialog(
+                    onDismissRequest = { dismissCount++ },
+                    title = { Text("AlertDialog") },
+                    text = { Text("Apply?") },
+                    confirmButton = { Button(onClick = {}) { Text("Apply") } },
+                    modifier = Modifier.size(dialogSize.width.dp, dialogSize.height.dp)
+                        .testTag("alertDialog")
+                )
+            }
+        }
+
+        navEventInput.backCompleted()
+
+        rule.runOnIdle {
+            assertEquals(1, dismissCount)
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class, ExperimentalMaterialApi::class)
+    @Test
+    fun `uses available width`() = runDesktopComposeUiTest(
+        width = 800,
+        height = 800
+    ){
+        setContent {
+            AlertDialog(
+                onDismissRequest = {},
+                confirmButton = {},
+                text = {
+                    Layout(
+                        modifier = Modifier.testTag("text_content"),
+                        measurePolicy = object: MeasurePolicy {
+                            override fun MeasureScope.measure(
+                                measurables: List<Measurable>,
+                                constraints: Constraints
+                            ): MeasureResult {
+                                val width = 200.coerceAtMost(constraints.maxWidth)
+                                return layout(width, 200){}
+                            }
+
+                            override fun IntrinsicMeasureScope.minIntrinsicWidth(
+                                measurables: List<IntrinsicMeasurable>,
+                                height: Int
+                            ): Int {
+                                return 100
+                            }
+                        }
+                    )
+                }
+            )
+        }
+
+        onNodeWithTag("text_content").assertWidthIsEqualTo(200.dp)
+    }
+
+    @Test
+    fun `applies modifier inside padding`() {
+        val dialogSize = DpSize(200.dp, 200.dp)
+
+        rule.setContent {
+            AlertDialog(
+                onDismissRequest = { },
+                title = { Text("Title") },
+                text = { Text("Text") },
+                buttons = {
+                    Box(Modifier.testTag("buttons"))
+                },
+                modifier = Modifier.size(dialogSize),
+            )
+        }
+
+
+        // We don't have direct access to the node holding the dialog contents, so we're forced to
+        // assume that the parent of the buttons is that node
+        with(rule.onNodeWithTag("buttons").onParent()){
+            assertWidthIsEqualTo(dialogSize.width)
+            assertHeightIsEqualTo(dialogSize.height)
+        }
+    }
+
+    private fun calculateCenterPosition(rootSize: IntSize, childSize: IntSize): Offset {
+        val x = (rootSize.width - childSize.width) / 2f
+        val y = (rootSize.height - childSize.height) / 2f
+        return Offset(x, y)
+    }
+}

@@ -1,0 +1,4 @@
+headers = app_webview.h
+headerFilter = app_webview.h
+package = app.webview
+compilerOpts = -Isrc/nativeInterop/cinterop/include

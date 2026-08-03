@@ -1,0 +1,14 @@
+# Bug component: 1070768
+
+# UI Team
+mount@google.com
+include /MOLECULE_UI_OWNERS
+
+# For Material related files
+soboleva@google.com
+
+# SubcomposeLayout + exception handling related
+ashikov@google.com
+
+# For text related files
+include /TEXT_OWNERS

@@ -1,0 +1,103 @@
+/*
+ * Copyright 2020 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * This file was created using the `create_project.py` script located in the
+ * `<AndroidX root>/development/project-creator` directory.
+ *
+ * Please use that script when creating a new project, rather than copying an existing project and
+ * modifying its settings.
+ */
+
+import androidx.build.SoftwareType
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
+import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFrameworkConfig
+import org.jetbrains.kotlin.konan.target.Family
+
+plugins {
+    id("AndroidXPlugin")
+    id("androidx.benchmark.darwin")
+}
+
+androidXMultiplatform {
+    // HACK: We consume the artifacts from this target in :collection:collection-benchmark-android
+    jvm()
+
+    // XCFrameworkConfig must always be called AndroidXDarwinBenchmarks
+    def xcf = new XCFrameworkConfig(project, "AndroidXDarwinBenchmarks")
+    ios {
+        binaries.framework {
+            // The module name must be AndroidXDarwinBenchmarks for the discovery to work.
+            baseName = "AndroidXDarwinBenchmarks"
+            export(project.project(":benchmark:benchmark-darwin"))
+            xcf.add(it)
+        }
+    }
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                implementation(project(":collection:collection"))
+            }
+        }
+
+        commonTest {
+            dependencies {
+                implementation(project(":collection:collection"))
+            }
+        }
+
+        darwinMain {
+            dependsOn(commonMain)
+            dependencies {
+                api(project(":benchmark:benchmark-darwin"))
+            }
+        }
+
+        targets.configureEach { target ->
+            if (target.platformType == KotlinPlatformType.native) {
+                target.compilations["main"].defaultSourceSet {
+                    def konanTargetFamily = target.konanTarget.family
+                    if (konanTargetFamily == Family.OSX || konanTargetFamily == Family.IOS) {
+                        dependsOn(darwinMain)
+                    } else {
+                        throw new GradleException("unknown native target ${target}")
+                    }
+                }
+                target.compilations.configureEach {
+                    compilerOptions.options.optIn.add("kotlinx.cinterop.ExperimentalForeignApi")
+                }
+            }
+        }
+    }
+}
+
+androidx {
+    name = "Collections Benchmarks (iOS)"
+    type = SoftwareType.BENCHMARK
+    inceptionYear = "2022"
+    description = "AndroidX Collections Benchmarks (iOS)"
+}
+
+darwinBenchmark {
+    xcodeGenConfigFile = new File(rootDir,
+            "benchmark/benchmark-darwin-xcode/projects/collection-benchmark-ios.yml")
+    xcodeProjectName = "collection-benchmark-ios"
+    scheme = "testapp-ios"
+    // To run locally switch to iOS 17.0 simulators
+    destination = "platform=iOS Simulator,name=iPhone 13,OS=15.2"
+    referenceSha.set(androidx.getReferenceSha())
+}

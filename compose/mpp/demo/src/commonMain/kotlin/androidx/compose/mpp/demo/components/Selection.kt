@@ -1,0 +1,164 @@
+/*
+ * Copyright 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package androidx.compose.mpp.demo.components
+
+import androidx.compose.foundation.ComposeFoundationFlags
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.contextmenu.builder.item
+import androidx.compose.foundation.text.contextmenu.modifier.appendTextContextMenuComponents
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Checkbox
+import androidx.compose.material.TextField
+import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.mpp.demo.textfield.ClearFocusBox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SelectionExample() {
+    var isAutoScrollEnabled by remember {
+        mutableStateOf(ComposeFoundationFlags.isSelectionAutoScrollEnabled)
+    }
+
+    var count by remember { mutableStateOf(0) }
+    val textState = remember {
+        mutableStateOf(
+            buildString {
+                repeat(3) {
+                    appendLine("Text line $it")
+                }
+            }
+        )
+    }
+    ClearFocusBox {
+        Column {
+            Button(onClick = { count++ }) {
+                Text("Outside Count: $count")
+            }
+
+            SelectionContainer(
+                Modifier.padding(24.dp).fillMaxWidth()
+                    .appendTextContextMenuComponents {
+                        separator()
+                        item(
+                            key = "custom item 1",
+                            label = "custom item 1",
+                            onClick = { close() }
+                        )
+                        item(
+                            key = "custom item 2",
+                            label = "custom item 2",
+                            onClick = { close() }
+                        )
+                        item(
+                            key = "custom item 3",
+                            label = "custom item 3",
+                            onClick = { close() }
+                        )
+                        item(
+                            key = "custom item 4",
+                            label = "custom item 4",
+                            onClick = { close() }
+                        )
+                        separator()
+                    }
+            ) {
+                Column {
+                    TextField(
+                        textState.value, { textState.value = it },
+                    )
+                    Text(
+                        "I'm a selection container. Double tap on word to select a word." +
+                            " Triple tap on content to select whole paragraph.\nAnother paragraph for testing.\n" +
+                            "And another one."
+                    )
+                    Row {
+                        DisableSelection {
+                            Button(onClick = { count++ }) {
+                                Text("DisableSelection Count: $count")
+                            }
+                        }
+                        Button(onClick = { count++ }) {
+                            Text("SelectionContainer Count: $count")
+                        }
+                    }
+                    Text("I'm another Text() block. Let's try to select me!")
+                    Text("I'm yet another Text() with multiparagraph structure block.\nLet's try to select me!")
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 16.dp)
+            ) {
+                Checkbox(
+                    checked = isAutoScrollEnabled,
+                    onCheckedChange = { checked ->
+                        isAutoScrollEnabled = checked
+                        // Mutate the global Compose flag directly
+                        ComposeFoundationFlags.isSelectionAutoScrollEnabled = checked
+                    }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(text = "isSelectionAutoScrollEnabled", style = MaterialTheme.typography.bodyLarge)
+            }
+
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+
+            Column(
+                Modifier
+                    .height(100.dp)
+                    .padding(2.dp)
+                    .border(1.dp, Color.Blue)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = (1..100).joinToString("\n") { "[$it] Select text and scroll" },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+    }
+}

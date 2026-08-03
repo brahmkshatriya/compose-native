@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+task_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "${1:-build}" in
+    build|assemble|linkReleaseExecutableLinuxX64)
+        exec "$task_root/scripts/build.sh"
+        ;;
+    run|runReleaseExecutableLinuxX64)
+        exec "$task_root/scripts/run.sh"
+        ;;
+    bootstrap)
+        exec "$task_root/scripts/bootstrap.sh"
+        ;;
+    *)
+        echo "Supported tasks: build, run, bootstrap" >&2
+        exit 2
+        ;;
+esac

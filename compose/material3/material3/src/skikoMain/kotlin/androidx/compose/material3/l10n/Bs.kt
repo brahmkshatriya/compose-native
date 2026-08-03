@@ -1,0 +1,102 @@
+/*
+ * Copyright 2025 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package androidx.compose.material3.l10n
+
+import androidx.compose.material3.internal.Strings
+import androidx.compose.material3.internal.Translations
+
+@Suppress("UnusedReceiverParameter", "DuplicatedCode")
+internal fun Translations.bs() = mapOf(
+    Strings.NavigationMenu to "Meni za navigaciju",
+    Strings.ExposedDropdownMenu to "Padajući meni",
+    Strings.CloseDrawer to "Zatvaranje navigacionog menija",
+    Strings.CloseSheet to "Zatvaranje tabele",
+    Strings.DefaultErrorMessage to "Pogrešan unos",
+    Strings.SliderRangeStart to "Početak raspona",
+    Strings.SliderRangeEnd to "Kraj raspona",
+    Strings.ButtonGroupMoreOptions to "Više opcija",
+    Strings.Dialog to "Dijaloški okvir",
+    Strings.MenuExpanded to "Prošireno",
+    Strings.MenuCollapsed to "Suženo",
+    Strings.ToggleDropdownMenu to "Uključivanje/isključivanje padajućeg menija",
+    Strings.SnackbarDismiss to "Odbacivanje",
+    Strings.SnackbarPaneTitle to "Obavještenje",
+    Strings.SearchBarSearch to "Pretraživanje",
+    Strings.SuggestionsAvailable to "Prijedlozi su u nastavku",
+    Strings.DatePickerTitle to "Odabir datuma",
+    Strings.DatePickerHeadline to "Odabrani datum",
+    Strings.DatePickerSwitchToYearSelection to "Prebacivanje na odabir godine",
+    Strings.DatePickerSwitchToDaySelection to "Prevucite da odaberete godinu ili dodirnite da se vratite na odabir dana",
+    Strings.DatePickerSwitchToNextMonth to "Promjena na sljedeći mjesec",
+    Strings.DatePickerSwitchToPreviousMonth to "Promjena na prethodni mjesec",
+    Strings.DatePickerNavigateToYearDescription to "Odlazak na %1\$s. godinu",
+    Strings.DatePickerHeadlineDescription to "Trenutni odabir: %1\$s",
+    Strings.DatePickerNoSelectionDescription to "Ništa",
+    Strings.DatePickerTodayDescription to "Danas",
+    Strings.DatePickerYearPickerPaneTitle to "Birač godine je vidljiv",
+    Strings.DateInputTitle to "Odabir datuma",
+    Strings.DateInputHeadline to "Unesen je datum",
+    Strings.DateInputLabel to "Datum",
+    Strings.DateInputHeadlineDescription to "Unesen je datum: %1\$s",
+    Strings.DateInputNoInputDescription to "Ništa",
+    Strings.DateInputInvalidNotAllowed to "Datum nije dozvoljen: %1\$s",
+    Strings.DateInputInvalidForPattern to "Datumi se ne podudaraju s očekivanim obrascem: %1\$s",
+    Strings.DateInputInvalidYearRange to "Datum je izvan očekivanog raspona %1\$s – %2\$s",
+    Strings.DatePickerSwitchToCalendarMode to "Prebacivanje na način rada unosa kalendara",
+    Strings.DatePickerSwitchToInputMode to "Prebacivanje na način rada unosa teksta",
+    Strings.DatePickerScrollToShowLaterYears to "Kliznite da se prikažu kasnije godine",
+    Strings.DatePickerScrollToShowEarlierYears to "Kliznite da se prikažu ranije godine",
+    Strings.DateRangePickerTitle to "Odabir datuma",
+    Strings.DateRangePickerStartHeadline to "Datum početka",
+    Strings.DateRangePickerEndHeadline to "Datum završetka",
+    Strings.DateRangePickerScrollToShowNextMonth to "Kliznite da se prikaže sljedeći mjesec",
+    Strings.DateRangePickerScrollToShowPreviousMonth to "Kliznite da se prikaže prethodni mjesec",
+    Strings.DateRangePickerDayInRange to "U rasponu",
+    Strings.DateRangeInputTitle to "Unos datuma",
+    Strings.DateRangeInputInvalidRangeInput to "Nevažeći unos raspona datuma",
+    Strings.BottomSheetPaneTitle to "Donja tabela",
+    Strings.BottomSheetDragHandleDescription to "Ručica za prevlačenje",
+    Strings.BottomSheetPartialExpandDescription to "Sužavanje donje tabele",
+    Strings.BottomSheetDismissDescription to "Odbacivanje donje tabele",
+    Strings.BottomSheetExpandDescription to "Proširivanje donje tabele",
+    Strings.FloatingToolbarCollapse to "Sužavanje alatne trake",
+    Strings.FloatingToolbarExpand to "Proširivanje alatne trake",
+    Strings.FloatingToolbarMoreOptions to "Više opcija",
+    Strings.TooltipPaneDescription to "Skočni opis",
+    Strings.TooltipLongPressLabel to "Prikaz skočnog opisa",
+    Strings.TimePickerPM to "poslijepodne",
+    Strings.TimePickerAM to "prijepodne",
+    Strings.TimePickerPeriodToggle to "Odaberite prijepodne ili poslijepodne",
+    Strings.TimePickerHourSelection to "Odaberite sate",
+    Strings.TimePickerMinuteSelection to "Odaberite minute",
+    Strings.TimePickerHourSuffix to "%1\$d h",
+    Strings.TimePicker24HourSuffix to "%1\$d h",
+    Strings.TimePickerMinuteSuffix to "%1\$d min",
+    Strings.TimePickerMinute to "Minuta",
+    Strings.TimePickerHour to "Sat",
+    Strings.TimePickerMinuteTextField to "za minute",
+    Strings.TimePickerHourTextField to "za sat",
+    Strings.TimePickerToggleKeyboard to "Prebacivanje na način rada unosa teksta",
+    Strings.TimePickerToggleTouch to "Prebacivanje na način rada za sat",
+    Strings.TimePickerDialogTitle to "Odaberite vrijeme",
+    Strings.TimeInputDialogTitle to "Unesite vrijeme",
+    Strings.TimePickerMinuteError to "Minuta mora biti 0–59",
+    Strings.TimePickerHourError to "Sat mora biti 1–12",
+    Strings.TimePicker24HourError to "Sat mora biti 0–23",
+    Strings.CloseRail to "Zatvaranje trake",
+    Strings.WideNavigationRailPaneTitle to "Traka za navigaciju",
+)

@@ -1,0 +1,994 @@
+/*
+ * Copyright 2023 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package androidx.compose.ui.node
+
+import androidx.collection.MutableIntObjectMap
+import androidx.collection.mutableIntObjectMapOf
+import androidx.compose.runtime.collection.mutableVectorOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
+import androidx.compose.runtime.retain.RetainedValuesStore
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.ComposeUiFlags
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.SessionMutex
+import androidx.compose.ui.areWindowInsetsRulersEnabled
+import androidx.compose.ui.autofill.AutofillManager
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusOwner
+import androidx.compose.ui.focus.FocusOwnerImpl
+import androidx.compose.ui.focus.PlatformFocusOwner
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.graphics.platform.PlatformGraphicsRegistry
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerButtons
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerIconService
+import androidx.compose.ui.input.pointer.PointerInputEvent
+import androidx.compose.ui.input.pointer.PointerInputEventProcessor
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.PositionCalculator
+import androidx.compose.ui.input.rotary.RotaryScrollEvent
+import androidx.compose.ui.layout.RootMeasurePolicy
+import androidx.compose.ui.layout.RulerProviderModifierElement
+import androidx.compose.ui.modifier.ModifierLocalManager
+import androidx.compose.ui.platform.DefaultAccessibilityManager
+import androidx.compose.ui.platform.DelegatingSoftwareKeyboardController
+import androidx.compose.ui.platform.PlatformContext
+import androidx.compose.ui.platform.PlatformRootForTest
+import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.platform.PlatformTextInputSessionScope
+import androidx.compose.ui.platform.PlatformWindowInsets
+import androidx.compose.ui.platform.createPlatformClipboard
+import androidx.compose.ui.platform.createPlatformClipboardManager
+import androidx.compose.ui.scene.ComposeScene
+import androidx.compose.ui.scene.ComposeSceneInputHandler
+import androidx.compose.ui.scene.ComposeScenePointer
+import androidx.compose.ui.scene.PointerEventResult
+import androidx.compose.ui.semantics.EmptySemanticsModifier
+import androidx.compose.ui.semantics.SemanticsOwner
+import androidx.compose.ui.semantics.isTraversalGroup
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.spatial.RectManager
+import androidx.compose.ui.text.InternalTextApi
+import androidx.compose.ui.text.font.createFontFamilyResolver
+import androidx.compose.ui.text.input.TextInputService
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.bounds
+import androidx.compose.ui.unit.round
+import androidx.compose.ui.unit.toMaxConstraints
+import androidx.compose.ui.unit.toRect
+import androidx.compose.ui.util.fastAll
+import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.util.trace
+import androidx.compose.ui.viewinterop.InteropPointerInputModifier
+import androidx.compose.ui.viewinterop.InteropView
+import kotlin.concurrent.Volatile
+import kotlin.coroutines.CoroutineContext
+import kotlin.math.max
+import kotlin.math.min
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+
+/**
+ * Owner of root [LayoutNode].
+ *
+ * It hides [Owner]/[RootForTest] implementations, but provides everything that
+ * [ComposeScene] need.
+ */
+internal class RootNodeOwner(
+    density: Density,
+    layoutDirection: LayoutDirection,
+    size: IntSize?,
+    coroutineContext: CoroutineContext,
+    val platformContext: PlatformContext,
+    private val inputHandler: ComposeSceneInputHandler,
+    private val invalidate: () -> Unit,
+    onChangedExecutor: (callback: () -> Unit) -> Unit,
+) {
+    val focusOwner: FocusOwner get() = _owner.focusOwner
+    val dragAndDropOwner = DragAndDropOwner(platformContext.dragAndDropManager)
+
+    private val rootSemanticsNode = EmptySemanticsModifier()
+    private val snapshotObserver = OwnerSnapshotObserver(onChangedExecutor)
+    private val graphicsContext = PlatformGraphicsRegistry.requireCurrent().createGraphicsContext()
+    private val coroutineScope =
+        CoroutineScope(coroutineContext + Job(parent = coroutineContext[Job]))
+
+    private val _owner = OwnerImpl(layoutDirection, coroutineContext)
+    val owner: Owner get() = _owner
+
+    val semanticsOwner get() = owner.semanticsOwner
+    var size: IntSize? = size
+        set(value) {
+            if (field != value) {
+                field = value
+                onRootSizeChanged(value)
+            }
+        }
+    var density by mutableStateOf(density)
+
+    private var _layoutDirection by mutableStateOf(layoutDirection)
+    var layoutDirection: LayoutDirection
+        get() = _layoutDirection
+        set(value) {
+            _layoutDirection = value
+            owner.root.layoutDirection = value
+        }
+
+    @Volatile
+    var hasPendingMeasureOrLayout: Boolean = true
+        private set
+
+    @Volatile
+    var hasPendingDraw: Boolean = true
+        private set
+
+    private val rootForTest by lazy(LazyThreadSafetyMode.NONE) {
+        PlatformRootForTestImpl()
+    }
+    private val ownedLayerManager = OwnedLayerManagerImpl()
+    private val pointerInputEventProcessor = PointerInputEventProcessor(owner.root)
+    private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(owner.root)
+    private var isDisposed = false
+
+    private var positionInWindow: Offset? = null
+    private var positionOnScreen: Offset? = null
+
+    // TODO: Android assumes matrix for some APIs, so we need store something to avoid extra
+    //  allocations. Clean up this APIs and remove it.
+    private val identityMatrix = Matrix()
+
+    init {
+        snapshotObserver.startObserving()
+        owner.root.attach(owner)
+        platformContext.rootForTestListener?.onRootForTestCreated(rootForTest)
+        onRootSizeChanged(size)
+        updatePositionCacheAndDispatch()
+        coroutineScope.launch {
+            snapshotFlow { platformContext.windowInfo.containerSize }
+                .collect { updatePositionCacheAndDispatch(hasContainerSizeChanged = true) }
+        }
+    }
+
+    fun dispose() {
+        require(!isDisposed) { "RootNodeOwner is already disposed" }
+        coroutineScope.cancel()
+        platformContext.rootForTestListener?.onRootForTestDisposed(rootForTest)
+        snapshotObserver.stopObserving()
+        graphicsContext.close()
+        _owner.dispose()
+        // we don't need to call root.detach() because root will be garbage collected
+        isDisposed = true
+    }
+
+    private var needClearObservations = false
+    private fun clearInvalidObservations() {
+        if (needClearObservations) {
+            snapshotObserver.clearInvalidObservations()
+            needClearObservations = false
+        }
+    }
+
+    /**
+     * Measures the Owner's content with given [constraints] and returns the resulting size.
+     */
+    fun measureContentWithConstraints(constraints: Constraints): IntSize {
+        require(!isDisposed) { "RootNodeOwner is already disposed" }
+        return measuringRootWithConstraints(constraints) {
+            val outerCoordinator = it.outerCoordinator
+            IntSize(outerCoordinator.measuredWidth, outerCoordinator.measuredHeight)
+        }
+    }
+
+    /**
+     * Provides a way to measure Owner's content in given [constraints]
+     * Draw/pointer and other callbacks won't be called here like in [measureAndLayout] functions
+     */
+    private fun <T> measuringRootWithConstraints(
+        constraints: Constraints,
+        block: (LayoutNode) -> T
+    ): T {
+        require(!isDisposed) { "RootNodeOwner is already disposed" }
+        return try {
+            // TODO: is it possible to measure without reassigning root constraints?
+            measureAndLayoutDelegate.updateRootConstraints(constraints)
+            measureAndLayoutDelegate.measureOnly()
+            block(owner.root)
+        } finally {
+            measureAndLayoutDelegate.updateRootConstraints(size.toMaxConstraints())
+        }
+    }
+
+    fun measureAndLayout() {
+        require(!isDisposed) { "RootNodeOwner is already disposed" }
+        hasPendingMeasureOrLayout = false
+        owner.measureAndLayout(sendPointerUpdate = true)
+        updatePositionCacheAndDispatch()
+    }
+
+    private fun updatePositionCacheAndDispatch(hasContainerSizeChanged: Boolean = false) {
+        val positionOnScreen = platformContext.convertLocalToScreenPosition(Offset.Zero)
+        val hasPositionOnScreenChanged = if (platformContext.hasNonTranslationComponents) {
+            this.positionOnScreen = null
+            true // Always invalidate in case of rotation, skew, etc.
+        } else if (positionOnScreen != this.positionOnScreen) {
+            this.positionOnScreen = positionOnScreen
+            true
+        } else false
+
+        val positionInWindow = platformContext.convertLocalToWindowPosition(Offset.Zero)
+        val hasPositionInWindowChanged = if (platformContext.hasNonTranslationComponents) {
+            this.positionInWindow = null
+            true // Always invalidate in case of rotation, skew, etc.
+        } else if (positionInWindow != this.positionInWindow) {
+            this.positionInWindow = positionInWindow
+            true
+        } else false
+
+        if (hasPositionOnScreenChanged || hasPositionInWindowChanged) {
+            owner.root.layoutDelegate.measurePassDelegate.requestLayoutIfCoordinatesAreUsedAndNotifyChildren()
+        }
+        val containerSize = platformContext.windowInfo.containerSize
+        owner.rectManager.updateOffsets(
+            screenOffset = positionOnScreen.round(),
+            windowOffset = positionInWindow.round(),
+            viewToWindowMatrix = identityMatrix, // TODO: Replace viewToWindowMatrix to delegates
+            windowWidth = containerSize.width,
+            windowHeight = containerSize.height,
+        )
+        measureAndLayoutDelegate.dispatchOnPositionedCallbacks(
+            forceDispatch = hasPositionOnScreenChanged || hasPositionInWindowChanged
+        )
+        owner.rectManager.dispatchCallbacks()
+        if (hasPositionInWindowChanged || hasContainerSizeChanged) {
+            graphicsContext.setLightingInfo(
+                canvasOffset = positionInWindow,
+                density = density,
+                containerSize = containerSize
+            )
+        }
+    }
+
+    fun invalidatePositionInWindow() {
+        require(!isDisposed) { "RootNodeOwner is already disposed" }
+        updatePositionCacheAndDispatch()
+    }
+
+    fun invalidatePositionOnScreen() {
+        require(!isDisposed) { "RootNodeOwner is already disposed" }
+        updatePositionCacheAndDispatch()
+    }
+
+    fun draw(canvas: Canvas) {
+        require(!isDisposed) { "RootNodeOwner is already disposed" }
+        trace("RootNodeOwner:draw") {
+            hasPendingDraw = false
+            ownedLayerManager.draw(canvas)
+            clearInvalidObservations()
+            owner.rectManager.dispatchCallbacks()
+        }
+    }
+
+    private fun requestMeasureAndLayout() {
+        hasPendingMeasureOrLayout = true
+        invalidate()
+    }
+
+    private fun requestDraw() {
+        hasPendingDraw = true
+        invalidate()
+    }
+
+    fun setRootModifier(modifier: Modifier) {
+        owner.root.modifier = _owner.rootModifier then modifier
+    }
+
+    private fun onRootSizeChanged(size: IntSize?) {
+        measureAndLayoutDelegate.updateRootConstraints(size.toMaxConstraints())
+        if (measureAndLayoutDelegate.hasPendingMeasureOrLayout) {
+            requestMeasureAndLayout()
+        }
+    }
+
+    fun onCancelPointerInput() {
+        pointerInputEventProcessor.processCancel()
+    }
+
+    fun onPointerInput(event: PointerInputEvent): PointerEventResult {
+        if (event.button != null) {
+            platformContext.inputModeManager.requestInputMode(InputMode.Touch)
+        }
+        val isInBounds = event.eventType != PointerEventType.Exit &&
+            event.pointers.fastAll { isInBounds(it.position) }
+        val result = pointerInputEventProcessor.process(
+            event,
+            IdentityPositionCalculator,
+            isInBounds = isInBounds
+        )
+        return PointerEventResult(value = result.value)
+    }
+
+    fun onKeyEvent(keyEvent: KeyEvent): Boolean {
+        return focusOwner.dispatchKeyEvent(keyEvent) || handleFocusKeys(keyEvent)
+    }
+
+    private fun handleFocusKeys(keyEvent: KeyEvent): Boolean {
+        // TODO(b/177931787) : Consider creating a KeyInputManager like we have for FocusManager so
+        //  that this common logic can be used by all owners.
+        val focusDirection = getFocusDirection(keyEvent)
+        if (focusDirection == null || keyEvent.type != KeyEventType.KeyDown) return false
+
+        platformContext.inputModeManager.requestInputMode(InputMode.Keyboard)
+        // Consume the key event if we moved focus.
+        return focusOwner.moveFocus(focusDirection)
+    }
+
+    private fun getFocusDirection(keyEvent: KeyEvent): FocusDirection? {
+        return when (keyEvent.key) {
+            Key.Tab -> if (keyEvent.isShiftPressed) FocusDirection.Previous else FocusDirection.Next
+            Key.DirectionCenter -> FocusDirection.Enter
+            Key.Back -> FocusDirection.Exit
+            else -> null
+        }
+    }
+
+    fun onRotaryEvent(event: RotaryScrollEvent): Boolean {
+        return _owner.focusOwner.dispatchRotaryEvent(event)
+    }
+
+    /**
+     * Perform hit test and return the [InteropView] associated with the resulting
+     * [PointerInputModifierNode] node in case it is a [Modifier.pointerInteropFilter],
+     * otherwise null.
+     */
+    fun hitTestInteropView(position: Offset): InteropView? {
+        val result = HitTestResult()
+        owner.root.hitTest(position, result, isInLayer = true)
+
+        val last = result.lastOrNull() as? BackwardsCompatNode
+        val node = last?.element as? InteropPointerInputModifier
+        return node?.interopView
+    }
+
+    private fun isInBounds(localPosition: Offset): Boolean =
+        size?.bounds(localPosition) ?: true
+
+    private fun calculateBoundsInWindow(): Rect? {
+        val rect = size?.toRect() ?: return null
+        val p0 = platformContext.convertLocalToWindowPosition(Offset(rect.left, rect.top))
+        val p1 = platformContext.convertLocalToWindowPosition(Offset(rect.left, rect.bottom))
+        val p3 = platformContext.convertLocalToWindowPosition(Offset(rect.right, rect.top))
+        val p4 = platformContext.convertLocalToWindowPosition(Offset(rect.right, rect.bottom))
+
+        val left = min(min(p0.x, p1.x), min(p3.x, p4.x))
+        val top = min(min(p0.y, p1.y), min(p3.y, p4.y))
+        val right = max(max(p0.x, p1.x), max(p3.x, p4.x))
+        val bottom = max(max(p0.y, p1.y), max(p3.y, p4.y))
+        return Rect(left, top, right, bottom)
+    }
+
+    private inner class OwnerImpl(
+        layoutDirection: LayoutDirection,
+        override val coroutineContext: CoroutineContext,
+    ) : Owner {
+
+        private val onPointerUpdateCallback = inputHandler::onPointerUpdate
+        private val platformFocusOwner = object : PlatformFocusOwner {
+            override fun requestOwnerFocus(
+                focusDirection: FocusDirection?,
+                previouslyFocusedRect: Rect?
+            ): Boolean {
+                return platformContext.requestFocus()
+            }
+
+            override fun clearOwnerFocus() {
+                platformContext.parentFocusManager.clearFocus(true)
+            }
+
+            // onMoveFocusInterop's purpose is to move focus inside embed interop views.
+            // Another logic is used in our child-interop views (SwingPanel, etc)
+            override fun moveFocusInChildren(focusDirection: FocusDirection) = false
+
+            override fun getEmbeddedViewFocusRect(): Rect? = null
+        }
+
+        override val focusOwner: FocusOwner = FocusOwnerImpl(platformFocusOwner, this)
+
+        val rootModifier = Modifier
+            .rulerProvider(platformContext.windowInsets)
+            .then(EmptySemanticsElement(rootSemanticsNode))
+            .focusProperties {
+                onExit = {
+                    // if focusDirection is forward/backward,
+                    // it will move the focus after/before ComposePanel
+                    if (platformContext.parentFocusManager.moveFocus(requestedFocusDirection)) {
+                        cancelFocusChange()
+                    }
+                }
+            }
+            .then(focusOwner.modifier)
+            .then(dragAndDropOwner.modifier)
+            .semantics {
+                // This makes the reported role of the root node "PANEL", which is ignored by VoiceOver
+                // (which is what we want).
+                isTraversalGroup = true
+            }
+
+        override val root = LayoutNode().also {
+            it.layoutDirection = layoutDirection
+            it.measurePolicy = RootMeasurePolicy
+            it.modifier = rootModifier
+        }
+
+        override val sharedDrawScope = LayoutNodeDrawScope()
+        override val layoutNodes: MutableIntObjectMap<LayoutNode> = mutableIntObjectMapOf()
+        override val rootForTest get() = this@RootNodeOwner.rootForTest
+        override val hapticFeedBack get() = platformContext.hapticFeedback
+        override val inputModeManager get() = platformContext.inputModeManager
+        override val clipboardManager = createPlatformClipboardManager()
+        override val clipboard = createPlatformClipboard()
+        override val accessibilityManager = DefaultAccessibilityManager()
+        override val graphicsContext get() = this@RootNodeOwner.graphicsContext
+        override val textToolbar get() = platformContext.textToolbar
+
+        @Suppress("DEPRECATION")
+        override val autofillTree = androidx.compose.ui.autofill.AutofillTree()
+
+        @Suppress("DEPRECATION")
+        override val autofill: androidx.compose.ui.autofill.Autofill?
+            get() = null
+
+        // TODO https://youtrack.jetbrains.com/issue/CMP-1572
+        override val autofillManager: AutofillManager? get() = null
+        override val density get() = this@RootNodeOwner.density
+        override val textInputService by lazy(LazyThreadSafetyMode.NONE) {
+            TextInputService(platformContext.textInputService)
+        }
+        override val softwareKeyboardController by lazy(LazyThreadSafetyMode.NONE) {
+            DelegatingSoftwareKeyboardController(textInputService)
+        }
+
+        private val textInputSessionMutex = SessionMutex<TextInputSession>()
+
+        private inner class TextInputSession(
+            coroutineScope: CoroutineScope,
+        ) : PlatformTextInputSessionScope, CoroutineScope by coroutineScope {
+            private val innerSessionMutex = SessionMutex<Nothing?>()
+
+            @OptIn(InternalTextApi::class)
+            override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
+                innerSessionMutex.withSessionCancellingPrevious<Nothing>(
+                    sessionInitializer = { null }
+                ) {
+                    coroutineScope {
+                        // Currently TextInputService is used for keyboard show/hide actions and for
+                        // backward compatibility by the LocalTextInputService.
+                        // startInput and stopInput calls are required to properly configure the service
+                        // and allow it to pass keyboard show/hide calls to the PlatformTextInputService.
+                        launch(start = CoroutineStart.UNDISPATCHED) {
+                            suspendCancellableCoroutine<Nothing> {
+                                textInputService.startInput()
+                                it.invokeOnCancellation {
+                                    textInputService.stopInput()
+                                }
+                            }
+                        }
+                        platformContext.startInputMethod(request)
+                    }
+                }
+            }
+        }
+
+        override suspend fun textInputSession(
+            session: suspend PlatformTextInputSessionScope.() -> Nothing
+        ): Nothing {
+            textInputSessionMutex.withSessionCancellingPrevious<Nothing>(
+                sessionInitializer = ::TextInputSession,
+                session = session
+            )
+        }
+
+        override val dragAndDropManager = this@RootNodeOwner.dragAndDropOwner
+
+        override val pointerIconService by lazy(LazyThreadSafetyMode.NONE) {
+            PointerIconServiceImpl()
+        }
+
+        override val semanticsOwner = SemanticsOwner(root, rootSemanticsNode, layoutNodes)
+        override val windowInfo get() = platformContext.windowInfo
+        override val retainedValuesStore: RetainedValuesStore get() = ForgetfulRetainedValuesStore
+        override val rectManager = RectManager(layoutNodes)
+
+        @Suppress("OVERRIDE_DEPRECATION", "DEPRECATION")
+        override val fontLoader = object : androidx.compose.ui.text.font.Font.ResourceLoader {
+            override fun load(font: androidx.compose.ui.text.font.Font): Any = Unit
+        }
+        override val fontFamilyResolver = createFontFamilyResolver()
+        override val layoutDirection get() = _layoutDirection
+        override val localeList get() = platformContext.localeList
+        override var showLayoutBounds by mutableStateOf(false)
+            set
+
+        override val modifierLocalManager = ModifierLocalManager(this)
+        override val snapshotObserver get() = this@RootNodeOwner.snapshotObserver
+        override val viewConfiguration get() = platformContext.viewConfiguration
+        override val measureIteration: Long get() = measureAndLayoutDelegate.measureIteration
+
+        override val outOfFrameExecutor: OutOfFrameExecutor? =
+            platformContext.outOfFrameExecutor?.let {
+                object : OutOfFrameExecutor {
+                    override fun schedule(block: () -> Unit) {
+                        it.schedule(block)
+                    }
+                }
+            }
+
+        override fun requestAutofill(node: LayoutNode) {
+            // TODO: 1.8.0-beta01 Adopt requestAutofill API
+            //  https://youtrack.jetbrains.com/issue/CMP-7485
+        }
+
+        override fun onPreAttach(node: LayoutNode) {
+            layoutNodes[node.semanticsId] = node
+        }
+
+        override fun onPostAttach(node: LayoutNode) {
+        }
+
+        override fun onDetach(node: LayoutNode) {
+            val existing = layoutNodes.remove(node.semanticsId)
+            checkNotNull(existing) {
+                "Invalid usage of Owner.onDetach: layoutNode was not previously attached"
+            }
+            measureAndLayoutDelegate.onNodeDetached(node)
+            snapshotObserver.clear(node)
+            needClearObservations = true
+        }
+
+        override fun measureAndLayout(sendPointerUpdate: Boolean) {
+            // only run the logic when we have something pending
+            if (measureAndLayoutDelegate.hasPendingMeasureOrLayout ||
+                measureAndLayoutDelegate.hasPendingOnPositionedCallbacks
+            ) {
+                trace("RootNodeOwner:measureAndLayout") {
+                    val resend = if (sendPointerUpdate) onPointerUpdateCallback else null
+                    val rootNodeResized = measureAndLayoutDelegate.measureAndLayout(resend)
+                    if (rootNodeResized) {
+                        requestDraw()
+                    }
+                    measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
+                    rectManager.dispatchCallbacks()
+                }
+            }
+        }
+
+        override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
+            trace("RootNodeOwner:measureAndLayout") {
+                measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
+                inputHandler.onPointerUpdate()
+                // only dispatch the callbacks if we don't have other nodes to process as otherwise
+                // we will have one more measureAndLayout() pass anyway in the same frame.
+                // it allows us to not traverse the hierarchy twice.
+                if (!measureAndLayoutDelegate.hasPendingMeasureOrLayout) {
+                    measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
+                }
+                rectManager.dispatchCallbacks()
+            }
+        }
+
+        override fun forceMeasureTheSubtree(layoutNode: LayoutNode, affectsLookahead: Boolean) {
+            measureAndLayoutDelegate.forceMeasureTheSubtree(layoutNode, affectsLookahead)
+        }
+
+        override fun onRequestMeasure(
+            layoutNode: LayoutNode,
+            affectsLookahead: Boolean,
+            forceRequest: Boolean,
+            scheduleMeasureAndLayout: Boolean
+        ) {
+            if (affectsLookahead) {
+                if (measureAndLayoutDelegate.requestLookaheadRemeasure(layoutNode, forceRequest) &&
+                    scheduleMeasureAndLayout
+                ) {
+                    requestMeasureAndLayout()
+                }
+            } else if (measureAndLayoutDelegate.requestRemeasure(layoutNode, forceRequest) &&
+                scheduleMeasureAndLayout
+            ) {
+                requestMeasureAndLayout()
+            }
+        }
+
+        override fun onRequestRelayout(
+            layoutNode: LayoutNode,
+            affectsLookahead: Boolean,
+            forceRequest: Boolean
+        ) {
+            if (affectsLookahead) {
+                if (measureAndLayoutDelegate.requestLookaheadRelayout(layoutNode, forceRequest)) {
+                    requestMeasureAndLayout()
+                }
+            } else {
+                if (measureAndLayoutDelegate.requestRelayout(layoutNode, forceRequest)) {
+                    requestMeasureAndLayout()
+                }
+            }
+        }
+
+        override fun requestOnPositionedCallback(layoutNode: LayoutNode) {
+            measureAndLayoutDelegate.requestOnPositionedCallback(layoutNode)
+            requestMeasureAndLayout()
+        }
+
+        override fun createLayer(
+            drawBlock: (canvas: Canvas, parentLayer: GraphicsLayer?) -> Unit,
+            invalidateParentLayer: () -> Unit,
+            explicitLayer: GraphicsLayer?,
+        ) = ownedLayerManager.createLayer(
+            drawBlock = drawBlock,
+            invalidateParentLayer = invalidateParentLayer,
+            explicitLayer = explicitLayer
+        )
+
+        override fun onSemanticsChange() {
+            platformContext.semanticsOwnerListener?.onSemanticsChange(semanticsOwner)
+        }
+
+        override fun onLayoutChange(layoutNode: LayoutNode) {
+            platformContext.semanticsOwnerListener?.onLayoutChange(
+                semanticsOwner = semanticsOwner,
+                semanticsNodeId = layoutNode.semanticsId
+            )
+        }
+
+        override fun onLayoutNodeDeactivated(layoutNode: LayoutNode) {
+        }
+
+        override fun onPreLayoutNodeReused(layoutNode: LayoutNode, oldSemanticsId: Int) {
+            // Keep the mapping up to date when the semanticsId changes
+            val existing = layoutNodes.remove(oldSemanticsId)
+            checkNotNull(existing) {
+                "Invalid usage of Owner.onPreLayoutNodeReused: layoutNode is not found"
+            }
+            check(existing == layoutNode) {
+                "Invalid usage of Owner.onPreLayoutNodeReused: previous semanticsId refers another layoutNode"
+            }
+            layoutNodes[layoutNode.semanticsId] = layoutNode
+        }
+
+        @InternalComposeUiApi
+        override fun onInteropViewLayoutChange(view: InteropView) {
+            // TODO dispatch platform re-layout
+        }
+
+        override fun calculatePositionInWindow(localPosition: Offset): Offset =
+            platformContext.convertLocalToWindowPosition(localPosition)
+
+        override fun calculateLocalPosition(positionInWindow: Offset): Offset =
+            platformContext.convertWindowToLocalPosition(positionInWindow)
+
+        override fun screenToLocal(positionOnScreen: Offset): Offset =
+            platformContext.convertScreenToLocalPosition(positionOnScreen)
+
+        override fun localToScreen(localPosition: Offset): Offset =
+            platformContext.convertLocalToScreenPosition(localPosition)
+
+        // TODO: reverted in https://r.android.com/3208275
+//        override fun localToScreen(localTransform: Matrix) {
+//            throw UnsupportedOperationException(
+//                "Construction of local-to-screen matrix is not supported, " +
+//                    "use direct conversion instead"
+//            )
+//        }
+
+        private val endApplyChangesListeners = mutableVectorOf<(() -> Unit)?>()
+
+        override fun onEndApplyChanges() {
+            clearInvalidObservations()
+
+            // Listeners can add more items to the list and we want to ensure that they
+            // are executed after being added, so loop until the list is empty
+            while (endApplyChangesListeners.isNotEmpty()) {
+                val size = endApplyChangesListeners.size
+                for (i in 0 until size) {
+                    val listener = endApplyChangesListeners[i]
+                    // null out the item so that if the listener is re-added then we execute it again.
+                    endApplyChangesListeners[i] = null
+                    listener?.invoke()
+                }
+                // Remove all the items that were visited. Removing items shifts all items after
+                // to the front of the list, so removing in a chunk is cheaper than removing one-by-one
+                endApplyChangesListeners.removeRange(0, size)
+            }
+        }
+
+        override fun registerOnEndApplyChangesListener(listener: () -> Unit) {
+            if (listener !in endApplyChangesListeners) {
+                endApplyChangesListeners += listener
+            }
+        }
+
+        override fun registerOnLayoutCompletedListener(listener: Owner.OnLayoutCompletedListener) {
+            measureAndLayoutDelegate.registerOnLayoutCompletedListener(listener)
+            requestMeasureAndLayout()
+        }
+
+        override fun voteFrameRate(frameRate: Float) {
+            ownedLayerManager.voteFrameRate(frameRate)
+        }
+
+        private var keepScreenOnCount = 0
+
+        override fun incrementKeepScreenOnCount() {
+            keepScreenOnCount++
+            platformContext.isKeepScreenOnEnabled = keepScreenOnCount > 0
+        }
+
+        override fun decrementKeepScreenOnCount() {
+            keepScreenOnCount--
+            platformContext.isKeepScreenOnEnabled = keepScreenOnCount > 0
+        }
+
+        override fun invalidateRootLayer() {
+            ownedLayerManager.invalidate()
+        }
+
+        fun dispose() {
+            // Unlike AndroidComposeView.onDetachedFromWindow, we only remove callbacks, without
+            // dispatching them because here we are already in the middle of disposing the
+            // `RootNodeOwner`, so dispatching callbacks can end up calling already-disposed
+            // objects.
+            rectManager.removeScheduledCallback()
+        }
+    }
+
+    private inner class PlatformRootForTestImpl : PlatformRootForTest {
+        override val density get() = this@RootNodeOwner.density
+
+        @Suppress("OVERRIDE_DEPRECATION")
+        override val textInputService get() = owner.textInputService
+        override val semanticsOwner get() = owner.semanticsOwner
+        override val visibleBounds: Rect
+            get() {
+                val windowRect = platformContext.windowInfo.containerSize.toRect()
+                val ownerRect = calculateBoundsInWindow()
+                return ownerRect?.intersect(windowRect) ?: windowRect
+            }
+
+        override val hasPendingMeasureOrLayout: Boolean
+            get() = measureAndLayoutDelegate.hasPendingMeasureOrLayout || platformContext.outOfFrameExecutor?.hasWorkScheduled ?: false
+
+        override fun measureAndLayoutForTest() {
+            owner.measureAndLayout(sendPointerUpdate = true)
+            platformContext.outOfFrameExecutor?.drainScheduledWorkForTest()
+        }
+
+        /**
+         * Handles the input initiated by tests.
+         */
+        override fun sendPointerEvent(
+            eventType: PointerEventType,
+            position: Offset,
+            scrollDelta: Offset,
+            timeMillis: Long,
+            type: PointerType,
+            buttons: PointerButtons?,
+            keyboardModifiers: PointerKeyboardModifiers?,
+            nativeEvent: Any?,
+            button: PointerButton?,
+            scaleGestureFactor: Float,
+            panGestureOffset: Offset,
+        ) {
+            inputHandler.onPointerEvent(
+                eventType = eventType,
+                position = position,
+                scrollDelta = scrollDelta,
+                timeMillis = timeMillis,
+                type = type,
+                buttons = buttons,
+                keyboardModifiers = keyboardModifiers,
+                nativeEvent = nativeEvent,
+                button = button,
+                scaleGestureFactor = scaleGestureFactor,
+                panGestureOffset = panGestureOffset,
+            )
+        }
+
+        /**
+         * Handles the input initiated by tests.
+         */
+        override fun sendPointerEvent(
+            eventType: PointerEventType,
+            pointers: List<ComposeScenePointer>,
+            buttons: PointerButtons,
+            keyboardModifiers: PointerKeyboardModifiers,
+            scrollDelta: Offset,
+            timeMillis: Long,
+            nativeEvent: Any?,
+            button: PointerButton?,
+            scaleGestureFactor: Float,
+            panGestureOffset: Offset,
+        ) {
+            inputHandler.onPointerEvent(
+                eventType = eventType,
+                pointers = pointers,
+                buttons = buttons,
+                keyboardModifiers = keyboardModifiers,
+                scrollDelta = scrollDelta,
+                timeMillis = timeMillis,
+                nativeEvent = nativeEvent,
+                button = button,
+                scaleGestureFactor = scaleGestureFactor,
+                panGestureOffset = panGestureOffset,
+            )
+        }
+
+        /**
+         * Handles the input initiated by tests or accessibility.
+         */
+        override fun sendKeyEvent(keyEvent: KeyEvent): Boolean =
+            inputHandler.onKeyEvent(keyEvent)
+
+        // TODO https://youtrack.jetbrains.com/issue/COMPOSE-1258/Implement-PlatformRootForTest.accessitiblity-functions
+
+        @ExperimentalComposeUiApi
+        override fun forceAccessibilityForTesting(enable: Boolean) {
+        }
+
+        @ExperimentalComposeUiApi
+        override fun setAccessibilityEventBatchIntervalMillis(intervalMillis: Long) {
+        }
+    }
+
+    private inner class PointerIconServiceImpl : PointerIconService {
+        private var desiredPointerIcon: PointerIcon? = null
+        override fun getIcon(): PointerIcon = desiredPointerIcon ?: PointerIcon.Default
+        override fun setIcon(value: PointerIcon?) {
+            desiredPointerIcon = value
+            platformContext.setPointerIcon(desiredPointerIcon ?: PointerIcon.Default)
+        }
+
+        // TODO https://youtrack.jetbrains.com/issue/CMP-7145/Properly-adopt-stylus-handwriting-hover-icon
+        override fun getStylusHoverIcon(): PointerIcon? = null
+        override fun setStylusHoverIcon(value: PointerIcon?) {}
+    }
+
+    private inner class OwnedLayerManagerImpl : OwnedLayerManager {
+        // OwnedLayers that are dirty and should be redrawn.
+        private val dirtyLayers = mutableListOf<OwnedLayer>()
+
+        // OwnerLayers that invalidated themselves during their last draw. They will be redrawn
+        // during the next AndroidComposeView dispatchDraw pass.
+        private var postponedDirtyLayers: MutableList<OwnedLayer>? = null
+
+        private var isDrawingContent = false
+
+        override fun createLayer(
+            drawBlock: (canvas: Canvas, parentLayer: GraphicsLayer?) -> Unit,
+            invalidateParentLayer: () -> Unit,
+            explicitLayer: GraphicsLayer?
+        ) = GraphicsLayerOwnerLayer(
+            graphicsLayer = explicitLayer ?: graphicsContext.createGraphicsLayer(),
+            context = if (explicitLayer != null) null else graphicsContext,
+            layerManager = this,
+            drawBlock = drawBlock,
+            invalidateParentLayer = invalidateParentLayer,
+        )
+
+        override fun recycle(layer: OwnedLayer): Boolean {
+            needClearObservations = true
+            dirtyLayers -= layer
+            return false
+        }
+
+        override fun notifyLayerIsDirty(layer: OwnedLayer, isDirty: Boolean) {
+            if (!isDirty) {
+                // It is correct to remove the layer here regardless of this if, but for performance
+                // we are hackily not doing the removal here in order to just do clear() a bit later.
+                if (!isDrawingContent) {
+                    dirtyLayers.remove(layer)
+                    postponedDirtyLayers?.remove(layer)
+                }
+            } else if (!isDrawingContent) {
+                dirtyLayers += layer
+            } else {
+                val postponed =
+                    postponedDirtyLayers
+                        ?: mutableListOf<OwnedLayer>().also { postponedDirtyLayers = it }
+                postponed += layer
+            }
+        }
+
+        override fun invalidate() {
+            requestDraw()
+        }
+
+        private val frameRateVoteCollector = FrameRateVoteCollector(platformContext::voteFrameRate)
+
+        override fun voteFrameRate(frameRate: Float) = frameRateVoteCollector.collectVote(frameRate)
+
+        fun draw(canvas: Canvas) {
+            isDrawingContent = true
+
+            // Unlike Android, "draw" forms actual render commands sequence, so updating
+            // display lists after that won't affect current frame result.
+            // So, we applying it before drawing to reflect the changes from previous phases.
+            // Changes that requires another round of invalidation will be scheduled to next frame.
+            if (dirtyLayers.isNotEmpty()) {
+                dirtyLayers.fastForEach { layer ->
+                    layer.updateDisplayList()
+                }
+                dirtyLayers.clear()
+            }
+
+            // Draw root node
+            owner.root.draw(
+                canvas = canvas,
+                graphicsLayer = null // the root node will provide the root graphics layer
+            )
+
+            // updateDisplayList operations performed above (during root.draw and during the explicit
+            // layer.updateDisplayList() calls) can result in the same layers being invalidated. These
+            // layers have been added to postponedDirtyLayers and will be redrawn during the next
+            // dispatchDraw.
+            if (postponedDirtyLayers != null) {
+                val postponed = postponedDirtyLayers!!
+                dirtyLayers.addAll(postponed)
+                postponed.clear()
+            }
+
+            frameRateVoteCollector.submitVoteIfNeeded()
+
+            isDrawingContent = false
+        }
+    }
+}
+
+private object IdentityPositionCalculator : PositionCalculator {
+    override fun screenToLocal(positionOnScreen: Offset): Offset = positionOnScreen
+    override fun localToScreen(localPosition: Offset): Offset = localPosition
+}
+
+private fun Modifier.rulerProvider(windowInsets: PlatformWindowInsets) =
+    if (ComposeUiFlags.areWindowInsetsRulersEnabled) then(RulerProviderModifierElement(windowInsets)) else this

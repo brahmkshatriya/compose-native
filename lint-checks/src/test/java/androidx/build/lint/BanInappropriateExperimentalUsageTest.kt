@@ -1,0 +1,326 @@
+/*
+ * Copyright 2021 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+@file:Suppress("UnstableApiUsage", "GroovyUnusedAssignment")
+
+package androidx.build.lint
+
+import androidx.build.lint.BanInappropriateExperimentalUsage.Companion.getMavenCoordinatesFromPath
+import androidx.build.lint.BanInappropriateExperimentalUsage.Companion.getMavenCoordinatesFromPrebuiltsPath
+import androidx.build.lint.BanInappropriateExperimentalUsage.Companion.isAnnotationAlwaysAllowed
+import androidx.build.lint.Stubs.Companion.JetpackOptIn
+import androidx.build.lint.Stubs.Companion.JetpackRequiresOptIn
+import com.android.tools.lint.checks.infrastructure.ProjectDescription
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.JUnit4
+
+/**
+ * Important:
+ *
+ * [BanInappropriateExperimentalUsage] uses the atomic library groups list generated from production
+ * data. For tests, we want to overwrite this to provide a different list of atomic library groups;
+ * the file location is lint-checks/src/test/resources/atomic-library-groups.txt.
+ *
+ * Note that the filename must match
+ * [BanInappropriateExperimentalUsage.ATOMIC_LIBRARY_GROUPS_FILENAME].
+ */
+@RunWith(JUnit4::class)
+class BanInappropriateExperimentalUsageTest :
+    AbstractLintDetectorTest(
+        useDetector = BanInappropriateExperimentalUsage(),
+        useIssues = listOf(BanInappropriateExperimentalUsage.ISSUE),
+        stubs = arrayOf(Stubs.OptIn),
+    ) {
+
+    @Test
+    fun `Check if annotation is always allowed`() {
+
+        // These annotations are used in AndroidX
+        assertTrue(isAnnotationAlwaysAllowed("com.google.devtools.ksp.KspExperimental"))
+        assertTrue(isAnnotationAlwaysAllowed("kotlin.contracts.ExperimentalContracts"))
+        assertTrue(isAnnotationAlwaysAllowed("kotlin.ExperimentalStdlibApi"))
+        assertTrue(isAnnotationAlwaysAllowed("kotlin.experimental.ExperimentalTypeInference"))
+        assertTrue(isAnnotationAlwaysAllowed("kotlinx.coroutines.DelicateCoroutinesApi"))
+        assertTrue(isAnnotationAlwaysAllowed("kotlinx.coroutines.ExperimentalCoroutinesApi"))
+        assertTrue(
+            isAnnotationAlwaysAllowed(
+                "org.jetbrains.kotlin.extensions.internal.InternalNonStableExtensionPoints"
+            )
+        )
+        assertTrue(isAnnotationAlwaysAllowed("org.jetbrains.kotlin.ir.ObsoleteDescriptorBasedAPI"))
+
+        assertFalse(isAnnotationAlwaysAllowed("androidx.foo.bar"))
+        assertFalse(isAnnotationAlwaysAllowed("com.google.foo.bar"))
+    }
+
+    @Test
+    fun `getLibraryFromPath should return correct Maven coordinates`() {
+
+        val paging =
+            getMavenCoordinatesFromPath(
+                "/path/to/checkout/out/androidx/paging/paging-common/build/libs/paging-common-3.2.0-alpha01.jar"
+            )
+        val room =
+            getMavenCoordinatesFromPath(
+                "/path/to/checkout/out/androidx/room/room-compiler-processing/build/libs/room-compiler-processing-2.5.0-alpha02.jar"
+            )
+        val uiTest =
+            getMavenCoordinatesFromPath(
+                "/path/to/checkout/out/androidx/compose/ui/ui-test/build/libs/ui-test-jvmstubs-1.8.0-beta01.jar"
+            )
+        val classFileTest =
+            getMavenCoordinatesFromPath(
+                "/path/to/checkout/out/androidx/compose/runtime/runtime/build/classes/kotlin/desktop/main/androidx/compose/runtime/InternalComposeApi.class"
+            )
+
+        assertNotNull(paging!!)
+        assertEquals("androidx.paging", paging.groupId)
+        assertEquals("paging-common", paging.artifactId)
+        assertEquals("3.2.0-alpha01", paging.version)
+
+        assertNotNull(room!!)
+        assertEquals("androidx.room", room.groupId)
+        assertEquals("room-compiler-processing", room.artifactId)
+        assertEquals("2.5.0-alpha02", room.version)
+
+        assertNotNull(uiTest!!)
+        assertEquals("androidx.compose.ui", uiTest.groupId)
+        assertEquals("ui-test", uiTest.artifactId)
+        assertEquals("jvmstubs-1.8.0-beta01", uiTest.version)
+
+        assertNotNull(classFileTest)
+        assertEquals("androidx.compose.runtime", classFileTest!!.groupId)
+        assertEquals("runtime", classFileTest.artifactId)
+        assertEquals("", classFileTest.version) // No version information
+
+        val invalid = getMavenCoordinatesFromPath("/foo/bar/baz")
+        assertNull(invalid)
+    }
+
+    @Test
+    fun `getMavenCoordinatesFromPrebuiltsPath should return correct Maven coordinates`() {
+        val paging =
+            getMavenCoordinatesFromPrebuiltsPath(
+                "/path/to/checkout/prebuilts/androidx/internal/androidx/paging/paging-common/3.2.0-alpha01/paging-common-3.2.0-alpha01.jar"
+            )
+        assertNotNull(paging)
+        assertEquals("androidx.paging", paging!!.groupId)
+        assertEquals("paging-common", paging.artifactId)
+        assertEquals("3.2.0-alpha01", paging.version)
+
+        val uiTest =
+            getMavenCoordinatesFromPrebuiltsPath(
+                "/path/to/checkout/prebuilts/androidx/internal/androidx/compose/ui/ui-test/1.8.0-beta01/ui-test-jvmstubs-1.8.0-beta01.jar"
+            )
+        assertNotNull(uiTest)
+        assertEquals("androidx.compose.ui", uiTest!!.groupId)
+        assertEquals("ui-test", uiTest.artifactId)
+        assertEquals("1.8.0-beta01", uiTest.version)
+    }
+
+    @Test
+    fun `Test same atomic module Experimental usage via Gradle model`() {
+        val provider =
+            project()
+                .name("provider")
+                .files(
+                    ktSample("sample.annotation.provider.WithinGroupExperimentalAnnotatedClass"),
+                    ktSample("sample.annotation.provider.ExperimentalSampleAnnotation"),
+                    gradle(
+                            """
+                    apply plugin: 'com.android.library'
+                    group=sample.annotation.provider
+                    """
+                        )
+                        .indented(),
+                )
+
+        val expected =
+            """
+No warnings.
+        """
+                .trimIndent()
+
+        check(provider).expect(expected)
+    }
+
+    @Test
+    fun `Test same non-atomic module Experimental usage via Gradle model`() {
+        val provider =
+            project()
+                .name("provider")
+                .files(
+                    ktSample("sample.annotation.provider.WithinGroupExperimentalAnnotatedClass"),
+                    ktSample("sample.annotation.provider.ExperimentalSampleAnnotation"),
+                    gradle(
+                            """
+                    apply plugin: 'com.android.library'
+                    group=sample.annotation.provider
+                    """
+                        )
+                        .indented(),
+                )
+
+        val expected =
+            """
+No warnings.
+        """
+                .trimIndent()
+
+        check(provider).expect(expected)
+    }
+
+    @Test
+    fun `Test cross-module Experimental usage via Gradle model`() {
+
+        val provider =
+            project()
+                .name("provider")
+                .type(ProjectDescription.Type.LIBRARY)
+                .report(false)
+                .files(
+                    JetpackRequiresOptIn,
+                    ktSample("sample.annotation.provider.ExperimentalSampleAnnotation"),
+                    javaSample("sample.annotation.provider.ExperimentalSampleAnnotationJava"),
+                    javaSample("sample.annotation.provider.RequiresOptInSampleAnnotationJava"),
+                    javaSample(
+                        "sample.annotation.provider.RequiresOptInSampleAnnotationJavaDuplicate"
+                    ),
+                    javaSample(
+                        "sample.annotation.provider.RequiresAndroidXOptInSampleAnnotationJava"
+                    ),
+                    javaSample(
+                        "sample.annotation.provider.RequiresAndroidXOptInSampleAnnotationJavaDuplicate"
+                    ),
+                    gradle(
+                            """
+                    apply plugin: 'com.android.library'
+                    group=sample.annotation.provider
+                    """
+                        )
+                        .indented(),
+                )
+
+        val consumer =
+            project()
+                .name("consumer")
+                .type(ProjectDescription.Type.LIBRARY)
+                .dependsOn(provider)
+                .files(
+                    JetpackOptIn,
+                    ktSample("androidx.sample.consumer.OutsideGroupExperimentalAnnotatedClass"),
+                    gradle(
+                            """
+                    apply plugin: 'com.android.library'
+                    group=androidx.sample.consumer
+                    """
+                        )
+                        .indented(),
+                )
+
+        val expected =
+            """
+../consumer/src/main/kotlin/androidx/sample/consumer/OutsideGroupExperimentalAnnotatedClass.kt:35: Error: Experimental and RequiresOptIn APIs may only be used within the same-version group where they were defined. [IllegalExperimentalApiUsage]
+    @ExperimentalSampleAnnotationJava
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../consumer/src/main/kotlin/androidx/sample/consumer/OutsideGroupExperimentalAnnotatedClass.kt:40: Error: Experimental and RequiresOptIn APIs may only be used within the same-version group where they were defined. [IllegalExperimentalApiUsage]
+    @RequiresOptInSampleAnnotationJava
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../consumer/src/main/kotlin/androidx/sample/consumer/OutsideGroupExperimentalAnnotatedClass.kt:45: Error: Experimental and RequiresOptIn APIs may only be used within the same-version group where they were defined. [IllegalExperimentalApiUsage]
+    @kotlin.OptIn(RequiresOptInSampleAnnotationJava::class)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../consumer/src/main/kotlin/androidx/sample/consumer/OutsideGroupExperimentalAnnotatedClass.kt:50: Error: Experimental and RequiresOptIn APIs may only be used within the same-version group where they were defined. [IllegalExperimentalApiUsage]
+    @kotlin.OptIn(
+    ^
+../consumer/src/main/kotlin/androidx/sample/consumer/OutsideGroupExperimentalAnnotatedClass.kt:58: Error: Experimental and RequiresOptIn APIs may only be used within the same-version group where they were defined. [IllegalExperimentalApiUsage]
+    @kotlin.OptIn(
+    ^
+../consumer/src/main/kotlin/androidx/sample/consumer/OutsideGroupExperimentalAnnotatedClass.kt:66: Error: Experimental and RequiresOptIn APIs may only be used within the same-version group where they were defined. [IllegalExperimentalApiUsage]
+    @androidx.annotation.OptIn(RequiresAndroidXOptInSampleAnnotationJava::class)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+../consumer/src/main/kotlin/androidx/sample/consumer/OutsideGroupExperimentalAnnotatedClass.kt:71: Error: Experimental and RequiresOptIn APIs may only be used within the same-version group where they were defined. [IllegalExperimentalApiUsage]
+    @androidx.annotation.OptIn(
+    ^
+../consumer/src/main/kotlin/androidx/sample/consumer/OutsideGroupExperimentalAnnotatedClass.kt:79: Error: Experimental and RequiresOptIn APIs may only be used within the same-version group where they were defined. [IllegalExperimentalApiUsage]
+    @androidx.annotation.OptIn(
+    ^
+8 errors, 0 warnings
+        """
+                .trimIndent()
+
+        check(provider, consumer).expect(expected)
+    }
+
+    @Test
+    fun `Test cross-module Experimental usage in alpha via Gradle model`() {
+
+        val provider =
+            project()
+                .name("provider")
+                .type(ProjectDescription.Type.LIBRARY)
+                .report(false)
+                .files(
+                    JetpackRequiresOptIn,
+                    ktSample("sample.annotation.provider.ExperimentalSampleAnnotation"),
+                    javaSample("sample.annotation.provider.ExperimentalSampleAnnotationJava"),
+                    javaSample("sample.annotation.provider.RequiresOptInSampleAnnotationJava"),
+                    javaSample(
+                        "sample.annotation.provider.RequiresOptInSampleAnnotationJavaDuplicate"
+                    ),
+                    javaSample(
+                        "sample.annotation.provider.RequiresAndroidXOptInSampleAnnotationJava"
+                    ),
+                    javaSample(
+                        "sample.annotation.provider.RequiresAndroidXOptInSampleAnnotationJavaDuplicate"
+                    ),
+                    gradle(
+                            """
+                    apply plugin: 'com.android.library'
+                    group=sample.annotation.provider
+                    version=1.0.0-beta02
+                    """
+                        )
+                        .indented(),
+                )
+
+        val consumer =
+            project()
+                .name("consumer")
+                .type(ProjectDescription.Type.LIBRARY)
+                .dependsOn(provider)
+                .files(
+                    JetpackOptIn,
+                    ktSample("androidx.sample.consumer.OutsideGroupExperimentalAnnotatedClass"),
+                    gradle(
+                            """
+                    apply plugin: 'com.android.library'
+                    group=androidx.sample.consumer
+                    version=1.0.0-alpha01
+                    """
+                        )
+                        .indented(),
+                )
+
+        val expected =
+            """
+No warnings.
+        """
+                .trimIndent()
+
+        check(provider, consumer).expect(expected)
+    }
+}

@@ -1,0 +1,4 @@
+headers = app_mpv.h
+headerFilter = app_mpv.h
+package = app.mpv
+compilerOpts = -Isrc/nativeInterop/cinterop/include
