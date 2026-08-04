@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ComposeUiFlags
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.geometry.Offset
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.cairo.CairoSurface
 import androidx.compose.ui.graphics.cairo.CairoText
 import androidx.compose.ui.graphics.cairo.runBackendSelfTests
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.platform.PlatformGraphicsContext
 import androidx.compose.ui.graphics.platform.PlatformGraphicsRegistry
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
@@ -53,6 +55,7 @@ import androidx.compose.ui.platform.LinuxProgressUpdate
 import androidx.compose.ui.platform.PlatformArchitectureComponentsOwner
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformDispatcherRegistry
+import androidx.compose.ui.platform.PlatformRootForTest
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.scene.CanvasLayersComposeScene
@@ -73,18 +76,17 @@ import androidx.compose.ui.viewinterop.LocalGpuInteropRegistry
 import androidx.compose.ui.viewinterop.LocalNativeViewInvalidationDispatcher
 import cairo.kc_create
 import cairo.kc_destroy
-import cairo.kgpu_context_begin
-import cairo.kgpu_context_create
-import cairo.kgpu_context_destroy
-import cairo.kgpu_context_draw_compose
-import cairo.kgpu_context_make_current
-import cairo.kgpu_context_present
-import cairo.kgpu_context_renderer
 import cnames.structs.SDL_Cursor
 import cnames.structs.SDL_Renderer
 import cnames.structs.SDL_Texture
 import cnames.structs.SDL_Window
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.native.concurrent.ObsoleteWorkersApi
+import kotlin.native.concurrent.Worker
 import kotlin.system.exitProcess
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.COpaquePointer
@@ -96,10 +98,12 @@ import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.asStableRef
+import kotlinx.cinterop.get
 import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.plus
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.pointed
 import kotlinx.cinterop.ptr
-import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.value
@@ -115,6 +119,7 @@ import kotlinx.coroutines.launch
 import linuxdesktop.*
 import platform.posix.getenv
 import platform.posix.setenv
+import platform.posix.usleep
 import sdl2.SDLK_ESCAPE
 import sdl2.SDL_BUTTON_LEFT
 import sdl2.SDL_BUTTON_MIDDLE
@@ -150,6 +155,7 @@ import sdl2.SDL_GetRendererOutputSize
 import sdl2.SDL_GetWindowDisplayIndex
 import sdl2.SDL_GetWindowFlags
 import sdl2.SDL_GetWindowID
+import sdl2.SDL_GetWindowPosition
 import sdl2.SDL_HideWindow
 import sdl2.SDL_HitTestResult
 import sdl2.SDL_Init
@@ -358,6 +364,28 @@ open class ComposeWindow internal constructor(internal val host: NativeWindowHos
     fun requestFocus() = host.requestFocus()
 
     fun close() = host.requestClose()
+
+    /** Installs the root listener used by Compose UI test hosts. */
+    @InternalComposeUiApi
+    var rootForTestListener: PlatformContext.RootForTestListener?
+        get() = host.rootForTestListener
+        set(value) {
+            host.rootForTestListener = value
+        }
+
+    /** Runs [action] synchronously on the SDL application thread. */
+    @InternalComposeUiApi
+    fun <T> runOnUiThread(action: () -> T): T = host.runOnUiThread(action)
+
+    /** Returns whether the caller is the SDL application thread. */
+    @InternalComposeUiApi
+    val isUiThread: Boolean
+        get() = host.isUiThread
+
+    /** Passive test-host query for pending composition, layout, or draw work. */
+    @InternalComposeUiApi
+    val hasPendingTestWork: Boolean
+        get() = host.hasPendingTestWork
 
     internal fun updateDraggableArea(key: Any, bounds: Rect) = host.updateDraggableArea(key, bounds)
 
@@ -568,17 +596,21 @@ fun application(
     }
     LinuxPlatformServicesRegistry.install(SdlPlatformServices)
     SDL_StartTextInput()
+    val isWindowSelfTest = getenv("KTNATIVE_WINDOW_SELF_TEST") != null
+    if (isWindowSelfTest) NativeWindowSelfTestRootListener.reset()
     try {
         NativeApplication()
             .run(
                 when {
                     getenv("KTNATIVE_DESKTOP_SELF_TEST") != null -> NativeDesktopSelfTestContent
-                    getenv("KTNATIVE_WINDOW_SELF_TEST") != null -> NativeWindowSelfTestContent
+                    isWindowSelfTest -> NativeWindowSelfTestContent
                     else -> content
                 }
             )
+        if (isWindowSelfTest) NativeWindowSelfTestRootListener.checkDisposed()
     } finally {
         LinuxPlatformServicesRegistry.install(null)
+        kld_atspi_shutdown()
         kld_shutdown()
         SDL_Quit()
     }
@@ -797,6 +829,43 @@ private fun checkDesktopError(failure: CPointer<ByteVar>?, operation: String) {
     error("Could not $operation: $detail")
 }
 
+private object NativeWindowSelfTestRootListener : PlatformContext.RootForTestListener {
+    private val activeRoots = mutableSetOf<PlatformRootForTest>()
+    private var createdCount = 0
+    private var disposedCount = 0
+
+    fun reset() {
+        activeRoots.clear()
+        createdCount = 0
+        disposedCount = 0
+    }
+
+    override fun onRootForTestCreated(root: PlatformRootForTest) {
+        check(activeRoots.add(root)) { "Compose test root was registered more than once" }
+        createdCount += 1
+    }
+
+    override fun onRootForTestDisposed(root: PlatformRootForTest) {
+        check(activeRoots.remove(root)) { "Unknown Compose test root was disposed" }
+        disposedCount += 1
+    }
+
+    fun checkRegistered() {
+        check(createdCount > 0 && activeRoots.isNotEmpty()) {
+            "The SDL window did not expose a Compose root to the test listener"
+        }
+    }
+
+    fun checkDisposed() {
+        check(createdCount > 0) { "No Compose test root was registered" }
+        check(activeRoots.isEmpty() && disposedCount == createdCount) {
+            "Compose test roots leaked: created=$createdCount disposed=$disposedCount " +
+                "active=${activeRoots.size}"
+        }
+        println("Native window test root lifecycle passed: $createdCount root(s)")
+    }
+}
+
 private val NativeWindowSelfTestContent: @Composable ApplicationScope.() -> Unit = {
     val applicationScope = this
     Window(
@@ -811,7 +880,12 @@ private val NativeWindowSelfTestContent: @Composable ApplicationScope.() -> Unit
         visible = false,
         title = "Native window test B",
     ) {
-        SideEffect { applicationScope.exitApplication() }
+        val composeWindow = window
+        SideEffect {
+            composeWindow.rootForTestListener = NativeWindowSelfTestRootListener
+            NativeWindowSelfTestRootListener.checkRegistered()
+            applicationScope.exitApplication()
+        }
     }
 }
 
@@ -948,8 +1022,11 @@ fun singleWindowApplication(
 internal class NativeApplication : ApplicationScope {
     private companion object {
         const val IdleWaitTimeoutMillis = 50
+        const val MaximumConfiguredFramesPerSecond = 240
     }
 
+    @OptIn(ObsoleteWorkersApi::class)
+    private val hostWorkerId = Worker.current.id
     private val windows = mutableListOf<NativeWindowHost>()
     private val running = atomic(true)
     private val frameRequested = atomic(true)
@@ -998,6 +1075,29 @@ internal class NativeApplication : ApplicationScope {
         synchronized(hostTaskLock) { hostTasks.addLast(block) }
         requestFrame()
     }
+
+    @OptIn(ObsoleteWorkersApi::class)
+    fun isHostThread(): Boolean = Worker.current.id == hostWorkerId
+
+    fun <T> dispatchToHostBlocking(block: () -> T): T {
+        if (isHostThread()) return block()
+        val result = BlockingHostTaskResult<T>()
+        dispatchToHost {
+            try {
+                result.value = block()
+            } catch (failure: Throwable) {
+                result.failure = failure
+            } finally {
+                result.completed.value = true
+            }
+        }
+        while (!result.completed.value) usleep(1_000u)
+        result.failure?.let { throw it }
+        @Suppress("UNCHECKED_CAST")
+        return result.value as T
+    }
+
+    fun hasPendingTestWork(host: NativeWindowHost): Boolean = host.hasPendingHostWork
 
     private fun hasHostTasks(): Boolean = synchronized(hostTaskLock) { hostTasks.isNotEmpty() }
 
@@ -1053,14 +1153,33 @@ internal class NativeApplication : ApplicationScope {
             }
         }
 
-        val frequency = SDL_GetPerformanceFrequency().toDouble()
+        val performanceFrequency = SDL_GetPerformanceFrequency().coerceAtLeast(1uL)
+        val frequency = performanceFrequency.toDouble()
         val start = SDL_GetPerformanceCounter()
+        val configuredFramesPerSecond =
+            getenv("KTNATIVE_MAX_FPS")
+                ?.toKString()
+                ?.toIntOrNull()
+                ?.coerceIn(1, MaximumConfiguredFramesPerSecond)
+        val framePacer =
+            configuredFramesPerSecond?.let { LinuxFramePacer(performanceFrequency, it) }
         var composed = false
         memScoped {
             val event = alloc<SDL_Event>()
             while (running.value) {
+                val immediateWork = hasImmediateWork(applicationScene)
+                val frameDelay =
+                    if (immediateWork) {
+                        framePacer?.delayMillis(SDL_GetPerformanceCounter()) ?: 0
+                    } else {
+                        0
+                    }
                 val timeout =
-                    if (hasImmediateWork(applicationScene)) 0 else IdleWaitTimeoutMillis
+                    when {
+                        !immediateWork -> IdleWaitTimeoutMillis
+                        frameDelay > 0 -> frameDelay
+                        else -> 0
+                    }
                 if (SDL_WaitEventTimeout(event.ptr, timeout) != 0) {
                     dispatchSdlEvent(event)
                 }
@@ -1070,6 +1189,16 @@ internal class NativeApplication : ApplicationScope {
 
                 drainHostTasks()
                 dispatchLinuxDesktopEvents()
+                if (kld_atspi_poll() != 0) {
+                    windows.toList().forEach { it.onAccessibilityBusConnected() }
+                }
+
+                if (
+                    hasImmediateWork(applicationScene) &&
+                        (framePacer?.delayMillis(SDL_GetPerformanceCounter()) ?: 0) > 0
+                ) {
+                    continue
+                }
 
                 val requested = frameRequested.getAndSet(false)
                 val recomposerPending = frameRecomposer.hasPendingWork()
@@ -1077,8 +1206,9 @@ internal class NativeApplication : ApplicationScope {
                     applicationLayoutDirty.value || applicationScene.hasPendingMeasureOrLayout
                 val windowPending = windows.any { it.hasPendingRender }
                 if (requested || recomposerPending || layoutPending || windowPending) {
+                    val counter = SDL_GetPerformanceCounter()
+                    framePacer?.onFrameStarted(counter)
                     if (recomposerPending) {
-                        val counter = SDL_GetPerformanceCounter()
                         val nanoTime =
                             ((counter - start).toDouble() * 1_000_000_000.0 / frequency).toLong()
                         frameRecomposer.performFrame(nanoTime)
@@ -1104,6 +1234,12 @@ internal class NativeApplication : ApplicationScope {
     }
 }
 
+private class BlockingHostTaskResult<T> {
+    val completed = atomic(false)
+    var value: T? = null
+    var failure: Throwable? = null
+}
+
 private data class RenderMetrics(
     val windowWidth: Int,
     val windowHeight: Int,
@@ -1123,8 +1259,55 @@ private class SdlWindowInfo : WindowInfo {
     override var containerDpSize by androidx.compose.runtime.mutableStateOf(DpSize.Zero)
 }
 
-private class SdlPlatformContext : PlatformContext by PlatformContext.Empty() {
+private class SdlRootForTestListener : PlatformContext.RootForTestListener {
+    private val roots = mutableSetOf<PlatformRootForTest>()
+
+    var externalListener: PlatformContext.RootForTestListener? = null
+        set(value) {
+            if (field === value) return
+            field = value
+            roots.forEach { value?.onRootForTestCreated(it) }
+        }
+
+    override fun onRootForTestCreated(root: PlatformRootForTest) {
+        roots += root
+        externalListener?.onRootForTestCreated(root)
+    }
+
+    override fun onRootForTestDisposed(root: PlatformRootForTest) {
+        roots -= root
+        externalListener?.onRootForTestDisposed(root)
+    }
+}
+
+private class SdlPlatformContext(
+    private val accessibility: LinuxAtSpiAccessibility,
+    private val damageTracker: FrameDamageTracker,
+    private val graphicsContextFactory: () -> PlatformGraphicsContext,
+) : PlatformContext by PlatformContext.Empty() {
+    private val testRootListener = SdlRootForTestListener()
+
+    override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener
+        get() = accessibility
+    override val rootForTestListener: PlatformContext.RootForTestListener
+        get() = testRootListener
     override val windowInfo = SdlWindowInfo()
+
+    override fun onDrawDamage(boundsInRoot: Rect) {
+        damageTracker.add(boundsInRoot)
+    }
+
+    override fun onFullDrawDamage() {
+        damageTracker.requireFullFrame()
+    }
+
+    override fun createGraphicsContext(): PlatformGraphicsContext = graphicsContextFactory()
+
+    var externalRootForTestListener: PlatformContext.RootForTestListener?
+        get() = testRootListener.externalListener
+        set(value) {
+            testRootListener.externalListener = value
+        }
     private val windowLifecycle = LinuxWindowLifecycle()
     override val architectureComponentsOwner: PlatformArchitectureComponentsOwner
         get() = windowLifecycle.owner
@@ -1204,7 +1387,91 @@ private class SdlPlatformContext : PlatformContext by PlatformContext.Empty() {
     }
 }
 
+internal class FrameDamageTracker(
+    private val drawOverflowPaddingDp: Float = 12f,
+) {
+    private companion object {
+        // Covers antialiasing fringes and fractional transforms at the edge of reported bounds.
+        const val AntialiasPadding = 2f
+    }
+
+    private var density = 1f
+    private var pending: Rect? = null
+    private var fullFrameRequired = false
+
+    fun updateDensity(value: Float) {
+        if (value.isFinite() && value > 0f) density = value
+    }
+
+    fun add(bounds: Rect) {
+        if (fullFrameRequired || !bounds.isFinite || bounds.isEmpty) return
+        // DrawModifierNode bounds describe layout bounds, but unbounded indications such as
+        // Material radio/checkbox/switch ripples can draw roughly 12 dp beyond them. Include that
+        // overflow in partial damage so the circle and its outgoing animation are not clipped into
+        // a rectangle or left behind after pointer/drag state changes.
+        val expanded = bounds.inflate(AntialiasPadding + drawOverflowPaddingDp * density)
+        val current = pending
+        pending =
+            if (current == null) {
+                expanded
+            } else {
+                Rect(
+                    min(current.left, expanded.left),
+                    min(current.top, expanded.top),
+                    max(current.right, expanded.right),
+                    max(current.bottom, expanded.bottom),
+                )
+            }
+    }
+
+    fun requireFullFrame() {
+        pending = null
+        fullFrameRequired = true
+    }
+
+    fun clear() {
+        pending = null
+        fullFrameRequired = false
+    }
+
+    fun takeFullFrameRequest(): Boolean {
+        if (!fullFrameRequired) return false
+        fullFrameRequired = false
+        pending = null
+        return true
+    }
+
+    fun take(width: Int, height: Int): FrameDamage? {
+        val bounds = pending ?: return null
+        pending = null
+        val clipped = bounds.intersect(Rect(0f, 0f, width.toFloat(), height.toFloat()))
+        if (clipped.isEmpty) return null
+        val left = floor(clipped.left).toInt().coerceIn(0, width)
+        val top = floor(clipped.top).toInt().coerceIn(0, height)
+        val right = ceil(clipped.right).toInt().coerceIn(left, width)
+        val bottom = ceil(clipped.bottom).toInt().coerceIn(top, height)
+        if (left >= right || top >= bottom) return null
+        return FrameDamage(left, top, right - left, bottom - top)
+    }
+}
+
+internal data class FrameDamage(
+    val x: Int,
+    val y: Int,
+    val width: Int,
+    val height: Int,
+) {
+    val pixelCount: Int
+        get() = width * height
+
+    val rect: Rect
+        get() = Rect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + height).toFloat())
+}
+
 private class Framebuffer(renderer: CPointer<SDL_Renderer>?, width: Int, height: Int) {
+    var needsFullComposeFrame = true
+        private set
+
     val surface = CairoSurface(width, height)
     private val context = checkNotNull(kc_create(surface.handle))
     val canvas = CairoCanvas(context)
@@ -1219,6 +1486,27 @@ private class Framebuffer(renderer: CPointer<SDL_Renderer>?, width: Int, height:
             ) ?: error("Could not create frame texture: ${SDL_GetError()?.toKString()}")
         }
 
+    fun markComposeFramePresented() {
+        needsFullComposeFrame = false
+    }
+
+    fun updateSdlTexture(damage: FrameDamage?) {
+        val target = texture ?: return
+        if (damage == null) return
+        memScoped {
+            val rect = alloc<SDL_Rect>()
+            rect.x = damage.x
+            rect.y = damage.y
+            rect.w = damage.width
+            rect.h = damage.height
+            val pixels =
+                surface.data.reinterpret<ByteVar>() +
+                    damage.y * surface.stride +
+                    damage.x * 4
+            check(SDL_UpdateTexture(target, rect.ptr, pixels, surface.stride) == 0)
+        }
+    }
+
     fun close() {
         texture?.let(::SDL_DestroyTexture)
         kc_destroy(context)
@@ -1232,8 +1520,7 @@ internal class NativeWindowHost(
 ) {
     private var nativeWindow: CPointer<SDL_Window>? = null
     private var renderer: CPointer<SDL_Renderer>? = null
-    private var gpuContext: COpaquePointer? = null
-    private val gpuInteropRegistry = GpuInteropRegistry()
+    private var compositor: SdlComposeCompositor? = null
     private var scene: androidx.compose.ui.scene.ComposeScene? = null
     private var framebuffer: Framebuffer? = null
     private var metrics: RenderMetrics? = null
@@ -1254,7 +1541,34 @@ internal class NativeWindowHost(
     private val droppedFiles = mutableListOf<String>()
     private var droppedText: String? = null
     private var dropAccepted = false
-    private val platformContext = SdlPlatformContext()
+    private val accessibility = LinuxAtSpiAccessibility(application::dispatchToHost)
+    private val damageTracker = FrameDamageTracker()
+    private val gpuInteropRegistry = GpuInteropRegistry(damageTracker::add)
+    private val platformContext =
+        SdlPlatformContext(accessibility, damageTracker) {
+            CairoGraphics.createGraphicsContext(compositor)
+        }
+
+    var rootForTestListener: PlatformContext.RootForTestListener?
+        get() = platformContext.externalRootForTestListener
+        set(value) {
+            platformContext.externalRootForTestListener = value
+        }
+
+    fun <T> runOnUiThread(action: () -> T): T = application.dispatchToHostBlocking(action)
+
+    val isUiThread: Boolean
+        get() = application.isHostThread()
+
+    val hasPendingTestWork: Boolean
+        get() = application.dispatchToHostBlocking { application.hasPendingTestWork(this) }
+
+    val hasPendingHostWork: Boolean
+        get() =
+            hasPendingRender ||
+                scene?.hasPendingMeasureOrLayout == true ||
+                scene?.hasInvalidations() == true
+
     private var closeRequest: () -> Unit = {}
     private var currentTitle = ""
     private var currentVisible = false
@@ -1271,6 +1585,7 @@ internal class NativeWindowHost(
     private var onKeyEvent: (KeyEvent) -> Boolean = { false }
     private var closed = false
     private val renderScheduled = atomic(true)
+    private val renderStats = getenv("KTNATIVE_RENDER_STATS") != null
     private var hitTestReference: StableRef<NativeWindowHost>? = null
     private val draggableAreas = mutableMapOf<Any, Rect>()
 
@@ -1286,6 +1601,10 @@ internal class NativeWindowHost(
     fun requestRender() {
         renderScheduled.value = true
         application.requestFrame()
+    }
+
+    fun onAccessibilityBusConnected() {
+        accessibility.onAccessibilityBusConnected()
     }
 
     val scope: FrameWindowScope =
@@ -1368,11 +1687,11 @@ internal class NativeWindowHost(
             }
         renderer = nativeRenderer
         if (useGpu) {
-            gpuContext =
-                checkNotNull(kgpu_context_create(window)) {
-                    "Could not create OpenGL context: ${SDL_GetError()?.toKString()}"
+            compositor =
+                checkNotNull(SdlComposeCompositor.create(window)) {
+                    "Could not create OpenGL compositor: ${SDL_GetError()?.toKString()}"
                 }
-            gpuInteropRegistry.context = gpuContext
+            gpuInteropRegistry.context = compositor?.context
         }
         currentTitle = title
         currentVisible = visible
@@ -1414,6 +1733,8 @@ internal class NativeWindowHost(
             isMinimized = currentMinimized,
         )
         updateWindowInfo(initialMetrics)
+        accessibility.open(title)
+        updateAccessibility(initialMetrics)
         scene = nativeScene
         nativeScene.setContent(parentComposition) {
             androidx.compose.runtime.CompositionLocalProvider(
@@ -1430,10 +1751,8 @@ internal class NativeWindowHost(
         framebuffer =
             Framebuffer(nativeRenderer, initialMetrics.pixelWidth, initialMetrics.pixelHeight)
         println("$title: ${initialMetrics.description()}")
-        gpuContext?.let {
-            println(
-                "$title: OpenGL ${kgpu_context_renderer(it)?.toKString() ?: "unknown renderer"}"
-            )
+        compositor?.let {
+            println("$title: OpenGL ${it.renderer}")
         }
     }
 
@@ -1526,6 +1845,7 @@ internal class NativeWindowHost(
             SDL_SetWindowSize(window, requestedWidth, requestedHeight)
             requestRender()
         }
+        updateAccessibility()
     }
 
     fun owns(event: SDL_Event): Boolean =
@@ -1905,15 +2225,17 @@ internal class NativeWindowHost(
         if (!isRenderable) return
         val window = nativeWindow ?: return
         val nativeRenderer = renderer
-        val nativeGpuContext = gpuContext
-        if (nativeRenderer == null && nativeGpuContext == null) return
+        val nativeCompositor = compositor
+        if (nativeRenderer == null && nativeCompositor == null) return
         val nativeScene = scene ?: return
         renderScheduled.value = false
-        nativeGpuContext?.let(::kgpu_context_make_current)
+        nativeCompositor?.makeCurrent()
         val nextMetrics = queryMetrics(window, nativeRenderer)
-        if (nextMetrics != metrics) {
+        val metricsChanged = nextMetrics != metrics
+        if (metricsChanged) {
             val densityChanged = nextMetrics.density != metrics?.density
             metrics = nextMetrics
+            damageTracker.updateDensity(nextMetrics.density)
             nativeScene.density = Density(nextMetrics.density)
             nativeScene.size = IntSize(nextMetrics.pixelWidth, nextMetrics.pixelHeight)
             framebuffer?.close()
@@ -1925,37 +2247,162 @@ internal class NativeWindowHost(
         }
         platformContext.updateTextInputRect(nextMetrics)
         val target = framebuffer ?: return
-        target.surface.clear()
-        nativeGpuContext?.let {
-            kgpu_context_begin(it, nextMetrics.pixelWidth, nextMetrics.pixelHeight)
+        nativeCompositor?.beginFrame(nextMetrics.pixelWidth, nextMetrics.pixelHeight)
+        val hadPendingLayout = nativeScene.hasPendingMeasureOrLayout
+        val composeNeedsDraw = metricsChanged || hadPendingLayout || nativeScene.hasInvalidations()
+        var damageReason = "none"
+        var orderedFullRedrawRequired = false
+        val damage =
+            if (composeNeedsDraw) {
+                if (hadPendingLayout) nativeScene.measureAndLayout()
+                val fullDamageReason =
+                    when {
+                        metricsChanged -> "resize"
+                        hadPendingLayout -> "layout"
+                        target.needsFullComposeFrame -> "first-frame"
+                        else -> null
+                    }
+                val resolvedDamage =
+                    if (fullDamageReason != null) {
+                        damageReason = fullDamageReason
+                        damageTracker.clear()
+                        FrameDamage(0, 0, nextMetrics.pixelWidth, nextMetrics.pixelHeight)
+                    } else {
+                        // Draw invalidations normally provide exact root-space bounds. Anything
+                        // that reaches the scene without bounds is deliberately treated as complex
+                        // or unsupported and falls back to a full frame.
+                        if (damageTracker.takeFullFrameRequest()) {
+                            damageReason = "complex"
+                            FrameDamage(0, 0, nextMetrics.pixelWidth, nextMetrics.pixelHeight)
+                        } else {
+                            val bounded =
+                                damageTracker.take(nextMetrics.pixelWidth, nextMetrics.pixelHeight)
+                            if (bounded != null) {
+                                damageReason = "bounded"
+                                bounded
+                            } else {
+                                damageReason = "unbounded"
+                                FrameDamage(0, 0, nextMetrics.pixelWidth, nextMetrics.pixelHeight)
+                            }
+                        }
+                    }
+                target.surface.clear(resolvedDamage.rect)
+                target.canvas.save()
+                target.canvas.clipRect(
+                    resolvedDamage.rect.left,
+                    resolvedDamage.rect.top,
+                    resolvedDamage.rect.right,
+                    resolvedDamage.rect.bottom,
+                )
+                val orderedRecorder =
+                    nativeCompositor?.beginOrderedRecording(
+                        rootCanvas = target.canvas,
+                        rootSurface = target.surface,
+                        width = nextMetrics.pixelWidth,
+                        height = nextMetrics.pixelHeight,
+                        damage = resolvedDamage,
+                    )
+                var orderedCapture: SdlOrderedFrameCapture? = null
+                gpuInteropRegistry.rootCanvas =
+                    if (nativeCompositor != null) target.canvas else null
+                gpuInteropRegistry.compositionRecorder = orderedRecorder
+                try {
+                    nativeScene.draw(target.canvas)
+                    // Unsupported retained-layer boundaries use the conservative external-first
+                    // path. Apply their root cutouts only after the complete scene has drawn so
+                    // isolated ancestors cannot repaint over the native surface.
+                    gpuInteropRegistry.applyFallbackMasks()
+                } finally {
+                    gpuInteropRegistry.compositionRecorder = null
+                    gpuInteropRegistry.rootCanvas = null
+                    try {
+                        orderedCapture = orderedRecorder?.finish()
+                    } finally {
+                        target.canvas.restore()
+                    }
+                }
+                target.surface.flush()
+                orderedCapture?.let { capture ->
+                    orderedFullRedrawRequired =
+                        nativeCompositor?.commitOrderedRecording(capture) == true
+                }
+                target.markComposeFramePresented()
+                resolvedDamage
+            } else {
+                null
+            }
+        if (orderedFullRedrawRequired) {
+            damageTracker.requireFullFrame()
+            requestRender()
         }
-        if (nativeScene.hasPendingMeasureOrLayout) nativeScene.measureAndLayout()
-        gpuInteropRegistry.rootCanvas = if (nativeGpuContext != null) target.canvas else null
-        try {
-            nativeScene.draw(target.canvas)
-        } finally {
-            gpuInteropRegistry.rootCanvas = null
-        }
-        target.surface.flush()
-        if (nativeGpuContext != null) {
-            gpuInteropRegistry.draw()
-            kgpu_context_draw_compose(
-                nativeGpuContext,
-                target.surface.data.reinterpret(),
-                nextMetrics.pixelWidth,
-                nextMetrics.pixelHeight,
-                target.surface.stride,
-            )
-            kgpu_context_present(nativeGpuContext)
+        if (nativeCompositor != null) {
+            if (!nativeCompositor.drawOrderedContent()) {
+                nativeCompositor.drawExternalContent(gpuInteropRegistry::draw)
+                nativeCompositor.uploadAndDrawRoot(
+                    surface = target.surface,
+                    width = nextMetrics.pixelWidth,
+                    height = nextMetrics.pixelHeight,
+                    damage = damage,
+                )
+            }
+            nativeCompositor.present()
         } else {
             checkNotNull(nativeRenderer)
             val texture = checkNotNull(target.texture)
-            check(SDL_UpdateTexture(texture, null, target.surface.data, target.surface.stride) == 0)
+            target.updateSdlTexture(damage)
             SDL_RenderClear(nativeRenderer)
             SDL_RenderCopy(nativeRenderer, texture, null, null)
             SDL_RenderPresent(nativeRenderer)
         }
+        if (renderStats) {
+            val pixels = damage?.pixelCount ?: 0
+            val total = nextMetrics.pixelWidth * nextMetrics.pixelHeight
+            val uploadBytes = nativeCompositor?.lastRootUploadBytes ?: (pixels * 4)
+            val compositorStats = nativeCompositor?.statsSnapshot()
+            println(
+                "Render damage [$damageReason]: $pixels/$total pixels" +
+                    (damage?.let { " (${it.x},${it.y} ${it.width}x${it.height})" } ?: "") +
+                    ", upload=${uploadBytes}B" +
+                    (compositorStats?.let {
+                        ", commands=${nativeCompositor.lastFrameCommands}" +
+                            ", layers=${it.activeLayers}" +
+                            ", layerChanges=${it.layerContentChanges}/${it.layerPropertyChanges}" +
+                            (
+                                nativeCompositor.lastOrderedFallbackReason
+                                    .takeIf { reason ->
+                                        reason != SdlOrderedFallbackReason.None
+                                    }
+                                    ?.let { reason -> ", orderedFallback=$reason" }
+                                    ?: ""
+                            )
+                    } ?: "")
+            )
+        }
+        // Accessibility updates are coalesced and performed after the visual frame is presented.
+        updateAccessibility(nextMetrics)
+        accessibility.refreshAfterLayout()
         if (nativeScene.hasInvalidations()) requestRender()
+    }
+
+    private fun updateAccessibility(currentMetrics: RenderMetrics? = metrics) {
+        val resolvedMetrics = currentMetrics ?: return
+        val window = nativeWindow ?: return
+        memScoped {
+            val x = alloc<IntVar>()
+            val y = alloc<IntVar>()
+            SDL_GetWindowPosition(window, x.ptr, y.ptr)
+            accessibility.updateWindow(
+                title = currentTitle,
+                visible = currentVisible && windowShown && !currentMinimized,
+                focused = platformContext.windowInfo.isWindowFocused,
+                screenX = x.value,
+                screenY = y.value,
+                width = resolvedMetrics.windowWidth,
+                height = resolvedMetrics.windowHeight,
+                scaleX = resolvedMetrics.inputScaleX,
+                scaleY = resolvedMetrics.inputScaleY,
+            )
+        }
     }
 
     private fun updateWindowInfo(metrics: RenderMetrics) {
@@ -2057,20 +2504,21 @@ internal class NativeWindowHost(
     fun close() {
         if (closed) return
         closed = true
-        gpuContext?.let(::kgpu_context_make_current)
+        compositor?.makeCurrent()
         framebuffer?.close()
         framebuffer = null
-        platformContext.close()
         scene?.close()
         scene = null
+        accessibility.close()
+        platformContext.close()
         nativeWindow?.let { SDL_SetWindowHitTest(it, null, null) }
         hitTestReference?.dispose()
         hitTestReference = null
         renderer?.let { SDL_DestroyRenderer(it) }
         renderer = null
         gpuInteropRegistry.context = null
-        gpuContext?.let(::kgpu_context_destroy)
-        gpuContext = null
+        compositor?.close()
+        compositor = null
         nativeWindow?.let { SDL_DestroyWindow(it) }
         nativeWindow = null
     }
@@ -2080,6 +2528,7 @@ internal class NativeWindowHost(
             isVisible = currentVisible && windowShown,
             isMinimized = currentMinimized,
         )
+        updateAccessibility()
     }
 }
 

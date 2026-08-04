@@ -24,6 +24,7 @@ import androidx.compose.ui.autofill.AutofillManager
 import androidx.compose.ui.draganddrop.DragAndDropManager
 import androidx.compose.ui.focus.FocusOwner
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.GraphicsContext
 import androidx.compose.ui.graphics.layer.GraphicsLayer
@@ -397,6 +398,15 @@ internal interface Owner : PositionCalculator {
      * layers.
      */
     fun invalidateRootLayer() {}
+
+    /**
+     * Reports root-coordinate pixels affected by a draw-only invalidation. Hosts may conservatively
+     * merge this rectangle with other damage before the next frame.
+     */
+    fun onDrawDamage(boundsInRoot: Rect) {}
+
+    /** Requests full-root damage when an effect cannot be bounded conservatively. */
+    fun onFullDrawDamage() {}
 
     companion object {
         /**

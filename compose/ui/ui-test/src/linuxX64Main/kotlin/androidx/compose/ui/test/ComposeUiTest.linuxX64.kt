@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 The Android Open Source Project
+ * Copyright 2026 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,14 @@
 
 package androidx.compose.ui.test
 
-// TODO https://youtrack.jetbrains.com/issue/COMPOSE-1283/Implement-coerceDensity
-internal actual fun coerceDensity(density: Float): Float =
-    density
+import kotlin.coroutines.CoroutineContext
+import kotlin.time.Duration
+import kotlinx.coroutines.test.TestResult
+
+@ExperimentalTestApi
+actual fun runComposeUiTest(
+    effectContext: CoroutineContext,
+    runTestContext: CoroutineContext,
+    testTimeout: Duration,
+    block: suspend ComposeUiTest.() -> Unit,
+): TestResult = runLinuxComposeUiTest(effectContext, runTestContext, testTimeout, block)

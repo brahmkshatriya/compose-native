@@ -128,10 +128,26 @@ internal class LayoutNodeDrawScope(val canvasDrawScope: CanvasDrawScope = Canvas
     ) {
         val previousDrawNode = this.drawNode
         this.drawNode = drawNode
-        canvasDrawScope.draw(coordinator, coordinator.layoutDirection, canvas, size, layer) {
-            with(drawNode) { this@LayoutNodeDrawScope.draw() }
+        val target =
+            drawNode.node.drawOwnerScope
+                ?: DrawNodeOwnerScope(drawNode).also { drawNode.node.drawOwnerScope = it }
+        try {
+            drawNode.requireOwner()
+                .snapshotObserver
+                .observeReads(target, DrawNodeOwnerScope.OnDrawReadsChanged) {
+                    canvasDrawScope.draw(
+                        coordinator,
+                        coordinator.layoutDirection,
+                        canvas,
+                        size,
+                        layer,
+                    ) {
+                        with(drawNode) { this@LayoutNodeDrawScope.draw() }
+                    }
+                }
+        } finally {
+            this.drawNode = previousDrawNode
         }
-        this.drawNode = previousDrawNode
     }
 }
 

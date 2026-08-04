@@ -1,0 +1,350 @@
+/*
+ * Copyright 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+@file:OptIn(
+    androidx.compose.ui.InternalComposeUiApi::class,
+    androidx.compose.ui.test.ExperimentalTestApi::class,
+    kotlin.native.concurrent.ObsoleteWorkersApi::class,
+    kotlinx.coroutines.ExperimentalCoroutinesApi::class,
+)
+
+package androidx.compose.ui.test
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.test.platform.makeSynchronizedObject
+import androidx.compose.ui.test.platform.synchronized
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.ComposeWindow
+import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.native.concurrent.TransferMode
+import kotlin.native.concurrent.Worker
+import kotlin.time.Duration
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
+import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.TestResult
+import kotlinx.coroutines.test.runTest
+
+private const val LinuxTestFrameMillis = 16L
+private const val LinuxIdlePollMillis = 1L
+
+/** Runs a Compose UI test against the real SDL/Cairo Linux window host. */
+@ExperimentalTestApi
+@Suppress("UNUSED_PARAMETER")
+fun runLinuxComposeUiTest(
+    effectContext: CoroutineContext = EmptyCoroutineContext,
+    runTestContext: CoroutineContext = EmptyCoroutineContext,
+    testTimeout: Duration = Duration.INFINITE,
+    block: suspend ComposeUiTest.() -> Unit,
+): TestResult {
+    val environment = LinuxComposeUiTestEnvironment(testTimeout)
+    val worker = Worker.start(name = "Compose Linux UI test host")
+    val applicationFuture =
+        worker.execute(TransferMode.UNSAFE, { environment }) { it.runApplication() }
+
+    val testResult =
+        runCatching {
+            environment.awaitHost()
+            // The production SDL recomposer is not yet driven by effectContext. The parameter is
+            // retained for API parity until deterministic frame-clock integration is added.
+            runTest(context = runTestContext, timeout = testTimeout) {
+                block(environment.test)
+            }
+        }
+
+    environment.close()
+    val applicationResult = runCatching { applicationFuture.result }
+    worker.requestTermination().result
+    environment.dispose()
+
+    environment.applicationFailure?.let { throw it }
+    applicationResult.getOrThrow()
+    return testResult.getOrThrow()
+}
+
+private class LinuxComposeUiTestEnvironment(
+    private val timeout: Duration,
+) {
+    private val stateLock = makeSynchronizedObject()
+    private val hostReady = atomic(false)
+    private val closed = atomic(false)
+    private var composeWindow: ComposeWindow? = null
+    private var updateContent: ((@Composable () -> Unit) -> Unit)? = null
+    private var exitApplication: (() -> Unit)? = null
+    private var contentSet = false
+
+    val rootRegistry = ComposeRootRegistry()
+    val test = LinuxComposeUiTest(this, timeout)
+    var applicationFailure: Throwable? = null
+        private set
+
+    init {
+        rootRegistry.setupRegistry()
+    }
+
+    fun runApplication() {
+        try {
+            application(exitProcessOnExit = false) {
+                val applicationScope = this
+                Window(
+                    onCloseRequest = applicationScope::exitApplication,
+                    state = rememberWindowState(size = DpSize(640.dp, 480.dp)),
+                    visible = true,
+                    title = "Compose Linux UI test",
+                ) {
+                    var content by remember {
+                        mutableStateOf<(@Composable () -> Unit)?>(null)
+                    }
+                    val windowForTest = window
+                    SideEffect {
+                        attach(
+                            window = windowForTest,
+                            updateContent = { content = it },
+                            exitApplication = applicationScope::exitApplication,
+                        )
+                    }
+                    content?.invoke()
+                }
+            }
+        } catch (failure: Throwable) {
+            applicationFailure = failure
+            hostReady.value = true
+        }
+    }
+
+    private fun attach(
+        window: ComposeWindow,
+        updateContent: (@Composable () -> Unit) -> Unit,
+        exitApplication: () -> Unit,
+    ) {
+        if (hostReady.value) return
+        synchronized(stateLock) {
+            if (hostReady.value) return@synchronized
+            window.rootForTestListener = rootRegistry
+            composeWindow = window
+            this.updateContent = updateContent
+            this.exitApplication = exitApplication
+            hostReady.value = true
+        }
+        if (closed.value) exitApplication()
+    }
+
+    fun awaitHost() {
+        val started = TimeSource.Monotonic.markNow()
+        while (!hostReady.value) {
+            applicationFailure?.let { throw it }
+            checkTimeout(started, "starting the SDL test host")
+            sleep(LinuxIdlePollMillis)
+        }
+        applicationFailure?.let { throw it }
+    }
+
+    fun setContent(content: @Composable () -> Unit) {
+        awaitHost()
+        synchronized(stateLock) {
+            check(!contentSet) { "setContent may only be called once per Compose UI test" }
+            contentSet = true
+        }
+        runOnUiThread {
+            checkNotNull(updateContent) { "The SDL test window is not attached" }.invoke(content)
+        }
+        test.waitForIdle()
+    }
+
+    fun <T> runOnUiThread(action: () -> T): T {
+        awaitHost()
+        return checkNotNull(composeWindow) { "The SDL test window is not attached" }
+            .runOnUiThread(action)
+    }
+
+    fun hasPendingWork(): Boolean =
+        runOnUiThread {
+            Snapshot.sendApplyNotifications()
+            rootRegistry.getComposeRoots().any { it.hasPendingMeasureOrLayout } ||
+                checkNotNull(composeWindow).hasPendingTestWork ||
+                Snapshot.current.hasPendingChanges() ||
+                Snapshot.isApplyObserverNotificationPending
+        }
+
+    fun close() {
+        if (!closed.compareAndSet(expect = false, update = true)) return
+        if (!hostReady.value) return
+        composeWindow?.runOnUiThread { exitApplication?.invoke() }
+    }
+
+    fun dispose() {
+        rootRegistry.tearDownRegistry()
+    }
+
+    fun checkTimeout(started: TimeMark, operation: String) {
+        if (timeout != Duration.INFINITE && started.elapsedNow() > timeout) {
+            throw ComposeTimeoutException("Timed out while $operation after $timeout")
+        }
+    }
+}
+
+@ExperimentalTestApi
+private class LinuxComposeUiTest(
+    private val environment: LinuxComposeUiTestEnvironment,
+    private val timeout: Duration,
+) : ComposeUiTest {
+    override val density: Density = Density(1f)
+    private val clock = LinuxMainTestClock(::waitForIdle)
+    override val mainClock: MainTestClock
+        get() = clock
+
+    private val owner = LinuxTestOwner()
+    private val context = TestContext(owner)
+
+    override fun <T> runOnUiThread(action: () -> T): T = environment.runOnUiThread(action)
+
+    override fun <T> runOnIdle(action: () -> T): T {
+        waitForIdle()
+        return runOnUiThread(action)
+    }
+
+    override fun <T> runWithoutImplicitWait(block: () -> T): T {
+        val previous = owner.isImplicitWaitSuppressed
+        owner.isImplicitWaitSuppressed = true
+        return try {
+            block()
+        } finally {
+            owner.isImplicitWaitSuppressed = previous
+        }
+    }
+
+    override fun waitForIdle() {
+        val started = TimeSource.Monotonic.markNow()
+        while (environment.hasPendingWork()) {
+            if (timeout != Duration.INFINITE && started.elapsedNow() > timeout) {
+                throw ComposeTimeoutException("waitForIdle timed out after $timeout")
+            }
+            sleep(LinuxIdlePollMillis)
+        }
+    }
+
+    override suspend fun awaitIdle() {
+        waitForIdle()
+    }
+
+    override fun waitUntil(
+        conditionDescription: String?,
+        timeoutMillis: Long,
+        condition: () -> Boolean,
+    ) {
+        val started = TimeSource.Monotonic.markNow()
+        while (!condition()) {
+            if (started.elapsedNow().inWholeMilliseconds > timeoutMillis) {
+                throw ComposeTimeoutException(
+                    buildWaitUntilTimeoutMessage(timeoutMillis, conditionDescription)
+                )
+            }
+            if (mainClock.autoAdvance) waitForIdle()
+            sleep(LinuxIdlePollMillis)
+        }
+    }
+
+    override fun setContent(composable: @Composable () -> Unit) {
+        environment.setContent(composable)
+    }
+
+    override fun hasPendingWork(): Boolean = environment.hasPendingWork()
+
+    override fun onNode(
+        matcher: SemanticsMatcher,
+        useUnmergedTree: Boolean,
+    ): SemanticsNodeInteraction = SemanticsNodeInteraction(context, useUnmergedTree, matcher)
+
+    override fun onAllNodes(
+        matcher: SemanticsMatcher,
+        useUnmergedTree: Boolean,
+    ): SemanticsNodeInteractionCollection =
+        SemanticsNodeInteractionCollection(context, useUnmergedTree, matcher)
+
+    private inner class LinuxTestOwner : TestOwner {
+        override var isImplicitWaitSuppressed: Boolean = false
+        override val mainClock: MainTestClock
+            get() = clock
+
+        override fun <T> runOnUiThread(action: () -> T): T = environment.runOnUiThread(action)
+
+        override fun getRoots(atLeastOneRootExpected: Boolean): Set<RootForTest> {
+            if (!isImplicitWaitSuppressed) waitForIdle()
+            val roots = environment.rootRegistry.getComposeRoots()
+            if (atLeastOneRootExpected && roots.isEmpty()) {
+                throw AssertionError("No Compose roots were registered by the SDL test host")
+            }
+            return roots
+        }
+
+        override fun runCurrent() {
+            clock.scheduler.runCurrent()
+        }
+    }
+}
+
+private class LinuxMainTestClock(
+    private val waitForIdle: () -> Unit,
+) : MainTestClock {
+    override val scheduler = TestCoroutineScheduler()
+    override val currentTime: Long
+        get() = scheduler.currentTime
+    override var autoAdvance: Boolean = true
+
+    override fun advanceTimeByFrame() {
+        advanceTimeBy(LinuxTestFrameMillis)
+    }
+
+    override fun advanceTimeBy(milliseconds: Long, ignoreFrameDuration: Boolean) {
+        require(milliseconds >= 0) { "milliseconds must be non-negative" }
+        val duration =
+            if (ignoreFrameDuration || milliseconds == 0L) {
+                milliseconds
+            } else {
+                ((milliseconds + LinuxTestFrameMillis - 1) / LinuxTestFrameMillis) *
+                    LinuxTestFrameMillis
+            }
+        scheduler.advanceTimeBy(duration)
+        if (duration > 0) sleep(duration)
+        waitForIdle()
+    }
+
+    override fun advanceTimeUntil(timeoutMillis: Long, condition: () -> Boolean) {
+        val start = currentTime
+        while (!condition()) {
+            if (currentTime - start >= timeoutMillis) {
+                throw ComposeTimeoutException(
+                    buildWaitUntilTimeoutMessage(timeoutMillis, "main clock condition")
+                )
+            }
+            advanceTimeByFrame()
+        }
+    }
+}

@@ -42,8 +42,38 @@ void *kgpu_context_create(void *sdl_window);
 void kgpu_context_make_current(void *context);
 void kgpu_context_destroy(void *context);
 void kgpu_context_begin(void *context, int width, int height);
-void kgpu_context_draw_compose(
-    void *context, const unsigned char *pixels, int width, int height, int stride);
+void *kgpu_texture_create(void);
+void kgpu_texture_destroy(void *context, void *texture);
+int kgpu_texture_upload(
+    void *context,
+    void *texture,
+    const unsigned char *pixels,
+    int width,
+    int height,
+    int stride,
+    int damage_x,
+    int damage_y,
+    int damage_width,
+    int damage_height);
+int kgpu_texture_upload_region(
+    void *context,
+    void *texture,
+    const unsigned char *pixels,
+    int source_width,
+    int source_height,
+    int source_stride,
+    int texture_width,
+    int texture_height,
+    int destination_x,
+    int destination_y);
+void kgpu_texture_draw(
+    void *context,
+    void *texture,
+    float x,
+    float y,
+    float width,
+    float height,
+    int cpu_top_down);
 void kgpu_context_present(void *context);
 const char *kgpu_context_renderer(void *context);
 void *kgpu_layer_create(void);
@@ -72,6 +102,17 @@ int kg_path_command_type(void *path, int index);
 double kg_path_command_value(void *path, int index, int value);
 
 static inline void *kc_create(void *surface) { return cairo_create(surface); }
+static inline void *kc_get_group_target(void *cr) { return cairo_get_group_target(cr); }
+static inline void kc_get_matrix_values(void *cr, double *values) {
+    cairo_matrix_t matrix;
+    cairo_get_matrix(cr, &matrix);
+    values[0] = matrix.xx;
+    values[1] = matrix.yx;
+    values[2] = matrix.xy;
+    values[3] = matrix.yy;
+    values[4] = matrix.x0;
+    values[5] = matrix.y0;
+}
 static inline void kc_destroy(void *cr) { cairo_destroy(cr); }
 static inline int kc_status(void *cr) { return cairo_status(cr); }
 static inline void kc_save(void *cr) { cairo_save(cr); }

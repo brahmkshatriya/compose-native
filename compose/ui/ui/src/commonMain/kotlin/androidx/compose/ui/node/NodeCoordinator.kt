@@ -34,7 +34,9 @@ import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.geometry.toRect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.DefaultCameraDistance
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.graphics.LayerOutsets
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.RectangleShape
@@ -327,6 +329,7 @@ internal abstract class NodeCoordinator(override val layoutNode: LayoutNode) :
 
     /** The current layer's positional attributes. */
     private var layerPositionalProperties: LayerPositionalProperties? = null
+    private var lastLayerRequiredFullDamage = false
 
     internal val lastMeasurementConstraints: Constraints
         get() = measurementConstraints
@@ -523,11 +526,7 @@ internal abstract class NodeCoordinator(override val layoutNode: LayoutNode) :
                     if (layoutNode.isPlaced) {
                         this.drawBlockCanvas = canvas
                         this.drawBlockParentLayer = parentLayer
-                        snapshotObserver.observeReads(
-                            this,
-                            onCommitAffectingLayer,
-                            drawBlockCallToDrawModifiers,
-                        )
+                        drawBlockCallToDrawModifiers()
                         lastLayerDrawingWasSkipped = false
                     } else {
                         // The invalidation is requested even for nodes which are not placed. As we
@@ -598,6 +597,13 @@ internal abstract class NodeCoordinator(override val layoutNode: LayoutNode) :
         }
         val layer = layer
         if (layer != null) {
+            val owner = layoutNode.owner
+            val previousDamage =
+                if (wasLayerBlockInvoked && isAttached && layoutNode.isPlaced) {
+                    boundsInRoot(clipBounds = false)
+                } else {
+                    null
+                }
             val layerBlock =
                 checkPreconditionNotNull(layerBlock) {
                     "updateLayerParameters requires a non-null layerBlock"
@@ -638,6 +644,16 @@ internal abstract class NodeCoordinator(override val layoutNode: LayoutNode) :
             lastLayerAlpha = graphicsLayerScope.alpha
             val positionalPropertiesChanged =
                 !tmpLayerPositionalProperties.hasSameValuesAs(layerPositionalProperties)
+            val requiresFullDamage = graphicsLayerScope.requiresFullDamageFallback()
+            if (previousDamage != null) {
+                if (lastLayerRequiredFullDamage || requiresFullDamage) {
+                    owner?.onFullDrawDamage()
+                } else {
+                    owner?.onDrawDamage(previousDamage)
+                    owner?.onDrawDamage(boundsInRoot(clipBounds = false))
+                }
+            }
+            lastLayerRequiredFullDamage = requiresFullDamage
             if (
                 invokeOnLayoutChange &&
                     (positionalPropertiesChanged ||
@@ -1627,9 +1643,6 @@ internal abstract class NodeCoordinator(override val layoutNode: LayoutNode) :
                 }
             }
         }
-        private val onCommitAffectingLayer: (NodeCoordinator) -> Unit = { coordinator ->
-            coordinator.layer?.invalidate()
-        }
         private val graphicsLayerScope = ReusableGraphicsLayerScope()
         private val tmpLayerPositionalProperties = LayerPositionalProperties()
 
@@ -1778,6 +1791,30 @@ private class LayerPositionalProperties {
             cameraDistance == other.cameraDistance &&
             transformOrigin == other.transformOrigin
     }
+}
+
+
+private fun ReusableGraphicsLayerScope.requiresFullDamageFallback(): Boolean {
+    val transformIsUnknown =
+        !scaleX.fastIsFinite() ||
+            !scaleY.fastIsFinite() ||
+            !alpha.fastIsFinite() ||
+            !translationX.fastIsFinite() ||
+            !translationY.fastIsFinite() ||
+            !rotationX.fastIsFinite() ||
+            !rotationY.fastIsFinite() ||
+            !rotationZ.fastIsFinite() ||
+            !cameraDistance.fastIsFinite() ||
+            cameraDistance <= 0f
+    return transformIsUnknown ||
+        rotationX != 0f ||
+        rotationY != 0f ||
+        renderEffect != null ||
+        colorFilter != null ||
+        blendMode != BlendMode.SrcOver ||
+        shadowElevation > 0f ||
+        outsets != LayerOutsets.Zero ||
+        (clip && shape != RectangleShape)
 }
 
 private fun DelegatableNode.nextUntil(type: NodeKind<*>, stopType: NodeKind<*>): Modifier.Node? {

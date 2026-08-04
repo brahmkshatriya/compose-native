@@ -41,7 +41,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Matrix
-import androidx.compose.ui.graphics.platform.PlatformGraphicsRegistry
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
@@ -131,7 +130,7 @@ internal class RootNodeOwner(
 
     private val rootSemanticsNode = EmptySemanticsModifier()
     private val snapshotObserver = OwnerSnapshotObserver(onChangedExecutor)
-    private val graphicsContext = PlatformGraphicsRegistry.requireCurrent().createGraphicsContext()
+    private val graphicsContext = platformContext.createGraphicsContext()
     private val coroutineScope =
         CoroutineScope(coroutineContext + Job(parent = coroutineContext[Job]))
 
@@ -772,6 +771,14 @@ internal class RootNodeOwner(
 
         override fun invalidateRootLayer() {
             ownedLayerManager.invalidate()
+        }
+
+        override fun onDrawDamage(boundsInRoot: Rect) {
+            platformContext.onDrawDamage(boundsInRoot)
+        }
+
+        override fun onFullDrawDamage() {
+            platformContext.onFullDrawDamage()
         }
 
         fun dispose() {

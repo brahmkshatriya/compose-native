@@ -142,6 +142,23 @@ internal class CairoSurface(
         kc_destroy(cr)
     }
 
+    fun clear(rect: Rect) {
+        if (!rect.isFinite || rect.isEmpty) return
+        val cr = checkNotNull(kc_create(handle))
+        kc_rectangle(
+            cr,
+            rect.left.toDouble(),
+            rect.top.toDouble(),
+            rect.width.toDouble(),
+            rect.height.toDouble(),
+        )
+        kc_clip(cr)
+        kc_set_operator(cr, 1) // CAIRO_OPERATOR_SOURCE
+        kc_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0)
+        kc_paint(cr)
+        kc_destroy(cr)
+    }
+
     fun flush() = kc_surface_flush(handle)
 
     fun markDirty() = kc_surface_dirty(handle)
@@ -735,10 +752,32 @@ private class CairoPaint : Paint {
     override var pathEffect: PathEffect? = null
 }
 
-internal class CairoCanvas(val context: COpaquePointer) : Canvas {
+internal class CairoCanvas(
+    val context: COpaquePointer,
+    private val externalBoundaryListener: (() -> Unit)? = null,
+) : Canvas {
     private data class SavedLayer(val paint: CairoPaint?)
 
     private val saves = mutableListOf<SavedLayer>()
+
+    internal fun markExternalBoundary(): Boolean {
+        val listener = externalBoundaryListener ?: return false
+        listener()
+        return true
+    }
+
+    internal fun currentTransform(): Matrix {
+        val values = DoubleArray(6)
+        values.usePinned { kc_get_matrix_values(context, it.addressOf(0)) }
+        return Matrix().also { matrix ->
+            matrix[0, 0] = values[0].toFloat()
+            matrix[0, 1] = values[1].toFloat()
+            matrix[1, 0] = values[2].toFloat()
+            matrix[1, 1] = values[3].toFloat()
+            matrix[3, 0] = values[4].toFloat()
+            matrix[3, 1] = values[5].toFloat()
+        }
+    }
 
     override fun save() {
         kc_save(context)
@@ -1604,24 +1643,141 @@ private class CairoPathMeasure : PathMeasure {
     }
 }
 
-private class CairoGraphicsLayer : PlatformGraphicsLayer {
+internal interface CairoLayerCompositor {
+    fun createLayerRegistration(): CairoLayerRegistration
+}
+
+internal interface CairoLayerRegistration : AutoCloseable {
+    val id: Long
+    fun onContentChanged()
+    fun onPropertiesChanged()
+}
+
+private class CairoGraphicsLayer(
+    private val compositorRegistration: CairoLayerRegistration? = null,
+) : PlatformGraphicsLayer {
+    override val requiresParentLayerInvalidation = true
+
     override var compositingStrategy = CompositingStrategy.Auto
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var pivotOffset = Offset.Unspecified
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var alpha = 1f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var scaleX = 1f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var scaleY = 1f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var translationX = 0f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var translationY = 0f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var shadowElevation = 0f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var ambientShadowColor = Color.Black
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var spotShadowColor = Color.Black
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var blendMode = BlendMode.SrcOver
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var colorFilter: ColorFilter? = null
+        set(value) {
+            if (field != value) {
+                field = value
+                markRenderSurfaceDirty()
+            }
+        }
     override var rotationX = 0f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var rotationY = 0f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var rotationZ = 0f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var cameraDistance = 8f
+        set(value) {
+            if (field != value) {
+                field = value
+                markPropertiesChanged()
+            }
+        }
     override var renderEffect: RenderEffect? = null
+        set(value) {
+            if (field != value) {
+                field = value
+                markRenderSurfaceDirty()
+            }
+        }
+
     private var topLeft = IntOffset.Zero
     private var size = IntSize.Zero
     private var outline: Outline? = null
@@ -1636,14 +1792,46 @@ private class CairoGraphicsLayer : PlatformGraphicsLayer {
     private var recordedLayer: GraphicsLayer? = null
     private var recordedBlock: (DrawScope.() -> Unit)? = null
 
+    private var contentSurface: CairoSurface? = null
+    private var effectSurface: CairoSurface? = null
+    private var filteredSurface: CairoSurface? = null
+    private var contentSurfaceDirty = true
+    private var renderSurfaceDirty = true
+    private var containsExternalBoundary = false
+    private var registrationClosed = false
+
+    private fun markContentDirty() {
+        contentSurfaceDirty = true
+        renderSurfaceDirty = true
+        compositorRegistration?.onContentChanged()
+    }
+
+    private fun markRenderSurfaceDirty() {
+        renderSurfaceDirty = true
+        compositorRegistration?.onContentChanged()
+    }
+
+    private fun markPropertiesChanged() {
+        compositorRegistration?.onPropertiesChanged()
+    }
+
     override fun setBounds(topLeft: IntOffset, size: IntSize) {
-        this.topLeft = topLeft
-        this.size = size
+        if (this.topLeft != topLeft) {
+            this.topLeft = topLeft
+            markPropertiesChanged()
+        }
+        if (this.size != size) {
+            this.size = size
+            markContentDirty()
+        }
     }
 
     override fun setOutline(outline: Outline?, clip: Boolean) {
-        this.outline = outline
-        this.clip = clip
+        if (this.outline != outline || this.clip != clip) {
+            this.outline = outline
+            this.clip = clip
+            markContentDirty()
+        }
     }
 
     override fun record(
@@ -1656,6 +1844,7 @@ private class CairoGraphicsLayer : PlatformGraphicsLayer {
         recordedLayoutDirection = layoutDirection
         recordedLayer = layer
         recordedBlock = block
+        markContentDirty()
     }
 
     private fun applyEffect(surface: CairoSurface, effect: CairoEffect?) {
@@ -1679,6 +1868,79 @@ private class CairoGraphicsLayer : PlatformGraphicsLayer {
         }
     }
 
+    private fun closeDerivedSurfaces() {
+        effectSurface?.close()
+        filteredSurface?.close()
+        effectSurface = null
+        filteredSurface = null
+    }
+
+    private fun ensureContentSurface(): CairoSurface? {
+        val density = recordedDensity ?: return null
+        val layoutDirection = recordedLayoutDirection ?: return null
+        val layer = recordedLayer ?: return null
+        val block = recordedBlock ?: return null
+        val width = max(1, size.width + ol + or)
+        val height = max(1, size.height + ot + ob)
+        var surface = contentSurface
+        if (surface == null || surface.width != width || surface.height != height) {
+            surface?.close()
+            surface = CairoSurface(width, height)
+            contentSurface = surface
+            contentSurfaceDirty = true
+        }
+        if (contentSurfaceDirty) {
+            surface.clear()
+            val context = checkNotNull(kc_create(surface.handle))
+            try {
+                val offscreen = CairoCanvas(context) { containsExternalBoundary = true }
+                offscreen.translate(ol.toFloat(), ot.toFloat())
+                if (clip) offscreen.clipOutline(outline)
+                scope.draw(density, layoutDirection, offscreen, layer.size.toSize(), layer, block)
+            } finally {
+                kc_destroy(context)
+            }
+            surface.flush()
+            contentSurfaceDirty = false
+            renderSurfaceDirty = true
+        }
+        return surface
+    }
+
+    private fun copySurface(source: CairoSurface, filter: ColorFilter? = null): CairoSurface {
+        val result = CairoSurface(source.width, source.height)
+        result.clear()
+        val context = checkNotNull(kc_create(result.handle))
+        try {
+            CairoCanvas(context).drawSurface(source, 0f, 0f, 1f, BlendMode.Src, filter)
+        } finally {
+            kc_destroy(context)
+        }
+        result.flush()
+        return result
+    }
+
+    private fun ensureRenderSurface(): CairoSurface? {
+        val content = ensureContentSurface() ?: return null
+        if (renderSurfaceDirty) {
+            closeDerivedSurfaces()
+            var source = content
+            val effect = renderEffect?.platformRenderEffect as? CairoEffect
+            if (effect != null) {
+                source = copySurface(source).also {
+                    applyEffect(it, effect)
+                    effectSurface = it
+                }
+            }
+            val filter = colorFilter
+            if (filter != null) {
+                source = copySurface(source, filter).also { filteredSurface = it }
+            }
+            renderSurfaceDirty = false
+        }
+        return filteredSurface ?: effectSurface ?: content
+    }
+
     private fun project(point: Offset, pivot: Offset): Offset {
         var x = (point.x - pivot.x) * scaleX
         var y = (point.y - pivot.y) * scaleY
@@ -1699,6 +1961,42 @@ private class CairoGraphicsLayer : PlatformGraphicsLayer {
         val depth = max(1f, cameraDistance * 72f)
         val perspective = depth / max(0.01f, depth - z)
         return Offset(pivot.x + xz * perspective, pivot.y + yz * perspective)
+    }
+
+    // Clip-only layers and layers containing external commands do not require isolation when no
+    // effect or group compositing semantics are active. External boundaries are discovered while
+    // recording an offscreen display list, then conservatively flattened on the next full frame.
+    private fun canDrawDirectly(): Boolean =
+        (containsExternalBoundary || (clip && outline != null)) &&
+            compositingStrategy != CompositingStrategy.Offscreen &&
+            alpha == 1f &&
+            rotationX == 0f &&
+            rotationY == 0f &&
+            shadowElevation == 0f &&
+            blendMode == BlendMode.SrcOver &&
+            colorFilter == null &&
+            renderEffect == null
+
+    private fun drawDirectly(target: CairoCanvas): Boolean {
+        val density = recordedDensity ?: return false
+        val layoutDirection = recordedLayoutDirection ?: return false
+        val layer = recordedLayer ?: return false
+        val block = recordedBlock ?: return false
+        val px = if (pivotOffset != Offset.Unspecified) pivotOffset.x else size.width / 2f
+        val py = if (pivotOffset != Offset.Unspecified) pivotOffset.y else size.height / 2f
+        target.save()
+        try {
+            target.translate(topLeft.x + translationX, topLeft.y + translationY)
+            target.translate(px, py)
+            target.rotate(rotationZ)
+            target.scale(scaleX, scaleY)
+            target.translate(-px, -py)
+            if (clip) target.clipOutline(outline)
+            scope.draw(density, layoutDirection, target, layer.size.toSize(), layer, block)
+        } finally {
+            target.restore()
+        }
+        return true
     }
 
     private fun drawProjected(target: CairoCanvas, surface: CairoSurface, pivot: Offset) {
@@ -1739,83 +2037,25 @@ private class CairoGraphicsLayer : PlatformGraphicsLayer {
 
     override fun draw(canvas: Canvas) {
         val target = canvas as? CairoCanvas ?: return
-        val density = recordedDensity ?: return
-        val layoutDirection = recordedLayoutDirection ?: return
-        val layer = recordedLayer ?: return
-        val block = recordedBlock ?: return
+        if (canDrawDirectly() && drawDirectly(target)) return
+        val surface = ensureRenderSurface() ?: return
+        // An external boundary can be discovered only while recording this retained surface.
+        // Re-check immediately so the layer can flatten into its parent in the same frame; parent
+        // layers perform the same check and propagate the boundary all the way to the root stream.
+        if (canDrawDirectly() && drawDirectly(target)) return
         val px = if (pivotOffset != Offset.Unspecified) pivotOffset.x else size.width / 2f
         val py = if (pivotOffset != Offset.Unspecified) pivotOffset.y else size.height / 2f
-        val effect = renderEffect?.platformRenderEffect as? CairoEffect
-        val requiresRaster = effect != null || abs(rotationX) > 0.001f || abs(rotationY) > 0.001f
-        if (requiresRaster) {
-            val surface = CairoSurface(max(1, size.width + ol + or), max(1, size.height + ot + ob))
-            surface.clear()
-            val context = checkNotNull(kc_create(surface.handle))
-            val offscreen = CairoCanvas(context)
-            offscreen.translate(ol.toFloat(), ot.toFloat())
-            if (clip) offscreen.clipOutline(outline)
-            scope.draw(density, layoutDirection, offscreen, layer.size.toSize(), layer, block)
-            kc_destroy(context)
-            applyEffect(surface, effect)
-            val renderSurface =
-                if (colorFilter == null) {
-                    surface
-                } else {
-                    CairoSurface(surface.width, surface.height).also { filtered ->
-                        filtered.clear()
-                        val filteredContext = checkNotNull(kc_create(filtered.handle))
-                        CairoCanvas(filteredContext)
-                            .drawSurface(surface, 0f, 0f, 1f, BlendMode.Src, colorFilter)
-                        kc_destroy(filteredContext)
-                    }
-                }
-            target.save()
-            target.translate(topLeft.x + translationX, topLeft.y + translationY)
-            if (abs(rotationX) > 0.001f || abs(rotationY) > 0.001f) {
-                drawProjected(target, renderSurface, Offset(px, py))
-            } else {
-                target.translate(px, py)
-                target.rotate(rotationZ)
-                target.scale(scaleX, scaleY)
-                target.translate(-px, -py)
-                target.drawSurface(renderSurface, -ol.toFloat(), -ot.toFloat(), alpha, blendMode)
-            }
-            target.restore()
-            if (renderSurface !== surface) renderSurface.close()
-            surface.close()
-            return
-        }
         target.save()
         target.translate(topLeft.x + translationX, topLeft.y + translationY)
-        target.translate(px, py)
-        target.rotate(rotationZ)
-        target.scale(scaleX, scaleY)
-        target.translate(-px, -py)
-        if (clip) target.clipOutline(outline)
-        val needsGroup =
-            alpha < 1f ||
-                colorFilter != null ||
-                compositingStrategy == CompositingStrategy.Offscreen ||
-                blendMode != BlendMode.SrcOver
-        if (needsGroup) {
-            val paint =
-                CairoPaint().also {
-                    it.alpha = alpha
-                    it.blendMode = blendMode
-                    it.colorFilter = colorFilter
-                }
-            target.saveLayer(
-                Rect(
-                    -ol.toFloat(),
-                    -ot.toFloat(),
-                    (size.width + or).toFloat(),
-                    (size.height + ob).toFloat(),
-                ),
-                paint,
-            )
+        if (abs(rotationX) > 0.001f || abs(rotationY) > 0.001f) {
+            drawProjected(target, surface, Offset(px, py))
+        } else {
+            target.translate(px, py)
+            target.rotate(rotationZ)
+            target.scale(scaleX, scaleY)
+            target.translate(-px, -py)
+            target.drawSurface(surface, -ol.toFloat(), -ot.toFloat(), alpha, blendMode)
         }
-        scope.draw(density, layoutDirection, target, layer.size.toSize(), layer, block)
-        if (needsGroup) target.restore()
         target.restore()
     }
 
@@ -1824,22 +2064,40 @@ private class CairoGraphicsLayer : PlatformGraphicsLayer {
         recordedLayoutDirection = null
         recordedLayer = null
         recordedBlock = null
+        contentSurface?.close()
+        contentSurface = null
+        closeDerivedSurfaces()
+        contentSurfaceDirty = true
+        renderSurfaceDirty = true
+        if (!registrationClosed) {
+            registrationClosed = true
+            compositorRegistration?.close()
+        }
     }
 
     override fun setOutsets(left: Int, top: Int, right: Int, bottom: Int) {
-        ol = left
-        ot = top
-        or = right
-        ob = bottom
+        if (ol != left || ot != top || or != right || ob != bottom) {
+            ol = left
+            ot = top
+            or = right
+            ob = bottom
+            markContentDirty()
+        }
     }
 }
 
-private class CairoGraphicsContext : PlatformGraphicsContext() {
-    override fun createPlatformGraphicsLayer(): PlatformGraphicsLayer = CairoGraphicsLayer()
+private class CairoGraphicsContext(
+    private val layerCompositor: CairoLayerCompositor? = null,
+) : PlatformGraphicsContext() {
+    override fun createPlatformGraphicsLayer(): PlatformGraphicsLayer =
+        CairoGraphicsLayer(layerCompositor?.createLayerRegistration())
 }
 
 internal object CairoGraphics : PlatformGraphics {
     override fun createGraphicsContext(): PlatformGraphicsContext = CairoGraphicsContext()
+
+    fun createGraphicsContext(layerCompositor: CairoLayerCompositor?): PlatformGraphicsContext =
+        CairoGraphicsContext(layerCompositor)
 
     override fun createCanvas(image: ImageBitmap): Canvas {
         image as CairoImage

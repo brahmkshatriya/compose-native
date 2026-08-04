@@ -6,6 +6,7 @@ plugins {
 val nativeSupportObject = layout.buildDirectory.file("native-support/native_support.o")
 val clipperEngineObject = layout.buildDirectory.file("native-support/clipper.engine.o")
 val desktopSupportObject = layout.buildDirectory.file("native-support/desktop_support.o")
+val atspiSupportObject = layout.buildDirectory.file("native-support/atspi_support.o")
 val nativeSupportArchive = layout.buildDirectory.file("native-support/libcompose_sdl2.a")
 
 val compileNativeSupport by tasks.registering(Exec::class) {
@@ -62,9 +63,26 @@ val compileDesktopSupport by tasks.registering(Exec::class) {
     )
 }
 
+val compileAtspiSupport by tasks.registering(Exec::class) {
+    inputs.files(
+        "src/nativeInterop/cinterop/atspi_support.cpp",
+        "src/nativeInterop/cinterop/include/linux_atspi.h",
+    )
+    outputs.file(atspiSupportObject)
+    doFirst { atspiSupportObject.get().asFile.parentFile.mkdirs() }
+    commandLine(
+        "c++", "-std=c++17", "-O3", "-fPIC", "-w",
+        "-Isrc/nativeInterop/cinterop/include",
+        "-I/usr/include/dbus-1.0",
+        "-I/usr/lib/dbus-1.0/include",
+        "-c", "src/nativeInterop/cinterop/atspi_support.cpp",
+        "-o", atspiSupportObject.get().asFile.absolutePath,
+    )
+}
+
 val archiveNativeSupport by tasks.registering(Exec::class) {
-    dependsOn(compileNativeSupport, compileClipperEngine, compileDesktopSupport)
-    inputs.files(nativeSupportObject, clipperEngineObject, desktopSupportObject)
+    dependsOn(compileNativeSupport, compileClipperEngine, compileDesktopSupport, compileAtspiSupport)
+    inputs.files(nativeSupportObject, clipperEngineObject, desktopSupportObject, atspiSupportObject)
     outputs.file(nativeSupportArchive)
     doFirst { nativeSupportArchive.get().asFile.parentFile.mkdirs() }
     commandLine(
@@ -73,6 +91,7 @@ val archiveNativeSupport by tasks.registering(Exec::class) {
         nativeSupportObject.get().asFile.absolutePath,
         clipperEngineObject.get().asFile.absolutePath,
         desktopSupportObject.get().asFile.absolutePath,
+        atspiSupportObject.get().asFile.absolutePath,
     )
 }
 

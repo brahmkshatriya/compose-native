@@ -98,6 +98,17 @@ class FrameRecomposer(
      * synchronously by [performTrampolineDispatch].
      */
     private val globalSnapshotRegistration = GlobalSnapshotManager.register(trampolineDispatcher)
+    private val immediateSnapshotApplyPending = atomic(false)
+    private val immediateGlobalWriteObserver =
+        if (globalSnapshotRegistration == null) {
+            Snapshot.registerGlobalWriteObserver {
+                if (immediateSnapshotApplyPending.compareAndSet(expect = false, update = true)) {
+                    invalidate()
+                }
+            }
+        } else {
+            null
+        }
 
     init {
         // The host must carry a (single-thread) continuation interceptor that work is dispatched
@@ -158,6 +169,7 @@ class FrameRecomposer(
      */
     fun hasPendingWork(): Boolean =
         recomposer.hasPendingWork ||
+            immediateSnapshotApplyPending.value ||
             trampolineDispatcher.hasImmediateTasks() ||
             frameDispatcher.hasImmediateTasks() ||
             frameClock.hasAwaiters
@@ -166,6 +178,7 @@ class FrameRecomposer(
      * Cancels the host recomposer and releases host-owned resources.
      */
     override fun close() {
+        immediateGlobalWriteObserver?.dispose()
         globalSnapshotRegistration?.close()
         recomposer.cancel()
         job.cancel()
@@ -216,7 +229,10 @@ class FrameRecomposer(
      */
     internal fun performTrampolineDispatch(): Unit =
         trace("FrameRecomposer:performTrampolineDispatch") {
-            if (globalSnapshotRegistration == null) {
+            if (
+                globalSnapshotRegistration == null &&
+                    immediateSnapshotApplyPending.getAndSet(false)
+            ) {
                 Snapshot.sendApplyNotifications()
             }
             trampolineDispatcher.flush()

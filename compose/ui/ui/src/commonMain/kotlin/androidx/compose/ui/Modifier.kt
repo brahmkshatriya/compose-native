@@ -22,6 +22,7 @@ import androidx.compose.ui.internal.PlatformOptimizedCancellationException
 import androidx.compose.ui.internal.checkPrecondition
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.DrawNodeOwnerScope
 import androidx.compose.ui.node.NodeCoordinator
 import androidx.compose.ui.node.NodeKind
 import androidx.compose.ui.node.ObserverNodeOwnerScope
@@ -200,6 +201,7 @@ interface Modifier {
         internal var parent: Node? = null
         internal var child: Node? = null
         internal var ownerScope: ObserverNodeOwnerScope? = null
+        internal var drawOwnerScope: DrawNodeOwnerScope? = null
         internal var coordinator: NodeCoordinator? = null
             private set
 

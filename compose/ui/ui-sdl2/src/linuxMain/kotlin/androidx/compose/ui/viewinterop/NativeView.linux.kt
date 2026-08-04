@@ -47,10 +47,12 @@ import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onLayoutRectChanged
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalDensity
 import cairo.kgpu_layer_create
@@ -70,63 +72,153 @@ internal val LocalGpuInteropRegistry = staticCompositionLocalOf<GpuInteropRegist
 internal val LocalNativeViewInvalidationDispatcher =
     staticCompositionLocalOf<((() -> Unit) -> Unit)> { { it() } }
 
-internal class GpuInteropRegistry {
+internal interface GpuInteropLayerCommand {
+    val compositionId: Long
+    fun draw(gpu: COpaquePointer): Boolean
+}
+
+internal interface GpuInteropCompositionRecorder {
+    fun emit(
+        layer: GpuInteropLayerCommand,
+        canvas: androidx.compose.ui.graphics.Canvas,
+        maskInRoot: Path,
+    ): Boolean
+}
+
+internal class GpuInteropRegistry(
+    private val onFallbackDamage: (Rect) -> Unit = {},
+) {
     var context: COpaquePointer? = null
     var rootCanvas: CairoCanvas? = null
+    var compositionRecorder: GpuInteropCompositionRecorder? = null
     private val layers = mutableListOf<GpuNativeViewLayer>()
+    private val fallbackMasks = mutableMapOf<Long, Path>()
+    private var nextCompositionId = 1L
 
     fun create(view: InteropView): GpuNativeViewLayer =
-        GpuNativeViewLayer(this, view).also(layers::add)
+        GpuNativeViewLayer(this, nextCompositionId++, view).also(layers::add)
 
     fun remove(layer: GpuNativeViewLayer) {
         layers.remove(layer)
+        fallbackMasks.remove(layer.compositionId)
     }
 
-    fun draw() {
-        val gpu = context ?: return
-        layers.toList().forEach { it.draw(gpu) }
+    fun draw(): Int {
+        val gpu = context ?: return 0
+        var drawnLayers = 0
+        layers.toList().forEach {
+            if (it.draw(gpu)) drawnLayers++
+        }
+        return drawnLayers
     }
 
-    fun clearMask(path: Path) {
-        rootCanvas?.clearInteropPathInRoot(path)
+    fun emitBoundary(
+        layer: GpuInteropLayerCommand,
+        canvas: androidx.compose.ui.graphics.Canvas,
+        maskInRoot: Path,
+    ): Boolean {
+        val ordered = compositionRecorder?.emit(layer, canvas, maskInRoot) == true
+        if (ordered) fallbackMasks.remove(layer.compositionId)
+        return ordered
     }
 
+    fun setFallbackMask(layer: GpuInteropLayerCommand, path: Path) {
+        fallbackMasks[layer.compositionId] = Path().also { it.addPath(path) }
+    }
+
+    fun refreshFallbackMask(
+        layer: GpuInteropLayerCommand,
+        path: Path,
+        previousBounds: Rect,
+    ): Boolean {
+        if (layer.compositionId !in fallbackMasks) return false
+        setFallbackMask(layer, path)
+        onFallbackDamage(previousBounds)
+        onFallbackDamage(path.getBounds())
+        return true
+    }
+
+    fun applyFallbackMasks() {
+        val canvas = rootCanvas ?: return
+        fallbackMasks.values.forEach(canvas::clearInteropPathInRoot)
+    }
+}
+
+internal class GpuNativeViewRenderInvalidation {
+    private var pending = true
+
+    fun request() {
+        pending = true
+    }
+
+    fun consume(block: () -> Boolean): Boolean {
+        if (!pending) return false
+        pending = false
+        val rendered = block()
+        if (!rendered) pending = true
+        return rendered
+    }
 }
 
 internal class GpuNativeViewLayer(
     private val registry: GpuInteropRegistry,
+    override val compositionId: Long,
     private val view: InteropView,
-) : AutoCloseable {
+) : GpuInteropLayerCommand, AutoCloseable {
     private companion object {
         // Matches the subdivision used by the Cairo graphics-layer perspective renderer.
         const val MeshColumns = 12
         const val MeshRows = 12
+        // Cairo antialiasing can expose a subpixel fringe between the transparent root cutout
+        // and an exactly coincident external polygon. Draw slightly underneath the cutout; the
+        // retained CPU scene remains the authoritative clip and covers this overdraw completely.
+        const val EdgeOverdrawPixels = 1.5f
     }
 
     private val handle = checkNotNull(kgpu_layer_create())
-    private val transformedMask = Path()
+    internal val transformedMask = Path()
+    private val localMask = Path()
     private var size = IntSize.Zero
     private var density = 1f
     private var meshPositions = FloatArray(0)
+    private val renderInvalidation = GpuNativeViewRenderInvalidation()
 
     fun resize(value: IntSize, density: Float) {
-        size = value
-        this.density = density
+        if (size != value || this.density != density) {
+            size = value
+            this.density = density
+            renderInvalidation.request()
+        }
     }
 
     fun updateDensity(value: Float) {
-        density = value
+        if (density != value) {
+            density = value
+            renderInvalidation.request()
+        }
     }
 
-    fun updateGeometry(coordinates: LayoutCoordinates, localMask: Path) {
-        if (!coordinates.isAttached || size.width <= 0 || size.height <= 0) return
+    fun requestRender() {
+        renderInvalidation.request()
+    }
+
+    fun updateGeometry(coordinates: LayoutCoordinates, mask: Path) {
+        localMask.reset()
+        localMask.fillType = mask.fillType
+        localMask.addPath(mask)
+        refreshGeometry(coordinates)
+    }
+
+    fun refreshGeometry(coordinates: LayoutCoordinates): Boolean {
+        if (!coordinates.isAttached || size.width <= 0 || size.height <= 0 || localMask.isEmpty) {
+            return false
+        }
         val transform = Matrix()
         coordinates.findRootCoordinates().transformFrom(coordinates, transform)
         transformedMask.reset()
         transformedMask.fillType = localMask.fillType
         transformedMask.addPath(localMask)
         transformedMask.transform(transform)
-        registry.clearMask(transformedMask)
 
         val stride = MeshColumns + 1
         val requiredSize = (MeshRows + 1) * stride * 2
@@ -134,10 +226,14 @@ internal class GpuNativeViewLayer(
             if (meshPositions.size == requiredSize) meshPositions else FloatArray(requiredSize)
         for (row in 0..MeshRows) {
             for (column in 0..MeshColumns) {
+                val horizontalFraction = column.toFloat() / MeshColumns
+                val verticalFraction = row.toFloat() / MeshRows
                 val local =
                     androidx.compose.ui.geometry.Offset(
-                        size.width * column.toFloat() / MeshColumns,
-                        size.height * row.toFloat() / MeshRows,
+                        -EdgeOverdrawPixels +
+                            (size.width + EdgeOverdrawPixels * 2f) * horizontalFraction,
+                        -EdgeOverdrawPixels +
+                            (size.height + EdgeOverdrawPixels * 2f) * verticalFraction,
                     )
                 val rootPosition = coordinates.localToRoot(local)
                 val index = (row * stride + column) * 2
@@ -146,10 +242,10 @@ internal class GpuNativeViewLayer(
             }
         }
         meshPositions = positions
+        return true
     }
 
-    fun render(): Boolean {
-        val gpu = registry.context ?: return false
+    private fun render(gpu: COpaquePointer): Boolean {
         if (size.width <= 0 || size.height <= 0) return false
         if (kgpu_layer_prepare(gpu, handle, size.width, size.height) == 0) return false
         return try {
@@ -168,9 +264,15 @@ internal class GpuNativeViewLayer(
         }
     }
 
-    fun draw(gpu: COpaquePointer) {
+    override fun draw(gpu: COpaquePointer): Boolean {
         val positions = meshPositions
-        if (positions.isEmpty()) return
+        if (positions.isEmpty()) return false
+        renderInvalidation.consume {
+            // The dirty bit is cleared before entering native code. An update callback raised
+            // during rendering therefore remains pending for the following compositor frame. A
+            // failed first render is also retained instead of leaving an empty texture forever.
+            render(gpu)
+        }
         positions.usePinned {
             kgpu_layer_draw_mesh(
                 gpu,
@@ -181,6 +283,7 @@ internal class GpuNativeViewLayer(
                 1f,
             )
         }
+        return true
     }
 
     override fun close() {
@@ -235,15 +338,22 @@ fun NativeView(
             }
         }
     var nativeFrame by remember { mutableStateOf<NativeViewFrame?>(null) }
-    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val lastLayoutBounds = remember { arrayOfNulls<IntRect>(1) }
     var renderRequest by remember(view) { mutableLongStateOf(1L) }
     val renderedRequest = remember(view) { longArrayOf(Long.MIN_VALUE) }
     val boundsMask = remember { Path() }
     val callbackActive = remember(view) { booleanArrayOf(false) }
-    val requestRender: () -> Unit = remember(view, dispatchInvalidation) {
+    val requestRender: () -> Unit = remember(view, gpuLayer, dispatchInvalidation) {
         {
             dispatchInvalidation {
-                if (callbackActive[0]) renderRequest += 1L
+                if (callbackActive[0]) {
+                    if (gpuLayer != null) {
+                        gpuLayer.requestRender()
+                    } else {
+                        renderRequest += 1L
+                    }
+                }
             }
         }
     }
@@ -269,6 +379,8 @@ fun NativeView(
             view.setRenderInvalidationCallback(null)
             nativeFrame?.close()
             nativeFrame = null
+            coordinates[0] = null
+            lastLayoutBounds[0] = null
             gpuLayer?.close()
             onRelease(view)
         }
@@ -350,7 +462,6 @@ fun NativeView(
                     if (size.width <= 0 || size.height <= 0) return@onSizeChanged
                     if (gpuLayer != null) {
                         gpuLayer.resize(size, density)
-                        renderRequest += 1L
                         return@onSizeChanged
                     }
                     val current = nativeFrame
@@ -360,9 +471,29 @@ fun NativeView(
                     current?.close()
                     nativeFrame = NativeViewFrame(size)
                     renderRequest += 1L
-                }.onGloballyPositioned { value ->
-                coordinates = value
-            }
+                }
+                .onPlaced { coordinates[0] = it }
+                .onLayoutRectChanged(throttleMillis = 0, debounceMillis = 0) { bounds ->
+                    val nextBounds = bounds.boundsInRoot
+                    if (lastLayoutBounds[0] == nextBounds) return@onLayoutRectChanged
+                    lastLayoutBounds[0] = nextBounds
+                    val placed = coordinates[0] ?: return@onLayoutRectChanged
+                    dispatchInvalidation {
+                        val layer = gpuLayer
+                        if (callbackActive[0] && layer != null) {
+                            val previousBounds = layer.transformedMask.getBounds()
+                            if (layer.refreshGeometry(placed)) {
+                                val fallbackMoved =
+                                    gpuRegistry?.refreshFallbackMask(
+                                        layer,
+                                        layer.transformedMask,
+                                        previousBounds,
+                                    ) == true
+                                if (fallbackMoved) renderRequest += 1L
+                            }
+                        }
+                    }
+                }
     ) {
         val requestedRender = renderRequest
         val mask =
@@ -372,13 +503,14 @@ fun NativeView(
                     addRect(Rect(0f, 0f, size.width, size.height))
                 }
         if (gpuLayer != null) {
-            coordinates?.let { gpuLayer.updateGeometry(it, mask) }
+            renderedRequest[0] = requestedRender
+            coordinates[0]?.let { gpuLayer.updateGeometry(it, mask) }
+            val ordered =
+                gpuRegistry?.emitBoundary(gpuLayer, drawContext.canvas, gpuLayer.transformedMask) ==
+                    true
+            if (!ordered) gpuRegistry?.setFallbackMask(gpuLayer, gpuLayer.transformedMask)
             clipPath(mask) {
                 drawRect(Color.Transparent, blendMode = BlendMode.Clear)
-            }
-            if (renderedRequest[0] != requestedRender) {
-                gpuLayer.render()
-                renderedRequest[0] = requestedRender
             }
             return@Canvas
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 The Android Open Source Project
+ * Copyright 2026 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,16 @@
 
 package androidx.compose.ui.test
 
-import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
+import kotlin.jvm.JvmInline
 
-@ExperimentalTestApi
-fun SemanticsNodeInteraction.scrollBy(x: Dp = Dp.Unspecified, y: Dp = Dp.Unspecified, density: Density) {
-    performMouseInput {
-        if (x != Dp.Unspecified) {
-            scroll(delta = x.toPx(), ScrollWheel.Horizontal)
-        }
-        if (y != Dp.Unspecified) {
-            scroll(delta = y.toPx(), ScrollWheel.Vertical)
-        }
+@JvmInline
+actual value class TrackpadButton actual constructor(actual val buttonId: Int) {
+    actual companion object {
+        actual val Primary: TrackpadButton
+            get() = TrackpadButton(0)
+        actual val Secondary: TrackpadButton
+            get() = TrackpadButton(1)
+        actual val Tertiary: TrackpadButton
+            get() = TrackpadButton(2)
     }
 }

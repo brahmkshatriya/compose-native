@@ -1,14 +1,14 @@
 # Native Compose on Wayland
 
-This is a Kotlin/Native Linux x64 proof that renders real Compose Material 3 UI in a native Wayland window. The demo embeds WPE WebKit through the Linux `NativeView` API and opens YouTube in a responsive, interactive native web view. Compose draws through a Cairo graphics and Pango text backend, while an SDL OpenGL compositor presents WPE's exported EGL images and the transparent Cairo UI layer.
+This is a Kotlin/Native Linux x64 proof that renders real Compose Material 3 UI in a native Wayland window. The demo embeds WPE WebKit through the Linux `NativeView` API and opens YouTube in a responsive, interactive native web view. It also includes a native libmpv HLS player. Compose draws through a Cairo graphics and Pango text backend, while an SDL OpenGL compositor presents external EGL/OpenGL content and the transparent Cairo UI layer.
 
 There is no JVM in the application at runtime. A JDK is required only to run Gradle and the Kotlin compiler.
 
 ## What works
 
 - Real Compose compiler/runtime and Material 3 components
-- Navigation 3 runtime and `NavDisplay`, including lifecycle-aware entries, animated navigation,
-  back handling, saved state, and deep-link matching
+- Responsive Material navigation using direct keyed page content for low-overhead switching,
+  with sidebar, bottom-bar, and back handling
 - Compose Desktop-style native window API with `application`, `awaitApplication`, `Window`,
   `DialogWindow`, state objects, and single-window/coroutine entry points
 - Undecorated windows with native draggable regions and native resize-edge hit testing
@@ -39,14 +39,15 @@ There is no JVM in the application at runtime. A JDK is required only to run Gra
   clipping, overlays, and input
 - Zero-readback WPE WebKit EGL-image rendering with pointer, wheel, keyboard, focus, fractional-DPI,
   and responsive resize integration
-- YouTube with JavaScript, Media Source Extensions, WebGL, and GStreamer media playback
+- Interactive WPE WebKit browser with JavaScript, Media Source Extensions, WebGL, and media controls
+- Native libmpv HLS playback rendered directly into an OpenGL framebuffer
 
 ## Requirements
 
 - Linux x64 in a Wayland or X11 session
-- Git
+- Git, a C++17 compiler, and pkg-config
 - JDK 21 for build tooling
-- SDL2, Cairo, Pango, Fontconfig, FreeType, libpng, libjpeg, libwebp, libdbus, WPE WebKit, OpenGL, and GStreamer development/runtime libraries
+- SDL2, Cairo, Pango, Fontconfig, libjpeg, libwebp, D-Bus, WPE WebKit, EGL/OpenGL, and libmpv development files
 
 The release link uses `--as-needed` to discard Kotlin/Native's unused default `-lcrypt`, so
 `libcrypt.so.1`/`libcrypt-legacy` is not a runtime requirement.
@@ -54,13 +55,13 @@ The release link uses `--as-needed` to discard Kotlin/Native's unused default `-
 Arch Linux:
 
 ```bash
-sudo pacman -S git jdk21-openjdk sdl2 cairo pango fontconfig freetype2 libpng libjpeg-turbo libwebp dbus wpewebkit mesa gst-plugins-good gst-plugins-bad gst-libav
+sudo pacman -S git jdk21-openjdk gcc pkgconf sdl2-compat cairo pango fontconfig libjpeg-turbo libwebp dbus wpewebkit mesa mpv
 ```
 
 Debian/Ubuntu:
 
 ```bash
-sudo apt install git openjdk-21-jdk libsdl2-dev libcairo2-dev libpango1.0-dev libfontconfig1-dev libfreetype-dev libpng-dev libjpeg-dev libwebp-dev libdbus-1-dev libwpewebkit-2.0-dev libwpe-1.0-dev libegl-dev libgl-dev gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav gstreamer1.0-alsa
+sudo apt install git openjdk-21-jdk g++ pkg-config libsdl2-dev libcairo2-dev libpango1.0-dev libfontconfig1-dev libjpeg-dev libwebp-dev libdbus-1-dev libwpewebkit-2.0-dev libwpe-1.0-dev libegl-dev libgl-dev libmpv-dev
 ```
 
 ## Build and run
@@ -92,11 +93,26 @@ Run the non-interactive backend regression checks with:
 ```bash
 KTNATIVE_BACKEND_SELF_TEST=1 ./build/bin/compose-wayland
 KTNATIVE_INPUT_SELF_TEST=1 ./build/bin/compose-wayland
+KTNATIVE_WINDOW_SELF_TEST=1 ./build/bin/compose-wayland
 KTNATIVE_DESKTOP_SELF_TEST=1 ./build/bin/compose-wayland
 ```
 
+Run the live AT-SPI integration check from an active desktop session with an accessibility bus:
+
+```bash
+./scripts/test-atspi.py
+```
+
+The test uses `gdbus`, `dbus-monitor`, and Python 3 without Python GI bindings. It discovers the
+application and semantics nodes dynamically, exercises actions and values, verifies incremental
+events and registry cleanup, and writes diagnostics under the ignored `build/atspi-test` directory.
+
 Set `KTNATIVE_WEBVIEW_URL` to open another initial page. Set `KTNATIVE_WEBVIEW_DEBUG=1` to print
 load transitions, browser console messages, frame dimensions, and input diagnostics.
+
+Compose animations are uncapped by the host and normally follow the display/VSync cadence. Set
+`KTNATIVE_MAX_FPS` to an explicit value from 1 through 240 only when an application needs an
+additional software frame-rate limit; for example, `KTNATIVE_MAX_FPS=30 ./build/bin/compose-wayland`.
 
 ## Native window API
 
@@ -223,8 +239,8 @@ External textures are currently composited below the final Cairo UI layer. This 
 Compose overlays (including controls) correct ordering, but does not yet interleave separate GPU
 textures between arbitrary individual Cairo draw commands.
 
-The executable stays a small native launcher; Cairo, Pango, HarfBuzz, SDL2, OpenGL, WPE WebKit,
-GStreamer, and their transitive system libraries remain dynamically linked.
+The executable stays a small native launcher; SDL2, Cairo/Pango, Fontconfig, D-Bus, WPE WebKit,
+libmpv, OpenGL/EGL, JPEG, WebP, and their required system libraries remain dynamically linked.
 
 ## Layout
 
@@ -236,4 +252,4 @@ GStreamer, and their transitive system libraries remain dynamically linked.
 - `build/bin/compose-wayland` — final executable produced by the wrapper
 - `../compose/ui/ui-sdl2/` — prepared source checkout containing the Compose-owned Wayland window
   host, Cairo/Pango backend, cinterops, and embedded native support archive
-- `../navigation3/navigation3-ui/` — Navigation 3 UI port with a Linux native target
+- `../navigation3/navigation3-ui/` — optional Navigation 3 UI port with a Linux native target

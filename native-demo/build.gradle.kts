@@ -97,7 +97,7 @@ kotlin {
         linuxMain.dependencies {
             implementation(project(":compose:material3:material3"))
             implementation(project(":compose:ui:ui-sdl2"))
-            implementation(project(":navigation3:navigation3-ui"))
+            implementation(project(":compose:ui:ui-backhandler"))
         }
     }
 }

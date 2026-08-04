@@ -28,12 +28,15 @@ extern "C" {
 struct KGpuContext {
     SDL_Window *window = nullptr;
     SDL_GLContext gl = nullptr;
-    GLuint compose_texture = 0;
-    int compose_texture_width = 0;
-    int compose_texture_height = 0;
     int width = 1;
     int height = 1;
     const char *renderer = "unknown";
+};
+
+struct KGpuTexture {
+    GLuint texture = 0;
+    int width = 0;
+    int height = 0;
 };
 
 struct KGpuLayer {
@@ -148,7 +151,6 @@ void *kgpu_context_create(void *raw_window) {
         return nullptr;
     }
     SDL_GL_SetSwapInterval(1);
-    glGenTextures(1, &context->compose_texture);
     const GLubyte *renderer = glGetString(GL_RENDERER);
     if (renderer) context->renderer = reinterpret_cast<const char *>(renderer);
     return context;
@@ -163,7 +165,6 @@ void kgpu_context_destroy(void *raw_context) {
     KGpuContext *context = static_cast<KGpuContext *>(raw_context);
     if (!context) return;
     SDL_GL_MakeCurrent(context->window, context->gl);
-    if (context->compose_texture) glDeleteTextures(1, &context->compose_texture);
     SDL_GL_DeleteContext(context->gl);
     delete context;
 }
@@ -182,30 +183,182 @@ void kgpu_context_begin(void *raw_context, int width, int height) {
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
-void kgpu_context_draw_compose(
+void *kgpu_texture_create(void) {
+    return new KGpuTexture();
+}
+
+void kgpu_texture_destroy(void *raw_context, void *raw_texture) {
+    KGpuContext *context = static_cast<KGpuContext *>(raw_context);
+    KGpuTexture *texture = static_cast<KGpuTexture *>(raw_texture);
+    if (!texture) return;
+    if (context) kgpu_context_make_current(context);
+    if (texture->texture) glDeleteTextures(1, &texture->texture);
+    delete texture;
+}
+
+int kgpu_texture_upload(
     void *raw_context,
+    void *raw_texture,
     const unsigned char *pixels,
     int width,
     int height,
-    int stride
+    int stride,
+    int damage_x,
+    int damage_y,
+    int damage_width,
+    int damage_height
 ) {
     KGpuContext *context = static_cast<KGpuContext *>(raw_context);
-    if (!context || !pixels || width <= 0 || height <= 0 || stride < width * 4) return;
-    glBindTexture(GL_TEXTURE_2D, context->compose_texture);
+    KGpuTexture *texture = static_cast<KGpuTexture *>(raw_texture);
+    if (!context || !texture || !pixels || width <= 0 || height <= 0 || stride < width * 4) {
+        return 0;
+    }
+    kgpu_context_make_current(context);
+    if (!texture->texture) glGenTextures(1, &texture->texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture->texture);
     kgpu_texture_parameters();
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glPixelStorei(GL_UNPACK_ROW_LENGTH, stride / 4);
-    if (context->compose_texture_width != width || context->compose_texture_height != height) {
+
+    int uploaded_bytes = 0;
+    if (texture->width != width || texture->height != height) {
         glTexImage2D(
             GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, pixels);
-        context->compose_texture_width = width;
-        context->compose_texture_height = height;
-    } else {
-        glTexSubImage2D(
-            GL_TEXTURE_2D, 0, 0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, pixels);
+        texture->width = width;
+        texture->height = height;
+        uploaded_bytes = width * height * 4;
+    } else if (damage_width > 0 && damage_height > 0) {
+        const int x = std::max(0, std::min(damage_x, width));
+        const int y = std::max(0, std::min(damage_y, height));
+        const int region_width = std::max(0, std::min(damage_width, width - x));
+        const int region_height = std::max(0, std::min(damage_height, height - y));
+        if (region_width > 0 && region_height > 0) {
+            const unsigned char *region = pixels + y * stride + x * 4;
+            glTexSubImage2D(
+                GL_TEXTURE_2D,
+                0,
+                x,
+                y,
+                region_width,
+                region_height,
+                GL_BGRA,
+                GL_UNSIGNED_BYTE,
+                region
+            );
+            uploaded_bytes = region_width * region_height * 4;
+        }
     }
+
     glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    kgpu_draw_texture(context, context->compose_texture, 0, 0, width, height, true);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return uploaded_bytes;
+}
+
+int kgpu_texture_upload_region(
+    void *raw_context,
+    void *raw_texture,
+    const unsigned char *pixels,
+    int source_width,
+    int source_height,
+    int source_stride,
+    int texture_width,
+    int texture_height,
+    int destination_x,
+    int destination_y
+) {
+    KGpuContext *context = static_cast<KGpuContext *>(raw_context);
+    KGpuTexture *texture = static_cast<KGpuTexture *>(raw_texture);
+    if (!context || !texture || !pixels || source_width <= 0 || source_height <= 0 ||
+        source_stride < source_width * 4 || texture_width <= 0 || texture_height <= 0) {
+        return 0;
+    }
+
+    int source_x = 0;
+    int source_y = 0;
+    int upload_width = source_width;
+    int upload_height = source_height;
+    int target_x = destination_x;
+    int target_y = destination_y;
+    if (target_x < 0) {
+        source_x = -target_x;
+        upload_width -= source_x;
+        target_x = 0;
+    }
+    if (target_y < 0) {
+        source_y = -target_y;
+        upload_height -= source_y;
+        target_y = 0;
+    }
+    upload_width = std::min(upload_width, texture_width - target_x);
+    upload_height = std::min(upload_height, texture_height - target_y);
+    if (upload_width <= 0 || upload_height <= 0) return 0;
+
+    kgpu_context_make_current(context);
+    if (!texture->texture) glGenTextures(1, &texture->texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture->texture);
+    kgpu_texture_parameters();
+    if (texture->width != texture_width || texture->height != texture_height) {
+        std::vector<unsigned char> transparent(
+            static_cast<size_t>(texture_width) * static_cast<size_t>(texture_height) * 4u,
+            0u
+        );
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA8,
+            texture_width,
+            texture_height,
+            0,
+            GL_BGRA,
+            GL_UNSIGNED_BYTE,
+            transparent.data()
+        );
+        texture->width = texture_width;
+        texture->height = texture_height;
+    }
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, source_stride / 4);
+    const unsigned char *region = pixels + source_y * source_stride + source_x * 4;
+    glTexSubImage2D(
+        GL_TEXTURE_2D,
+        0,
+        target_x,
+        target_y,
+        upload_width,
+        upload_height,
+        GL_BGRA,
+        GL_UNSIGNED_BYTE,
+        region
+    );
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    return upload_width * upload_height * 4;
+}
+
+void kgpu_texture_draw(
+    void *raw_context,
+    void *raw_texture,
+    float x,
+    float y,
+    float width,
+    float height,
+    int cpu_top_down
+) {
+    KGpuContext *context = static_cast<KGpuContext *>(raw_context);
+    KGpuTexture *texture = static_cast<KGpuTexture *>(raw_texture);
+    if (!context || !texture) return;
+    kgpu_draw_texture(
+        context,
+        texture->texture,
+        x,
+        y,
+        width,
+        height,
+        cpu_top_down != 0
+    );
 }
 
 void kgpu_context_present(void *raw_context) {

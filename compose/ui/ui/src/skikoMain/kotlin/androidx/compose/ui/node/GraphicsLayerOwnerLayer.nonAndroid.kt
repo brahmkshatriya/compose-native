@@ -17,6 +17,7 @@
 package androidx.compose.ui.node
 
 import androidx.compose.ui.FrameRateCategory
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.MutableRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isUnspecified
@@ -62,6 +63,7 @@ import androidx.compose.ui.unit.dp
  * @param drawBlock The lambda function invoked to perform custom drawing on the canvas.
  * @param invalidateParentLayer Callback to invalidate the parent layer when necessary.
  */
+@OptIn(InternalComposeUiApi::class)
 internal class GraphicsLayerOwnerLayer(
     graphicsLayer: GraphicsLayer,
     private val context: GraphicsContext?,
@@ -209,7 +211,14 @@ internal class GraphicsLayerOwnerLayer(
      * Triggers redrawing of Compose content during the next frame.
      */
     private fun triggerRepaint() {
+        invalidateRetainedParentLayer()
         layerManager.invalidate()
+    }
+
+    private fun invalidateRetainedParentLayer() {
+        if (graphicsLayer.platformGraphicsLayer.requiresParentLayerInvalidation) {
+            invalidateParentLayer?.invoke()
+        }
     }
 
     private fun updateOutline() {
@@ -278,6 +287,7 @@ internal class GraphicsLayerOwnerLayer(
     override fun invalidate() {
         if (isDestroyed) return
         isDirty = true
+        invalidateRetainedParentLayer()
         layerManager.invalidate()
     }
 

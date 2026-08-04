@@ -1,5 +1,5 @@
 // Klib ABI Dump
-// Targets: [iosArm64, iosSimulatorArm64, js, macosArm64, wasmJs]
+// Targets: [iosArm64, iosSimulatorArm64, js, linuxX64, macosArm64, wasmJs]
 // Rendering settings:
 // - Signature version: 2
 // - Show manifest properties: true
@@ -343,7 +343,6 @@ final val androidx.compose.ui.test/androidx_compose_ui_test_SemanticsMatcher$sta
 final val androidx.compose.ui.test/androidx_compose_ui_test_SemanticsNodeInteraction$stableprop // androidx.compose.ui.test/androidx_compose_ui_test_SemanticsNodeInteraction$stableprop|#static{}androidx_compose_ui_test_SemanticsNodeInteraction$stableprop[0]
 final val androidx.compose.ui.test/androidx_compose_ui_test_SemanticsNodeInteractionCollection$stableprop // androidx.compose.ui.test/androidx_compose_ui_test_SemanticsNodeInteractionCollection$stableprop|#static{}androidx_compose_ui_test_SemanticsNodeInteractionCollection$stableprop[0]
 final val androidx.compose.ui.test/androidx_compose_ui_test_SemanticsSelector$stableprop // androidx.compose.ui.test/androidx_compose_ui_test_SemanticsSelector$stableprop|#static{}androidx_compose_ui_test_SemanticsSelector$stableprop[0]
-final val androidx.compose.ui.test/androidx_compose_ui_test_SkikoComposeUiTest$stableprop // androidx.compose.ui.test/androidx_compose_ui_test_SkikoComposeUiTest$stableprop|#static{}androidx_compose_ui_test_SkikoComposeUiTest$stableprop[0]
 final val androidx.compose.ui.test/androidx_compose_ui_test_StateRestorationTester$stableprop // androidx.compose.ui.test/androidx_compose_ui_test_StateRestorationTester$stableprop|#static{}androidx_compose_ui_test_StateRestorationTester$stableprop[0]
 final val androidx.compose.ui.test/androidx_compose_ui_test_TestContext$stableprop // androidx.compose.ui.test/androidx_compose_ui_test_TestContext$stableprop|#static{}androidx_compose_ui_test_TestContext$stableprop[0]
 final val androidx.compose.ui.test/bottom // androidx.compose.ui.test/bottom|@androidx.compose.ui.test.GestureScope{}bottom[0]
@@ -509,7 +508,6 @@ final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.u
 final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.ui.test/assertValueEquals(kotlin/String): androidx.compose.ui.test/SemanticsNodeInteraction // androidx.compose.ui.test/assertValueEquals|assertValueEquals@androidx.compose.ui.test.SemanticsNodeInteraction(kotlin.String){}[0]
 final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.ui.test/assertWidthIsAtLeast(androidx.compose.ui.unit/Dp): androidx.compose.ui.test/SemanticsNodeInteraction // androidx.compose.ui.test/assertWidthIsAtLeast|assertWidthIsAtLeast@androidx.compose.ui.test.SemanticsNodeInteraction(androidx.compose.ui.unit.Dp){}[0]
 final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.ui.test/assertWidthIsEqualTo(androidx.compose.ui.unit/Dp): androidx.compose.ui.test/SemanticsNodeInteraction // androidx.compose.ui.test/assertWidthIsEqualTo|assertWidthIsEqualTo@androidx.compose.ui.test.SemanticsNodeInteraction(androidx.compose.ui.unit.Dp){}[0]
-final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.ui.test/captureToImage(): androidx.compose.ui.graphics/ImageBitmap // androidx.compose.ui.test/captureToImage|captureToImage@androidx.compose.ui.test.SemanticsNodeInteraction(){}[0]
 final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.ui.test/getAlignmentLinePosition(androidx.compose.ui.layout/AlignmentLine): androidx.compose.ui.unit/Dp // androidx.compose.ui.test/getAlignmentLinePosition|getAlignmentLinePosition@androidx.compose.ui.test.SemanticsNodeInteraction(androidx.compose.ui.layout.AlignmentLine){}[0]
 final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.ui.test/getBoundsInRoot(): androidx.compose.ui.unit/DpRect // androidx.compose.ui.test/getBoundsInRoot|getBoundsInRoot@androidx.compose.ui.test.SemanticsNodeInteraction(){}[0]
 final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.ui.test/getFirstLinkBounds(kotlin/Function1<androidx.compose.ui.text/AnnotatedString.Range<androidx.compose.ui.text/LinkAnnotation>, kotlin/Boolean> = ...): androidx.compose.ui.geometry/Rect? // androidx.compose.ui.test/getFirstLinkBounds|getFirstLinkBounds@androidx.compose.ui.test.SemanticsNodeInteraction(kotlin.Function1<androidx.compose.ui.text.AnnotatedString.Range<androidx.compose.ui.text.LinkAnnotation>,kotlin.Boolean>){}[0]
@@ -605,7 +603,6 @@ final fun androidx.compose.ui.test/androidx_compose_ui_test_SemanticsMatcher$sta
 final fun androidx.compose.ui.test/androidx_compose_ui_test_SemanticsNodeInteraction$stableprop_getter(): kotlin/Int // androidx.compose.ui.test/androidx_compose_ui_test_SemanticsNodeInteraction$stableprop_getter|androidx_compose_ui_test_SemanticsNodeInteraction$stableprop_getter(){}[0]
 final fun androidx.compose.ui.test/androidx_compose_ui_test_SemanticsNodeInteractionCollection$stableprop_getter(): kotlin/Int // androidx.compose.ui.test/androidx_compose_ui_test_SemanticsNodeInteractionCollection$stableprop_getter|androidx_compose_ui_test_SemanticsNodeInteractionCollection$stableprop_getter(){}[0]
 final fun androidx.compose.ui.test/androidx_compose_ui_test_SemanticsSelector$stableprop_getter(): kotlin/Int // androidx.compose.ui.test/androidx_compose_ui_test_SemanticsSelector$stableprop_getter|androidx_compose_ui_test_SemanticsSelector$stableprop_getter(){}[0]
-final fun androidx.compose.ui.test/androidx_compose_ui_test_SkikoComposeUiTest$stableprop_getter(): kotlin/Int // androidx.compose.ui.test/androidx_compose_ui_test_SkikoComposeUiTest$stableprop_getter|androidx_compose_ui_test_SkikoComposeUiTest$stableprop_getter(){}[0]
 final fun androidx.compose.ui.test/androidx_compose_ui_test_StateRestorationTester$stableprop_getter(): kotlin/Int // androidx.compose.ui.test/androidx_compose_ui_test_StateRestorationTester$stableprop_getter|androidx_compose_ui_test_StateRestorationTester$stableprop_getter(){}[0]
 final fun androidx.compose.ui.test/androidx_compose_ui_test_TestContext$stableprop_getter(): kotlin/Int // androidx.compose.ui.test/androidx_compose_ui_test_TestContext$stableprop_getter|androidx_compose_ui_test_TestContext$stableprop_getter(){}[0]
 final fun androidx.compose.ui.test/hasAnyAncestor(androidx.compose.ui.test/SemanticsMatcher): androidx.compose.ui.test/SemanticsMatcher // androidx.compose.ui.test/hasAnyAncestor|hasAnyAncestor(androidx.compose.ui.test.SemanticsMatcher){}[0]
@@ -651,3 +648,12 @@ final fun androidx.compose.ui.test/isSelectable(): androidx.compose.ui.test/Sema
 final fun androidx.compose.ui.test/isSelected(): androidx.compose.ui.test/SemanticsMatcher // androidx.compose.ui.test/isSelected|isSelected(){}[0]
 final fun androidx.compose.ui.test/isToggleable(): androidx.compose.ui.test/SemanticsMatcher // androidx.compose.ui.test/isToggleable|isToggleable(){}[0]
 final inline fun <#A: kotlin/Any?> androidx.compose.ui.test/wrapAssertionErrorsWithNodeInfo(androidx.compose.ui.test/SemanticsSelector, androidx.compose.ui.semantics/SemanticsNode, kotlin/Function0<#A>): #A // androidx.compose.ui.test/wrapAssertionErrorsWithNodeInfo|wrapAssertionErrorsWithNodeInfo(androidx.compose.ui.test.SemanticsSelector;androidx.compose.ui.semantics.SemanticsNode;kotlin.Function0<0:0>){0§<kotlin.Any?>}[0]
+
+// Targets: [iosArm64, iosSimulatorArm64, js, macosArm64, wasmJs]
+final val androidx.compose.ui.test/androidx_compose_ui_test_SkikoComposeUiTest$stableprop // androidx.compose.ui.test/androidx_compose_ui_test_SkikoComposeUiTest$stableprop|#static{}androidx_compose_ui_test_SkikoComposeUiTest$stableprop[0]
+
+// Targets: [iosArm64, iosSimulatorArm64, js, macosArm64, wasmJs]
+final fun (androidx.compose.ui.test/SemanticsNodeInteraction).androidx.compose.ui.test/captureToImage(): androidx.compose.ui.graphics/ImageBitmap // androidx.compose.ui.test/captureToImage|captureToImage@androidx.compose.ui.test.SemanticsNodeInteraction(){}[0]
+
+// Targets: [iosArm64, iosSimulatorArm64, js, macosArm64, wasmJs]
+final fun androidx.compose.ui.test/androidx_compose_ui_test_SkikoComposeUiTest$stableprop_getter(): kotlin/Int // androidx.compose.ui.test/androidx_compose_ui_test_SkikoComposeUiTest$stableprop_getter|androidx_compose_ui_test_SkikoComposeUiTest$stableprop_getter(){}[0]

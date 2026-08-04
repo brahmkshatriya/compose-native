@@ -326,7 +326,6 @@ def includeProject(String name, filePath, List<BuildType> filter = []) {
             ":compose:ui:ui-android-stubs",
             ":compose:ui:ui-graphics:ui-graphics-samples",
             ":compose:ui:ui-lint",
-            ":compose:ui:ui-test",
             ":compose:ui:ui-test-junit4",
             ":compose:ui:ui-text-lint",
             ":compose:ui:ui-text:ui-text-samples",

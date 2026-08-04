@@ -41,6 +41,13 @@ import androidx.compose.ui.unit.LayoutDirection
  */
 @InternalComposeUiApi
 interface PlatformGraphicsLayer {
+    /**
+     * Whether a change in this layer must invalidate a retained raster surface owned by its
+     * parent. Display-list backends normally leave this disabled.
+     */
+    val requiresParentLayerInvalidation: Boolean
+        get() = false
+
     /** Backs [GraphicsLayer.compositingStrategy]. */
     var compositingStrategy: CompositingStrategy
     /** Backs [GraphicsLayer.pivotOffset]. */

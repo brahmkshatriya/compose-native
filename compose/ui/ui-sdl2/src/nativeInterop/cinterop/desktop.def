@@ -1,5 +1,5 @@
-headers = linux_desktop.h
-headerFilter = linux_desktop.h
+headers = linux_desktop.h linux_atspi.h
+headerFilter = linux_desktop.h linux_atspi.h
 package = linuxdesktop
 compilerOpts = -Isrc/nativeInterop/cinterop/include
 linkerOpts = -ldbus-1 -lstdc++

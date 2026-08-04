@@ -26,6 +26,8 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.platform.PlatformGraphicsContext
+import androidx.compose.ui.graphics.platform.PlatformGraphicsRegistry
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
@@ -144,6 +146,23 @@ interface PlatformContext {
      * such bounds.
      */
     val measureDrawLayerBounds: Boolean get() = false
+
+    /**
+     * Reports a conservative root-coordinate rectangle whose rendered pixels may have changed.
+     * Hosts that retain the root framebuffer can use this to limit rasterization and texture
+     * uploads. An empty or non-finite rectangle must be ignored by the host.
+     */
+    fun onDrawDamage(boundsInRoot: Rect) = Unit
+
+    /** Requests a conservative full-root redraw for effects whose pixel extent is not bounded. */
+    fun onFullDrawDamage() = Unit
+
+    /**
+     * Creates the graphics context owned by this scene. Windowed hosts can override this to bind
+     * layer resources to a particular native compositor/context.
+     */
+    fun createGraphicsContext(): PlatformGraphicsContext =
+        PlatformGraphicsRegistry.requireCurrent().createGraphicsContext()
 
     val localeList: LocaleList get() = LocaleList.current
     val viewConfiguration: ViewConfiguration get() = DefaultViewConfiguration

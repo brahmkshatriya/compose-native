@@ -1,4 +1,5 @@
 @file:OptIn(
+    androidx.compose.ui.ExperimentalComposeUiApi::class,
     androidx.compose.material3.ExperimentalMaterial3Api::class,
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
     kotlinx.cinterop.ExperimentalForeignApi::class,
@@ -24,12 +25,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -56,8 +60,6 @@ import androidx.compose.ui.window.NotificationAction
 import androidx.compose.ui.window.NotificationRequest
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.sendNotification
-import androidx.navigation3.runtime.NavEntry
-import androidx.navigation3.ui.NavDisplay
 import app.webview.app_demo_render_gl
 import kotlinx.cinterop.UByteVar
 import kotlinx.cinterop.reinterpret
@@ -102,7 +104,9 @@ private fun CircleGlyph(
 
 @Composable
 fun WindowScope.CatalogueApp(onOpenPreview: () -> Unit) {
-    val backStack = remember { mutableStateListOf(Page.Home) }
+    var currentPage by remember { mutableStateOf(Page.Home) }
+    val navigate: (Page) -> Unit = { page -> currentPage = page }
+    BackHandler(enabled = currentPage != Page.Home) { currentPage = Page.Home }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 880.dp
         Scaffold(
@@ -111,8 +115,8 @@ fun WindowScope.CatalogueApp(onOpenPreview: () -> Unit) {
                     NavigationBar {
                         listOf(Page.Home, Page.Controls, Page.WebView, Page.NativeViews).forEach { page ->
                             NavigationBarItem(
-                                selected = backStack.last() == page,
-                                onClick = { backStack.navigate(page) },
+                                selected = currentPage == page,
+                                onClick = { navigate(page) },
                                 icon = { CircleGlyph(page.title) },
                                 label = { Text(if (page == Page.Home) "Home" else page.title.substringBefore(' ')) },
                             )
@@ -122,40 +126,29 @@ fun WindowScope.CatalogueApp(onOpenPreview: () -> Unit) {
             },
         ) { padding ->
             Row(Modifier.fillMaxSize().padding(padding)) {
-                if (wide) CatalogueRail(backStack.last(), backStack::navigate)
-                NavDisplay(
-                    backStack = backStack,
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                    onBack = { if (backStack.size > 1) backStack.removeLast() },
-                ) { page ->
-                    NavEntry(page) { destination ->
-                        when (destination) {
-                            Page.Home -> HomePage(backStack::navigate)
-                            Page.Controls -> PageFrame(destination) { ControlsPage() }
-                            Page.TextInputs -> PageFrame(destination) { TextInputsPage() }
+                if (wide) CatalogueRail(currentPage, navigate)
+                Box(Modifier.weight(1f).fillMaxHeight()) {
+                    key(currentPage) {
+                        when (currentPage) {
+                            Page.Home -> HomePage(navigate)
+                            Page.Controls -> PageFrame(currentPage) { ControlsPage() }
+                            Page.TextInputs -> PageFrame(currentPage) { TextInputsPage() }
                             Page.CardsLists -> CardsListsPage()
-                            Page.Navigation -> PageFrame(destination) { NavigationPage() }
-                            Page.Overlays -> PageFrame(destination) { OverlaysPage() }
-                            Page.Graphics -> PageFrame(destination) { GraphicsPage() }
-                            Page.Animations -> PageFrame(destination) { AnimationsPage() }
+                            Page.Navigation -> PageFrame(currentPage) { NavigationPage() }
+                            Page.Overlays -> PageFrame(currentPage) { OverlaysPage() }
+                            Page.Graphics -> PageFrame(currentPage) { GraphicsPage() }
+                            Page.Animations -> PageFrame(currentPage) { AnimationsPage() }
                             Page.WebView -> WebViewPage()
                             Page.Video -> VideoPage()
-                            Page.NativeViews -> PageFrame(destination) { NativeViewsPage() }
-                            Page.Windows -> PageFrame(destination) { WindowsPage(onOpenPreview) }
-                            Page.Desktop -> PageFrame(destination) { DesktopPage() }
+                            Page.NativeViews -> PageFrame(currentPage) { NativeViewsPage() }
+                            Page.Windows -> PageFrame(currentPage) { WindowsPage(onOpenPreview) }
+                            Page.Desktop -> PageFrame(currentPage) { DesktopPage() }
                         }
                     }
                 }
             }
         }
     }
-}
-
-private fun SnapshotStateList<Page>.navigate(page: Page) {
-    if (lastOrNull() == page) return
-    clear()
-    add(Page.Home)
-    if (page != Page.Home) add(page)
 }
 
 @Composable
@@ -524,9 +517,31 @@ private fun NativeViewsPage() {
         glView.requestRender()
     }
     DemoSection("Two native surfaces in Compose") {
+        val cornerRadius = with(LocalDensity.current) { 24.dp.toPx() }
+        val nativeClip: (Size) -> Path = { viewSize ->
+            Path().apply {
+                addRoundRect(
+                    RoundRect(
+                        left = 0f,
+                        top = 0f,
+                        right = viewSize.width,
+                        bottom = viewSize.height,
+                        cornerRadius = CornerRadius(cornerRadius),
+                    )
+                )
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            NativeView({ cpuView }, Modifier.weight(1f).height(size.dp).clip(RoundedCornerShape(24.dp)).graphicsLayer { rotationZ = -2f })
-            NativeView({ glView }, Modifier.weight(1f).height(size.dp).clip(RoundedCornerShape(24.dp)).graphicsLayer { rotationZ = 2f })
+            NativeView(
+                { cpuView },
+                Modifier.weight(1f).height(size.dp).clip(RoundedCornerShape(24.dp)).graphicsLayer { rotationZ = -2f },
+                clipPath = nativeClip,
+            )
+            NativeView(
+                { glView },
+                Modifier.weight(1f).height(size.dp).clip(RoundedCornerShape(24.dp)).graphicsLayer { rotationZ = 2f },
+                clipPath = nativeClip,
+            )
         }
         Row { AssistChip({}, { Text("CPU pixels") }); Spacer(Modifier.width(8.dp)); AssistChip({}, { Text("Native OpenGL") }) }
         Text("Animated size / OpenGL color"); Slider(size, { size = it; phase = it / 30f }, valueRange = 120f..300f)

@@ -33,12 +33,25 @@ interface DrawModifierNode : DelegatableNode {
     fun onMeasureResultChanged() {}
 }
 
+internal class DrawNodeOwnerScope(internal val drawNode: DrawModifierNode) : OwnerScope {
+    override val isValidOwnerScope: Boolean
+        get() = drawNode.node.isAttached
+
+    companion object {
+        internal val OnDrawReadsChanged: (DrawNodeOwnerScope) -> Unit = { scope ->
+            if (scope.isValidOwnerScope) scope.drawNode.invalidateDraw()
+        }
+    }
+}
+
 /**
  * Invalidates this modifier's draw layer, ensuring that a draw pass will be run on the next frame.
  */
 fun DrawModifierNode.invalidateDraw() {
     if (node.isAttached) {
-        requireCoordinator(Nodes.Any).invalidateLayer()
+        val coordinator = requireCoordinator(Nodes.Any)
+        requireOwner().onDrawDamage(coordinator.boundsInRoot(clipBounds = false))
+        coordinator.invalidateLayer()
     }
 }
 
