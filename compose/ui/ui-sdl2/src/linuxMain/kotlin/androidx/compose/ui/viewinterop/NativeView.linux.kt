@@ -61,9 +61,11 @@ import cairo.kgpu_layer_draw_mesh
 import cairo.kgpu_layer_finish
 import cairo.kgpu_layer_framebuffer
 import cairo.kgpu_layer_prepare
+import cairo.kgpu_layer_read_pixels
 import cairo.kgpu_context_renderer
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 
@@ -72,9 +74,36 @@ internal val LocalGpuInteropRegistry = staticCompositionLocalOf<GpuInteropRegist
 internal val LocalNativeViewInvalidationDispatcher =
     staticCompositionLocalOf<((() -> Unit) -> Unit)> { { it() } }
 
+internal enum class GpuInteropEmission {
+    Unsupported,
+    External,
+    Rasterized,
+}
+
 internal interface GpuInteropLayerCommand {
     val compositionId: Long
     fun draw(gpu: COpaquePointer): Boolean
+    fun snapshot(gpu: COpaquePointer?): CairoImage? = null
+
+    fun drawRasterized(
+        gpu: COpaquePointer?,
+        canvas: CairoCanvas,
+        maskInLocal: Path,
+    ): Boolean {
+        val image = snapshot(gpu) ?: return false
+        try {
+            canvas.save()
+            try {
+                canvas.clipPath(maskInLocal)
+                canvas.drawSurface(image.surface, 0f, 0f, 1f, BlendMode.SrcOver)
+            } finally {
+                canvas.restore()
+            }
+        } finally {
+            image.close()
+        }
+        return true
+    }
 }
 
 internal interface GpuInteropCompositionRecorder {
@@ -82,7 +111,8 @@ internal interface GpuInteropCompositionRecorder {
         layer: GpuInteropLayerCommand,
         canvas: androidx.compose.ui.graphics.Canvas,
         maskInRoot: Path,
-    ): Boolean
+        maskInLocal: Path,
+    ): GpuInteropEmission
 }
 
 internal class GpuInteropRegistry(
@@ -105,9 +135,10 @@ internal class GpuInteropRegistry(
 
     fun draw(): Int {
         val gpu = context ?: return 0
+        val fallbackIds = fallbackMasks.keys.toSet()
         var drawnLayers = 0
         layers.toList().forEach {
-            if (it.draw(gpu)) drawnLayers++
+            if (it.compositionId in fallbackIds && it.draw(gpu)) drawnLayers++
         }
         return drawnLayers
     }
@@ -116,10 +147,15 @@ internal class GpuInteropRegistry(
         layer: GpuInteropLayerCommand,
         canvas: androidx.compose.ui.graphics.Canvas,
         maskInRoot: Path,
-    ): Boolean {
-        val ordered = compositionRecorder?.emit(layer, canvas, maskInRoot) == true
-        if (ordered) fallbackMasks.remove(layer.compositionId)
-        return ordered
+        maskInLocal: Path,
+    ): GpuInteropEmission {
+        val result =
+            compositionRecorder?.emit(layer, canvas, maskInRoot, maskInLocal)
+                ?: GpuInteropEmission.Unsupported
+        if (result != GpuInteropEmission.Unsupported) {
+            fallbackMasks.remove(layer.compositionId)
+        }
+        return result
     }
 
     fun setFallbackMask(layer: GpuInteropLayerCommand, path: Path) {
@@ -141,6 +177,32 @@ internal class GpuInteropRegistry(
     fun applyFallbackMasks() {
         val canvas = rootCanvas ?: return
         fallbackMasks.values.forEach(canvas::clearInteropPathInRoot)
+    }
+
+    val rasterReadbacks: Long
+        get() = layers.sumOf(GpuNativeViewLayer::rasterReadbacks)
+
+    val rasterReadbackBytes: Long
+        get() = layers.sumOf(GpuNativeViewLayer::rasterReadbackBytes)
+}
+
+internal class GpuNativeViewSnapshotCacheState {
+    private var renderGeneration = 0L
+    private var snapshotGeneration = -1L
+
+    fun onRendered() {
+        renderGeneration++
+    }
+
+    fun invalidateSnapshot() {
+        snapshotGeneration = -1L
+    }
+
+    val needsReadback: Boolean
+        get() = snapshotGeneration != renderGeneration
+
+    fun onReadback() {
+        snapshotGeneration = renderGeneration
     }
 }
 
@@ -182,12 +244,21 @@ internal class GpuNativeViewLayer(
     private var density = 1f
     private var meshPositions = FloatArray(0)
     private val renderInvalidation = GpuNativeViewRenderInvalidation()
+    private val snapshotCacheState = GpuNativeViewSnapshotCacheState()
+    private var cachedSnapshot: CairoImage? = null
+    private var hasRendered = false
+
+    internal var rasterReadbacks = 0L
+        private set
+    internal var rasterReadbackBytes = 0L
+        private set
 
     fun resize(value: IntSize, density: Float) {
         if (size != value || this.density != density) {
             size = value
             this.density = density
             renderInvalidation.request()
+            snapshotCacheState.invalidateSnapshot()
         }
     }
 
@@ -264,15 +335,23 @@ internal class GpuNativeViewLayer(
         }
     }
 
-    override fun draw(gpu: COpaquePointer): Boolean {
-        val positions = meshPositions
-        if (positions.isEmpty()) return false
+    private fun updateTexture(gpu: COpaquePointer): Boolean {
         renderInvalidation.consume {
             // The dirty bit is cleared before entering native code. An update callback raised
-            // during rendering therefore remains pending for the following compositor frame. A
-            // failed first render is also retained instead of leaving an empty texture forever.
-            render(gpu)
+            // during rendering therefore remains pending for the following compositor frame.
+            render(gpu).also { rendered ->
+                if (rendered) {
+                    hasRendered = true
+                    snapshotCacheState.onRendered()
+                }
+            }
         }
+        return hasRendered
+    }
+
+    override fun draw(gpu: COpaquePointer): Boolean {
+        val positions = meshPositions
+        if (positions.isEmpty() || !updateTexture(gpu)) return false
         positions.usePinned {
             kgpu_layer_draw_mesh(
                 gpu,
@@ -286,8 +365,50 @@ internal class GpuNativeViewLayer(
         return true
     }
 
+    override fun drawRasterized(
+        gpu: COpaquePointer?,
+        canvas: CairoCanvas,
+        maskInLocal: Path,
+    ): Boolean {
+        val context = gpu ?: return false
+        if (size.width <= 0 || size.height <= 0 || !updateTexture(context)) return false
+        var image = cachedSnapshot
+        if (image == null || image.width != size.width || image.height != size.height) {
+            image?.close()
+            image = CairoImage(size.width, size.height)
+            cachedSnapshot = image
+            snapshotCacheState.invalidateSnapshot()
+        }
+        if (snapshotCacheState.needsReadback) {
+            val copied =
+                kgpu_layer_read_pixels(
+                    context,
+                    handle,
+                    image.surface.data.reinterpret(),
+                    size.width,
+                    size.height,
+                    image.surface.stride,
+                )
+            if (copied <= 0) return false
+            image.surface.markDirty()
+            snapshotCacheState.onReadback()
+            rasterReadbacks++
+            rasterReadbackBytes += copied
+        }
+        canvas.save()
+        try {
+            canvas.clipPath(maskInLocal)
+            canvas.drawSurface(image.surface, 0f, 0f, 1f, BlendMode.SrcOver)
+        } finally {
+            canvas.restore()
+        }
+        return true
+    }
+
     override fun close() {
         registry.remove(this)
+        cachedSnapshot?.close()
+        cachedSnapshot = null
         registry.context?.let { kgpu_layer_destroy(it, handle) }
     }
 }
@@ -310,8 +431,9 @@ private class NativeViewFrame(size: IntSize) : AutoCloseable {
  *
  * [clipPath] supplies an optional local-coordinate alpha mask. GPU views are projected through
  * the current Compose transform (including perspective rotation), and the path is cut from the
- * Cairo frame with antialiased coverage before the external texture is composited. No native
- * framebuffer pixels are read back to the CPU.
+ * Cairo frame with antialiased coverage before the external texture is composited. Root-level GPU
+ * views remain zero-readback. When an isolated Compose layer requires CPU composition, one retained
+ * snapshot is refreshed after each successful native render and reused for geometry-only redraws.
  *
  * Compose content can be drawn over the native view, and pointer input remains handled by Compose.
  */
@@ -342,6 +464,7 @@ fun NativeView(
     val lastLayoutBounds = remember { arrayOfNulls<IntRect>(1) }
     var renderRequest by remember(view) { mutableLongStateOf(1L) }
     val renderedRequest = remember(view) { longArrayOf(Long.MIN_VALUE) }
+    val lastGpuEmission = remember(view) { arrayOf(GpuInteropEmission.Unsupported) }
     val boundsMask = remember { Path() }
     val callbackActive = remember(view) { booleanArrayOf(false) }
     val requestRender: () -> Unit = remember(view, gpuLayer, dispatchInvalidation) {
@@ -350,6 +473,9 @@ fun NativeView(
                 if (callbackActive[0]) {
                     if (gpuLayer != null) {
                         gpuLayer.requestRender()
+                        if (lastGpuEmission[0] == GpuInteropEmission.Rasterized) {
+                            renderRequest += 1L
+                        }
                     } else {
                         renderRequest += 1L
                     }
@@ -505,12 +631,26 @@ fun NativeView(
         if (gpuLayer != null) {
             renderedRequest[0] = requestedRender
             coordinates[0]?.let { gpuLayer.updateGeometry(it, mask) }
-            val ordered =
-                gpuRegistry?.emitBoundary(gpuLayer, drawContext.canvas, gpuLayer.transformedMask) ==
-                    true
-            if (!ordered) gpuRegistry?.setFallbackMask(gpuLayer, gpuLayer.transformedMask)
-            clipPath(mask) {
-                drawRect(Color.Transparent, blendMode = BlendMode.Clear)
+            val emission =
+                gpuRegistry?.emitBoundary(
+                    gpuLayer,
+                    drawContext.canvas,
+                    gpuLayer.transformedMask,
+                    mask,
+                ) ?: GpuInteropEmission.Unsupported
+            lastGpuEmission[0] = emission
+            when (emission) {
+                GpuInteropEmission.Rasterized -> Unit
+                GpuInteropEmission.External ->
+                    clipPath(mask) {
+                        drawRect(Color.Transparent, blendMode = BlendMode.Clear)
+                    }
+                GpuInteropEmission.Unsupported -> {
+                    gpuRegistry?.setFallbackMask(gpuLayer, gpuLayer.transformedMask)
+                    clipPath(mask) {
+                        drawRect(Color.Transparent, blendMode = BlendMode.Clear)
+                    }
+                }
             }
             return@Canvas
         }

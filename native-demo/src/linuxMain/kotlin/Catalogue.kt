@@ -13,6 +13,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,10 +27,10 @@ import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
@@ -40,10 +41,18 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -55,17 +64,24 @@ import androidx.compose.ui.viewinterop.InteropRenderTarget
 import androidx.compose.ui.viewinterop.LinuxInteropView
 import androidx.compose.ui.viewinterop.NativeView
 import androidx.compose.ui.viewinterop.OpenGlInteropRenderTarget
+import androidx.compose.ui.window.DialogModalityType
 import androidx.compose.ui.window.Notification
 import androidx.compose.ui.window.NotificationAction
 import androidx.compose.ui.window.NotificationRequest
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.sendNotification
+import androidx.navigationevent.NavigationEventInfo
+import androidx.navigationevent.compose.NavigationBackHandler
+import androidx.navigationevent.compose.rememberNavigationEventState
 import app.webview.app_demo_render_gl
 import kotlinx.cinterop.UByteVar
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.set
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import platform.posix.fclose
+import platform.posix.fopen
+import platform.posix.fputs
 
 private enum class Page(val title: String, val note: String) {
     Home("Catalogue", "Linux Compose, exercised for real"),
@@ -79,9 +95,11 @@ private enum class Page(val title: String, val note: String) {
     WebView("WebView", "WPE WebKit with browser controls"),
     Video("Video Player", "Native MPV video surface"),
     NativeViews("Native Views", "CPU and OpenGL interop surfaces"),
-    Windows("Desktop Windows", "Multi-window and window modes"),
-    Desktop("Desktop Features", "Notifications, clipboard, URLs and drops"),
+    Windows("Desktop Windows", "Icons, transparency, modality and multi-window"),
+    Desktop("Desktop Features", "Menus, tray, notifications, URLs and drag source"),
 }
+
+private data class CatalogueNavigationInfo(val page: Page) : NavigationEventInfo()
 
 private val destinations = Page.entries.drop(1)
 
@@ -91,8 +109,14 @@ private fun CircleGlyph(
     modifier: Modifier = Modifier,
 ) {
     val semanticsModifier =
-        if (contentDescription == null) Modifier
-        else Modifier.semantics { this.contentDescription = contentDescription }
+        if (contentDescription == null) {
+            Modifier
+        } else {
+            Modifier.semantics {
+                this.contentDescription = contentDescription
+                role = Role.Image
+            }
+        }
 
     Box(
         modifier
@@ -103,10 +127,28 @@ private fun CircleGlyph(
 }
 
 @Composable
-fun WindowScope.CatalogueApp(onOpenPreview: () -> Unit) {
+fun WindowScope.CatalogueApp(
+    onOpenPreview: () -> Unit,
+    onOpenTransparentWindow: () -> Unit,
+    onOpenDialog: (DialogModalityType) -> Unit,
+    traySupported: Boolean,
+) {
     var currentPage by remember { mutableStateOf(Page.Home) }
     val navigate: (Page) -> Unit = { page -> currentPage = page }
-    BackHandler(enabled = currentPage != Page.Home) { currentPage = Page.Home }
+    NavigationBackHandler(
+        state =
+            rememberNavigationEventState(
+                currentInfo = CatalogueNavigationInfo(currentPage),
+                backInfo =
+                    if (currentPage == Page.Home) {
+                        emptyList()
+                    } else {
+                        listOf(CatalogueNavigationInfo(Page.Home))
+                    },
+            ),
+        isBackEnabled = currentPage != Page.Home,
+        onBackCompleted = { currentPage = Page.Home },
+    )
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 880.dp
         Scaffold(
@@ -141,8 +183,16 @@ fun WindowScope.CatalogueApp(onOpenPreview: () -> Unit) {
                             Page.WebView -> WebViewPage()
                             Page.Video -> VideoPage()
                             Page.NativeViews -> PageFrame(currentPage) { NativeViewsPage() }
-                            Page.Windows -> PageFrame(currentPage) { WindowsPage(onOpenPreview) }
-                            Page.Desktop -> PageFrame(currentPage) { DesktopPage() }
+                            Page.Windows ->
+                                PageFrame(currentPage) {
+                                    WindowsPage(
+                                        onOpenPreview = onOpenPreview,
+                                        onOpenTransparentWindow = onOpenTransparentWindow,
+                                        onOpenDialog = onOpenDialog,
+                                    )
+                                }
+                            Page.Desktop ->
+                                PageFrame(currentPage) { DesktopPage(traySupported) }
                         }
                     }
                 }
@@ -290,7 +340,15 @@ private fun TextInputsPage() {
         Text("Monospace: val linux = Compose()", fontFamily = FontFamily.Monospace)
     }
     DemoSection("Fields") {
-        OutlinedTextField(name, { name = it }, label = { Text("Name") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text("Name") },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .semantics { contentDescription = "Name editor" },
+        )
         OutlinedTextField(search, { search = it }, label = { Text("Search") }, leadingIcon = { CircleGlyph() }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(password, { password = it }, label = { Text("Password") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
         OutlinedTextField(notes, { notes = it }, label = { Text("Multiline editor") }, minLines = 4, modifier = Modifier.fillMaxWidth())
@@ -300,10 +358,33 @@ private fun TextInputsPage() {
 
 @Composable
 private fun CardsListsPage() {
-    val contacts = listOf("Ada Lovelace" to "Computing", "Linus Torvalds" to "Linux", "Margaret Hamilton" to "Apollo", "Grace Hopper" to "Compilers", "James Gosling" to "Java", "Radia Perlman" to "Networks")
+    val contacts =
+        listOf(
+            "Ada Lovelace" to "Computing",
+            "Linus Torvalds" to "Linux",
+            "Margaret Hamilton" to "Apollo",
+            "Grace Hopper" to "Compilers",
+            "James Gosling" to "Java",
+            "Radia Perlman" to "Networks",
+        )
     Column(Modifier.fillMaxSize().padding(28.dp)) {
-        Text("Cards & Lists", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Text("A contacts screen using a real lazy list.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircleGlyph("Contacts illustration")
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    "Cards & Lists",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "A contacts screen using a real lazy list.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        AccessibleRuntimeTable()
         Spacer(Modifier.height(18.dp))
         LazyColumn(
             modifier = Modifier.weight(1f),
@@ -311,14 +392,88 @@ private fun CardsListsPage() {
         ) {
             items(contacts) { (name, role) ->
                 Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) { Text(name.take(1), Modifier.padding(14.dp), fontWeight = FontWeight.Bold) }
-                        Spacer(Modifier.width(14.dp)); Column(Modifier.weight(1f)) { Text(name, fontWeight = FontWeight.Medium); Text(role, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Row(
+                        Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                        ) {
+                            Text(
+                                name.take(1),
+                                Modifier.padding(14.dp),
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(name, fontWeight = FontWeight.Medium)
+                            Text(role, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Badge { Text("${name.length}") }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun AccessibleRuntimeTable() {
+    val cells =
+        listOf(
+            "Renderer" to "Cairo + OpenGL",
+            "Accessibility" to "AT-SPI",
+        )
+    Surface(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .semantics {
+                    contentDescription = "Runtime matrix"
+                    collectionInfo = CollectionInfo(rowCount = 2, columnCount = 2)
+                },
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            cells.forEachIndexed { rowIndex, (label, value) ->
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    RuntimeTableCell(label, rowIndex, columnIndex = 0, Modifier.weight(1f))
+                    RuntimeTableCell(value, rowIndex, columnIndex = 1, Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RuntimeTableCell(
+    text: String,
+    rowIndex: Int,
+    columnIndex: Int,
+    modifier: Modifier,
+) {
+    Surface(
+        modifier =
+            modifier.semantics {
+                contentDescription = "Runtime cell $rowIndex,$columnIndex: $text"
+                collectionItemInfo =
+                    CollectionItemInfo(
+                        rowIndex = rowIndex,
+                        rowSpan = 1,
+                        columnIndex = columnIndex,
+                        columnSpan = 1,
+                    )
+            },
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Text(text, Modifier.padding(10.dp))
     }
 }
 
@@ -330,7 +485,15 @@ private fun NavigationPage() {
         Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(16.dp)) {
             Column {
                 Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Text("Sample inbox", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge); TextButton({ drawer = !drawer }) { Text("Menu") } }
-                TabRow(tab) { listOf("Primary", "Updates", "Saved").forEachIndexed { i, text -> Tab(tab == i, { tab = i }, text = { Text(text) }) } }
+                PrimaryTabRow(selectedTabIndex = tab) {
+                    listOf("Primary", "Updates", "Saved").forEachIndexed { index, text ->
+                        Tab(
+                            selected = tab == index,
+                            onClick = { tab = index },
+                            text = { Text(text) },
+                        )
+                    }
+                }
                 Box(Modifier.fillMaxWidth().height(110.dp), contentAlignment = Alignment.Center) { Text("${listOf("Primary", "Updates", "Saved")[tab]} content") }
             }
         }
@@ -391,7 +554,7 @@ private fun GraphicsPage() {
     DemoSection("Gradients, vector paths & transforms") {
         Canvas(Modifier.fillMaxWidth().height(210.dp).graphicsLayer { rotationY = tilt; shadowElevation = 18f }.blur(0.3.dp)) {
             drawRoundRect(Brush.linearGradient(listOf(Color(0xff7c4dff), Color(0xff00bfa5))), cornerRadius = androidx.compose.ui.geometry.CornerRadius(36f, 36f))
-            val path = Path().apply { moveTo(size.width * .18f, size.height * .72f); quadraticBezierTo(size.width * .48f, -20f, size.width * .82f, size.height * .7f); lineTo(size.width * .65f, size.height * .82f); quadraticBezierTo(size.width * .48f, size.height * .25f, size.width * .33f, size.height * .82f); close() }
+            val path = Path().apply { moveTo(size.width * .18f, size.height * .72f); quadraticTo(size.width * .48f, -20f, size.width * .82f, size.height * .7f); lineTo(size.width * .65f, size.height * .82f); quadraticTo(size.width * .48f, size.height * .25f, size.width * .33f, size.height * .82f); close() }
             drawPath(path, Color.White.copy(alpha = .78f))
         }
         Text("3D tilt ${tilt.roundToInt()}°"); Slider(tilt, { tilt = it }, valueRange = -30f..30f)
@@ -561,11 +724,23 @@ private fun renderCpuDemo(target: InteropRenderTarget): Boolean {
 }
 
 @Composable
-private fun WindowScope.WindowsPage(onOpenPreview: () -> Unit) {
-    var dialog by remember { mutableStateOf(false) }
-    DemoSection("Window playground") {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { Button(onOpenPreview) { Text("Open preview window") }; OutlinedButton({ dialog = true }) { Text("Open dialog") } }
-        Text("The preview is resizable and always on top. Double-click the system title bar to maximize; use your desktop shortcut for fullscreen.")
+private fun WindowScope.WindowsPage(
+    onOpenPreview: () -> Unit,
+    onOpenTransparentWindow: () -> Unit,
+    onOpenDialog: (DialogModalityType) -> Unit,
+) {
+    DemoSection("Native windows and icons") {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Button(onOpenPreview) { Text("Open preview window") }
+            OutlinedButton(onOpenTransparentWindow) { Text("Open transparent window") }
+        }
+        Text(
+            "Every catalogue surface uses a Painter-backed native window icon. The transparent " +
+                "window has real per-pixel alpha and intentionally leaves its corners empty."
+        )
         WindowDraggableArea(modifier = Modifier.fillMaxWidth()) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
@@ -573,40 +748,286 @@ private fun WindowScope.WindowsPage(onOpenPreview: () -> Unit) {
                 shape = RoundedCornerShape(12.dp),
             ) {
                 Text(
-                    "Custom title-bar preview  ·  drag area",
+                    "Custom title-bar preview  ·  drag this area",
                     modifier = Modifier.padding(16.dp),
                     fontWeight = FontWeight.Medium,
                 )
             }
         }
     }
-    if (dialog) AlertDialog({ dialog = false }, confirmButton = { Button({ dialog = false }) { Text("Done") } }, title = { Text("Compose dialog") }, text = { Text("Dialogs remain owned by the active window.") })
+    DemoSection("Dialog modality") {
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedButton({ onOpenDialog(DialogModalityType.Modeless) }) {
+                Text("Modeless")
+            }
+            OutlinedButton({ onOpenDialog(DialogModalityType.DocumentModal) }) {
+                Text("Document modal")
+            }
+            Button({ onOpenDialog(DialogModalityType.ApplicationModal) }) {
+                Text("Application modal")
+            }
+        }
+        Text(
+            "Modeless dialogs leave every window interactive. Document modality blocks only the " +
+                "owner tree; application modality blocks all other application windows."
+        )
+    }
+    DemoSection("Window menu bar") {
+        Text(
+            "Use File, View, Window and Help above the catalogue. The menu tree includes nested " +
+                "menus, check and radio items, an icon, mnemonics, and Ctrl+N / Ctrl+Shift+T / Ctrl+Q shortcuts."
+        )
+    }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun DesktopPage() {
-    val clipboard = LocalClipboardManager.current
+private fun DesktopPage(traySupported: Boolean) {
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
     val uri = LocalUriHandler.current
+    val dragFile = remember { createDragDemoFile() }
     var copied by remember { mutableStateOf("Nothing copied yet") }
     var progress by remember { mutableFloatStateOf(.25f) }
     DemoSection("Desktop actions") {
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button({ sendNotification(Notification("Compose Linux", "The catalogue notification works.", Notification.Type.Info)) }) { Text("Send notification") }
-            OutlinedButton({ sendNotification(NotificationRequest(title = "Copying files", message = "Project assets", progress = progress, actions = listOf(NotificationAction("cancel", "Cancel")))) }) { Text("Progress notification") }
-            OutlinedButton({ clipboard.setText(AnnotatedString("Hello from Compose Linux")); copied = "Copied to clipboard" }) { Text("Copy text") }
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Button({
+                sendNotification(
+                    Notification(
+                        "Compose Linux",
+                        "The catalogue notification works.",
+                        Notification.Type.Info,
+                    )
+                )
+            }) { Text("Send notification") }
+            OutlinedButton({
+                sendNotification(
+                    NotificationRequest(
+                        title = "Copying files",
+                        message = "Project assets",
+                        progress = progress,
+                        actions = listOf(NotificationAction("cancel", "Cancel")),
+                    )
+                )
+            }) { Text("Progress notification") }
+            OutlinedButton({
+                coroutineScope.launch {
+                    clipboard.setClipEntry(ClipEntry.withPlainText("Hello from Compose Linux"))
+                    copied = "Copied to clipboard"
+                }
+            }) { Text("Copy text") }
             OutlinedButton({ uri.openUri("https://kotlinlang.org") }) { Text("Open URL") }
         }
-        Text(copied); Slider(progress, { progress = it })
+        Text(copied)
+        Slider(progress, { progress = it })
     }
-    DemoSection("Drag & keyboard") {
-        Box(Modifier.fillMaxWidth().height(120.dp).border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) { Text("Drop files or text anywhere in this window") }
-        Text("Keyboard shortcuts:  Ctrl+C copy  ·  Ctrl+V paste  ·  Tab focus  ·  Esc close")
+    DemoSection("System tray and menus") {
+        AssistChip(
+            onClick = {},
+            label = {
+                Text(if (traySupported) "StatusNotifier watcher detected" else "No tray watcher detected")
+            },
+        )
+        Text(
+            if (traySupported) {
+                "The catalogue icon is registered in the system tray. Primary activation opens the " +
+                    "preview window; its dbusmenu contains live check items, notifications and Exit."
+            } else {
+                "This desktop session does not expose a StatusNotifier watcher. The window menu bar " +
+                    "and all other desktop integrations remain available."
+            }
+        )
     }
+    DemoSection("Outgoing drag source") {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(128.dp)
+                        .dragAndDropSource(
+                            drawDragDecoration = {
+                                drawRoundRect(
+                                    color = Color(0xff6750a4),
+                                    cornerRadius = CornerRadius(22f),
+                                )
+                            },
+                            transferData = {
+                                DragAndDropTransferData(
+                                    text = "Dragged from the Compose Linux catalogue"
+                                )
+                            },
+                        ),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Drag text", fontWeight = FontWeight.Bold)
+                        Text("Native Wayland / Xdnd offer")
+                    }
+                }
+            }
+            Surface(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(128.dp)
+                        .dragAndDropSource {
+                            DragAndDropTransferData(
+                                files = listOf(dragFile),
+                                text = "Compose Linux catalogue file",
+                            )
+                        },
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Drag file", fontWeight = FontWeight.Bold)
+                        Text(dragFile, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(96.dp)
+                .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("External files or text can still be dropped anywhere in this window")
+        }
+        Text("Hold the primary mouse button and move either source to another native application.")
+    }
+    DemoSection("Keyboard") {
+        Text(
+            "Menu shortcuts: Ctrl+N preview  ·  Ctrl+Shift+T transparency  ·  Ctrl+Q exit  ·  " +
+                "Tab focus  ·  Esc close"
+        )
+    }
+}
+
+private fun createDragDemoFile(): String {
+    val path = "/tmp/compose-linux-catalogue.txt"
+    fopen(path, "w")?.let { file ->
+        fputs(
+            "Compose Linux catalogue drag source\n" +
+                "This file was created by the native desktop integration demo.\n",
+            file,
+        )
+        fclose(file)
+    }
+    return path
 }
 
 @Composable
 fun PreviewWindow() {
     Box(Modifier.fillMaxSize().background(Brush.linearGradient(listOf(Color(0xff1f1635), Color(0xff073b4c)))), contentAlignment = Alignment.Center) {
         Card(Modifier.padding(36.dp)) { Column(Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("Live preview", style = MaterialTheme.typography.headlineMedium); Text("A second native Linux window"); Spacer(Modifier.height(16.dp)); CircularProgressIndicator() } }
+    }
+}
+
+@Composable
+fun WindowScope.TransparentPreviewWindow(onClose: () -> Unit) {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(20.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp),
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = .96f),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 8.dp,
+            shadowElevation = 18.dp,
+        ) {
+            Column(Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    WindowDraggableArea(
+                        modifier = Modifier.weight(1f).height(64.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "Per-pixel transparency",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                    TextButton(onClick = onClose) {
+                        Text("Close")
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Column(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        "The empty corners reveal the desktop or window underneath.",
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        "Drag only the title area above. Buttons and body content remain fully " +
+                            "interactive, including when the window is maximized.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ModalityDemoDialog(
+    modality: DialogModalityType,
+    onClose: () -> Unit,
+) {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Column(
+            Modifier.fillMaxSize().padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text("${modality.name} modal dialog", style = MaterialTheme.typography.headlineSmall)
+            Text(
+                when (modality) {
+                    DialogModalityType.Modeless ->
+                        "The catalogue and every other application window remain interactive."
+                    DialogModalityType.DocumentModal ->
+                        "The owning catalogue document is blocked while unrelated documents remain interactive."
+                    else ->
+                        "All other windows in this application are blocked until this dialog closes."
+                }
+            )
+            Text(
+                "This is a separate owned SDL window with the same native Painter icon.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Button(onClose) { Text("Close dialog") }
+            }
+        }
     }
 }

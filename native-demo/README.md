@@ -107,6 +107,10 @@ The test uses `gdbus`, `dbus-monitor`, and Python 3 without Python GI bindings. 
 application and semantics nodes dynamically, exercises actions and values, verifies incremental
 events and registry cleanup, and writes diagnostics under the ignored `build/atspi-test` directory.
 
+The Linux Compose UI test host registers roots from every application window and dialog, supports
+custom idling resources, and captures semantics-node screenshots from the owning composed SDL
+framebuffer, including GPU native views.
+
 Set `KTNATIVE_WEBVIEW_URL` to open another initial page. Set `KTNATIVE_WEBVIEW_DEBUG=1` to print
 load transitions, browser console messages, frame dimensions, and input diagnostics.
 
@@ -200,11 +204,14 @@ copy.update(
 copy.complete()
 ```
 
-SDL2 does not expose Wayland protocols for system menu bars, status-notifier trays,
-screen-reader AT-SPI, transparent top-level surfaces, or drag-source data offers. Those remain
-separate Linux platform adapters; the core host currently supplies external drop targets but not
-native drag initiation. The `focusable` flag suppresses Compose keyboard/IME focus,
-although SDL2 cannot prevent the compositor from focusing the native decoration itself.
+The host includes Linux platform adapters beyond SDL itself: AT-SPI accessibility over D-Bus,
+StatusNotifierItem trays with dbusmenu context menus, Compose-rendered window menu bars, per-pixel
+transparent undecorated top-level windows, and outgoing text/file drags through native Wayland
+and Xdnd data-source protocols. The AT-SPI bridge exports Accessible, Application, Component,
+Action, Text, EditableText, Image, Selection, Table, TableCell, Value, and Cache interfaces from
+Compose semantics. Incoming external file/text drops continue to use SDL events. The `focusable`
+flag suppresses Compose keyboard/IME focus, although SDL cannot prevent every window manager from
+focusing a native decoration.
 
 For client-side decoration libraries, pass `undecorated = true` and use the Desktop-shaped
 `WindowScope.WindowDraggableArea` primitive. Keep interactive controls outside the draggable area
@@ -225,19 +232,23 @@ selection, shaping, line layout, span attributes, and glyph masks for brushes an
 The platform host is packaged as the Compose-owned `:compose:ui:ui-sdl2` module. Its KLIB embeds
 the small C++ graphics support archive and exposes the native application, window/dialog state,
 input, clipboard, URI, `WindowDraggableArea`, and native CPU/GPU interop APIs. GPU native views
-render directly into host-owned OpenGL FBOs. The window compositor projects those textures through
-the current Compose transform and blends the transparent Cairo UI texture over them without
-reading external frames back to the CPU. The module deliberately provides only generic native-view
-interop; the WPE WebKit adapter remains app-owned and can be replaced without changing Compose.
+render directly into host-owned OpenGL FBOs. Root-level views stay GPU-resident while the window
+compositor projects their textures through the current Compose transform and interleaves them with
+persistent Cairo segments. The module deliberately provides only generic native-view interop; the
+WPE WebKit adapter remains app-owned and can be replaced without changing Compose.
 
 GPU interop views accept an antialiased Compose `Path` mask and follow the current Compose
 transform, including `rotationX`/`rotationY` perspective, through a subdivided texture mesh. The
 mask clears the Cairo frame at the `NativeView`'s draw position, so later Compose siblings remain
 above GPU-resident native content without host readback.
 
-External textures are currently composited below the final Cairo UI layer. This gives ordinary
-Compose overlays (including controls) correct ordering, but does not yet interleave separate GPU
-textures between arbitrary individual Cairo draw commands.
+Root-level GPU native views participate in an ordered compositor stream that interleaves persistent
+Cairo segment textures and external OpenGL commands. Native views inside isolated Compose layers,
+`saveLayer`, alpha/effect/shadow groups, or perspective transforms use a retained CPU snapshot in
+the active Cairo layer. That snapshot is refreshed only after the native renderer produces a new
+frame and is reused for scrolling, geometry changes, and ancestor-layer property updates. This
+preserves arbitrary Compose z-order and layer semantics while avoiding repeated `glReadPixels` calls
+and keeping the common root-level video path zero-readback.
 
 The executable stays a small native launcher; SDL2, Cairo/Pango, Fontconfig, D-Bus, WPE WebKit,
 libmpv, OpenGL/EGL, JPEG, WebP, and their required system libraries remain dynamically linked.

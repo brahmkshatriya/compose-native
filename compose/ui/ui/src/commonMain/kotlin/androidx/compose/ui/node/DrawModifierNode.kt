@@ -17,6 +17,9 @@
 package androidx.compose.ui.node
 
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.LayerOutsets
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 
 /**
@@ -31,6 +34,16 @@ interface DrawModifierNode : DelegatableNode {
     fun ContentDrawScope.draw()
 
     fun onMeasureResultChanged() {}
+}
+
+/**
+ * Optional contract for draw nodes whose visual output extends beyond their measured bounds.
+ *
+ * The reported [drawInvalidationOutsets] are used only for damage tracking; they do not affect
+ * measurement, placement, clipping, hit testing, or semantics.
+ */
+interface DrawInvalidationOutsetModifierNode {
+    val drawInvalidationOutsets: LayerOutsets
 }
 
 internal class DrawNodeOwnerScope(internal val drawNode: DrawModifierNode) : OwnerScope {
@@ -50,9 +63,36 @@ internal class DrawNodeOwnerScope(internal val drawNode: DrawModifierNode) : Own
 fun DrawModifierNode.invalidateDraw() {
     if (node.isAttached) {
         val coordinator = requireCoordinator(Nodes.Any)
-        requireOwner().onDrawDamage(coordinator.boundsInRoot(clipBounds = false))
+        requireOwner().onDrawDamage(invalidationBoundsInRoot(coordinator))
         coordinator.invalidateLayer()
     }
+}
+
+private fun DrawModifierNode.invalidationBoundsInRoot(coordinator: NodeCoordinator): Rect {
+    val outsets =
+        (this as? DrawInvalidationOutsetModifierNode)?.drawInvalidationOutsets
+            ?: LayerOutsets.Zero
+    if (outsets == LayerOutsets.Zero) return coordinator.boundsInRoot(clipBounds = false)
+    val density = requireDensity()
+    val left = with(density) { outsets.left.toPx() }
+    val top = with(density) { outsets.top.toPx() }
+    val right = with(density) { outsets.right.toPx() }
+    val bottom = with(density) { outsets.bottom.toPx() }
+    val width = coordinator.size.width.toFloat()
+    val height = coordinator.size.height.toFloat()
+    val points =
+        arrayOf(
+            coordinator.localToRoot(Offset(-left, -top)),
+            coordinator.localToRoot(Offset(width + right, -top)),
+            coordinator.localToRoot(Offset(width + right, height + bottom)),
+            coordinator.localToRoot(Offset(-left, height + bottom)),
+        )
+    return Rect(
+        left = points.minOf { it.x },
+        top = points.minOf { it.y },
+        right = points.maxOf { it.x },
+        bottom = points.maxOf { it.y },
+    )
 }
 
 /**

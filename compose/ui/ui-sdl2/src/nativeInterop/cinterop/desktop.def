@@ -1,5 +1,5 @@
-headers = linux_desktop.h linux_atspi.h
-headerFilter = linux_desktop.h linux_atspi.h
+headers = linux_desktop.h linux_atspi.h linux_tray.h linux_drag.h
+headerFilter = linux_desktop.h linux_atspi.h linux_tray.h linux_drag.h
 package = linuxdesktop
 compilerOpts = -Isrc/nativeInterop/cinterop/include
-linkerOpts = -ldbus-1 -lstdc++
+linkerOpts = -ldbus-1 -lstdc++ -lwayland-client -lX11

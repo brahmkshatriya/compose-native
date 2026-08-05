@@ -29,6 +29,11 @@ constexpr const char *application_interface = "org.a11y.atspi.Application";
 constexpr const char *component_interface = "org.a11y.atspi.Component";
 constexpr const char *action_interface = "org.a11y.atspi.Action";
 constexpr const char *text_interface = "org.a11y.atspi.Text";
+constexpr const char *editable_text_interface = "org.a11y.atspi.EditableText";
+constexpr const char *image_interface = "org.a11y.atspi.Image";
+constexpr const char *selection_interface = "org.a11y.atspi.Selection";
+constexpr const char *table_interface = "org.a11y.atspi.Table";
+constexpr const char *table_cell_interface = "org.a11y.atspi.TableCell";
 constexpr const char *value_interface = "org.a11y.atspi.Value";
 constexpr const char *cache_interface = "org.a11y.atspi.Cache";
 constexpr const char *object_event_interface = "org.a11y.atspi.Event.Object";
@@ -55,6 +60,9 @@ constexpr uint32_t state_resizable = 21;
 constexpr uint32_t state_sensitive = 24;
 constexpr uint32_t state_showing = 25;
 constexpr uint32_t state_visible = 30;
+constexpr uint32_t state_selectable = 22;
+constexpr uint32_t state_selected = 23;
+constexpr uint32_t role_image = 27;
 
 struct Action {
     int32_t callback_id = -1;
@@ -87,6 +95,20 @@ struct Node {
     double current = 0.0;
     double increment = 0.0;
     int32_t value_action_id = -1;
+    bool has_collection = false;
+    int32_t row_count = -1;
+    int32_t column_count = -1;
+    bool has_collection_item = false;
+    int32_t row_index = -1;
+    int32_t row_span = 0;
+    int32_t column_index = -1;
+    int32_t column_span = 0;
+    int32_t set_text_action_id = -1;
+    int32_t insert_text_action_id = -1;
+    int32_t set_selection_action_id = -1;
+    int32_t copy_action_id = -1;
+    int32_t cut_action_id = -1;
+    int32_t paste_action_id = -1;
 };
 
 struct Window {
@@ -159,6 +181,8 @@ const char *role_name(uint32_t role) {
         case 44: return "radio button";
         case 49: return "scroll pane";
         case 51: return "slider";
+        case 55: return "table";
+        case 56: return "table cell";
         case 61: return "text";
         case 67: return "unknown";
         case 69: return "window";
@@ -287,6 +311,91 @@ int32_t object_index_in_parent(const Object &object) {
     return -1;
 }
 
+bool node_has_state(const Node &node, uint32_t state) {
+    return (node.states & state_bit(state)) != 0;
+}
+
+bool node_is_editable(const Node &node) {
+    return node.set_text_action_id >= 0 || node.insert_text_action_id >= 0 ||
+           node.copy_action_id >= 0 || node.cut_action_id >= 0 || node.paste_action_id >= 0;
+}
+
+std::vector<Object> selected_children(const Object &object) {
+    std::vector<Object> result;
+    for (const Object &child : object_children(object)) {
+        if (child.node && node_has_state(*child.node, state_selected)) result.push_back(child);
+    }
+    return result;
+}
+
+bool supports_selection(const Object &object) {
+    for (const Object &child : object_children(object)) {
+        if (child.node && node_has_state(*child.node, state_selectable)) return true;
+    }
+    return false;
+}
+
+Object table_for_cell(const Object &object) {
+    Object candidate = object_parent(object);
+    while (candidate.kind == ObjectKind::Node) {
+        if (candidate.node && candidate.node->has_collection) return candidate;
+        candidate = object_parent(candidate);
+    }
+    return {};
+}
+
+Object table_cell_at(const Object &table, int32_t row, int32_t column) {
+    for (const Object &child : object_children(table)) {
+        if (!child.node || !child.node->has_collection_item) continue;
+        const Node &cell = *child.node;
+        if (row >= cell.row_index && row < cell.row_index + cell.row_span &&
+            column >= cell.column_index && column < cell.column_index + cell.column_span) {
+            return child;
+        }
+    }
+    return {};
+}
+
+int32_t table_cell_index_at(const Object &table, int32_t row, int32_t column) {
+    const auto children = object_children(table);
+    for (size_t index = 0; index < children.size(); ++index) {
+        const Object &child = children[index];
+        if (!child.node || !child.node->has_collection_item) continue;
+        const Node &cell = *child.node;
+        if (row >= cell.row_index && row < cell.row_index + cell.row_span &&
+            column >= cell.column_index && column < cell.column_index + cell.column_span) {
+            return static_cast<int32_t>(index);
+        }
+    }
+    return -1;
+}
+
+const Action *action_named(const Node &node, const char *name) {
+    for (const Action &action : node.actions) if (action.name == name) return &action;
+    return nullptr;
+}
+
+int invoke_callback(
+    const Object &object,
+    int32_t action_id,
+    double numeric_value = 0.0,
+    const char *text_value = nullptr,
+    int32_t selection_start = 0,
+    int32_t selection_end = 0
+) {
+    return object.window && object.node && object.window->callback && action_id >= 0
+        ? object.window->callback(
+            object.window->callback_context,
+            object.node->id,
+            action_id,
+            numeric_value,
+            text_value,
+            selection_start,
+            selection_end
+        )
+        : 0;
+}
+
 std::vector<std::string> object_interfaces(const Object &object) {
     std::vector<std::string> result{accessible_interface};
     if (object.kind == ObjectKind::Application) result.push_back(application_interface);
@@ -295,7 +404,12 @@ std::vector<std::string> object_interfaces(const Object &object) {
     }
     if (object.kind == ObjectKind::Node && object.node) {
         if (!object.node->actions.empty()) result.push_back(action_interface);
-        if (!object.node->text.empty()) result.push_back(text_interface);
+        if (!object.node->text.empty() || node_is_editable(*object.node)) result.push_back(text_interface);
+        if (node_is_editable(*object.node)) result.push_back(editable_text_interface);
+        if (object.node->role == role_image) result.push_back(image_interface);
+        if (supports_selection(object)) result.push_back(selection_interface);
+        if (object.node->has_collection) result.push_back(table_interface);
+        if (object.node->has_collection_item) result.push_back(table_cell_interface);
         if (object.node->has_value) result.push_back(value_interface);
     }
     return result;
@@ -347,6 +461,20 @@ void append_string_array(DBusMessageIter *iter, const std::vector<std::string> &
         const char *text = value.c_str();
         dbus_message_iter_append_basic(&array, DBUS_TYPE_STRING, &text);
     }
+    dbus_message_iter_close_container(iter, &array);
+}
+
+void append_object_array(DBusMessageIter *iter, const std::vector<Object> &objects) {
+    DBusMessageIter array;
+    dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, "(so)", &array);
+    for (const Object &object : objects) append_object_reference(&array, object);
+    dbus_message_iter_close_container(iter, &array);
+}
+
+void append_int_array(DBusMessageIter *iter, const std::vector<int32_t> &values) {
+    DBusMessageIter array;
+    dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, "i", &array);
+    for (int32_t value : values) dbus_message_iter_append_basic(&array, DBUS_TYPE_INT32, &value);
     dbus_message_iter_close_container(iter, &array);
 }
 
@@ -493,7 +621,7 @@ bool append_property(DBusMessageIter *variant, const Object &object, const std::
             int32_t value = static_cast<int32_t>(object.node->actions.size());
             return dbus_message_iter_append_basic(variant, DBUS_TYPE_INT32, &value);
         }
-    } else if (interface_name == text_interface && object.node && !object.node->text.empty()) {
+    } else if (interface_name == text_interface && object.node && (!object.node->text.empty() || node_is_editable(*object.node))) {
         if (property == "version") {
             uint32_t value = interface_version;
             return dbus_message_iter_append_basic(variant, DBUS_TYPE_UINT32, &value);
@@ -504,6 +632,68 @@ bool append_property(DBusMessageIter *variant, const Object &object, const std::
                 for (unsigned char byte : object.node->text) if ((byte & 0xc0u) != 0x80u) ++value;
             }
             return dbus_message_iter_append_basic(variant, DBUS_TYPE_INT32, &value);
+        }
+    } else if (interface_name == editable_text_interface && object.node && node_is_editable(*object.node)) {
+        if (property == "version") {
+            uint32_t value = interface_version;
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_UINT32, &value);
+        }
+    } else if (interface_name == image_interface && object.node && object.node->role == role_image) {
+        if (property == "version") {
+            uint32_t value = interface_version;
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_UINT32, &value);
+        }
+        if (property == "ImageDescription" || property == "ImageLocale") {
+            const std::string value = property == "ImageDescription"
+                ? (object.node->description.empty() ? object.node->name : object.node->description)
+                : (std::setlocale(LC_MESSAGES, nullptr) ? std::setlocale(LC_MESSAGES, nullptr) : "C");
+            const char *text = value.c_str();
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_STRING, &text);
+        }
+    } else if (interface_name == selection_interface && supports_selection(object)) {
+        if (property == "version") {
+            uint32_t value = interface_version;
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_UINT32, &value);
+        }
+        if (property == "NSelectedChildren") {
+            int32_t value = static_cast<int32_t>(selected_children(object).size());
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_INT32, &value);
+        }
+    } else if (interface_name == table_interface && object.node && object.node->has_collection) {
+        if (property == "version") {
+            uint32_t value = interface_version;
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_UINT32, &value);
+        }
+        if (property == "NRows" || property == "NColumns" ||
+            property == "NSelectedRows" || property == "NSelectedColumns") {
+            int32_t value = property == "NRows" ? object.node->row_count :
+                property == "NColumns" ? object.node->column_count : 0;
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_INT32, &value);
+        }
+        if (property == "Caption" || property == "Summary") {
+            append_object_reference(variant, {});
+            return true;
+        }
+    } else if (interface_name == table_cell_interface && object.node && object.node->has_collection_item) {
+        if (property == "version") {
+            uint32_t value = interface_version;
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_UINT32, &value);
+        }
+        if (property == "ColumnSpan" || property == "RowSpan") {
+            int32_t value = property == "ColumnSpan" ? object.node->column_span : object.node->row_span;
+            return dbus_message_iter_append_basic(variant, DBUS_TYPE_INT32, &value);
+        }
+        if (property == "Position") {
+            DBusMessageIter position;
+            dbus_message_iter_open_container(variant, DBUS_TYPE_STRUCT, nullptr, &position);
+            dbus_message_iter_append_basic(&position, DBUS_TYPE_INT32, &object.node->row_index);
+            dbus_message_iter_append_basic(&position, DBUS_TYPE_INT32, &object.node->column_index);
+            dbus_message_iter_close_container(variant, &position);
+            return true;
+        }
+        if (property == "Table") {
+            append_object_reference(variant, table_for_cell(object));
+            return true;
         }
     } else if (interface_name == value_interface && object.node && object.node->has_value) {
         if (property == "version") {
@@ -551,6 +741,27 @@ const char *property_signature(const Object &object, const std::string &interfac
     if (interface_name == text_interface) {
         if (property == "version") return "u";
         if (property == "CharacterCount" || property == "CaretOffset") return "i";
+    }
+    if (interface_name == editable_text_interface && property == "version") return "u";
+    if (interface_name == image_interface) {
+        if (property == "version") return "u";
+        if (property == "ImageDescription" || property == "ImageLocale") return "s";
+    }
+    if (interface_name == selection_interface) {
+        if (property == "version") return "u";
+        if (property == "NSelectedChildren") return "i";
+    }
+    if (interface_name == table_interface) {
+        if (property == "version") return "u";
+        if (property == "NRows" || property == "NColumns" ||
+            property == "NSelectedRows" || property == "NSelectedColumns") return "i";
+        if (property == "Caption" || property == "Summary") return "(so)";
+    }
+    if (interface_name == table_cell_interface) {
+        if (property == "version") return "u";
+        if (property == "ColumnSpan" || property == "RowSpan") return "i";
+        if (property == "Position") return "(ii)";
+        if (property == "Table") return "(so)";
     }
     if (interface_name == value_interface) {
         if (property == "version") return "u";
@@ -650,7 +861,10 @@ DBusMessage *handle_properties(DBusMessage *message, const Object &object) {
         const std::vector<std::string> candidates = {
             "version", "Name", "Description", "Parent", "ChildCount", "Locale", "AccessibleId", "HelpText",
             "ToolkitName", "ToolkitVersion", "AtspiVersion", "InterfaceVersion", "Id", "NActions",
-            "CharacterCount", "CaretOffset", "MinimumValue", "MaximumValue", "MinimumIncrement", "CurrentValue", "Text"
+            "CharacterCount", "CaretOffset", "ImageDescription", "ImageLocale", "NSelectedChildren",
+            "NRows", "NColumns", "Caption", "Summary", "NSelectedRows", "NSelectedColumns",
+            "ColumnSpan", "Position", "RowSpan", "Table", "MinimumValue", "MaximumValue",
+            "MinimumIncrement", "CurrentValue", "Text"
         };
         for (const std::string &property : candidates) {
             const char *signature = property_signature(object, iface, property);
@@ -903,6 +1117,13 @@ DBusMessage *handle_action(DBusMessage *message, const Object &object) {
     return nullptr;
 }
 
+std::string utf8_prefix_bytes(const std::string &text, int32_t maximum_bytes) {
+    if (maximum_bytes < 0 || static_cast<size_t>(maximum_bytes) >= text.size()) return text;
+    size_t end = static_cast<size_t>(maximum_bytes);
+    while (end > 0 && (static_cast<unsigned char>(text[end]) & 0xc0u) == 0x80u) --end;
+    return text.substr(0, end);
+}
+
 std::vector<size_t> utf8_offsets(const std::string &text) {
     std::vector<size_t> offsets;
     for (size_t index = 0; index < text.size(); ++index) {
@@ -943,7 +1164,7 @@ DBusMessage *text_range_reply(DBusMessage *message, const std::string &text, int
 }
 
 DBusMessage *handle_text(DBusMessage *message, const Object &object) {
-    if (!object.node || object.node->text.empty()) return nullptr;
+    if (!object.node || (object.node->text.empty() && !node_is_editable(*object.node))) return nullptr;
     const char *member = dbus_message_get_member(message);
     if (!member) return nullptr;
     const std::string &text = object.node->text;
@@ -1011,11 +1232,376 @@ DBusMessage *handle_text(DBusMessage *message, const Object &object) {
             DBUS_TYPE_INT32, &object.node->selection_end, DBUS_TYPE_INVALID);
         return reply;
     }
-    if (std::strcmp(member, "SetCaretOffset") == 0 || std::strcmp(member, "AddSelection") == 0 ||
-        std::strcmp(member, "RemoveSelection") == 0 || std::strcmp(member, "SetSelection") == 0 ||
-        std::strcmp(member, "ScrollSubstringTo") == 0 || std::strcmp(member, "ScrollSubstringToPoint") == 0) {
+    if (std::strcmp(member, "SetCaretOffset") == 0) {
+        int32_t offset = 0;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &offset, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid caret offset");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        dbus_bool_t value = invoke_callback(object, object.node->set_selection_action_id,
+            0.0, nullptr, offset, offset) != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "AddSelection") == 0 || std::strcmp(member, "SetSelection") == 0) {
+        int32_t index = 0, start = 0, end = 0;
+        DBusError error;
+        dbus_error_init(&error);
+        const bool is_set = std::strcmp(member, "SetSelection") == 0;
+        const bool parsed = is_set
+            ? dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &index,
+                DBUS_TYPE_INT32, &start, DBUS_TYPE_INT32, &end, DBUS_TYPE_INVALID)
+            : dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &start,
+                DBUS_TYPE_INT32, &end, DBUS_TYPE_INVALID);
+        if (!parsed || (is_set && index != 0)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid text selection");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        dbus_bool_t value = invoke_callback(object, object.node->set_selection_action_id,
+            0.0, nullptr, start, end) != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "RemoveSelection") == 0) {
+        int32_t index = 0;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &index, DBUS_TYPE_INVALID) || index != 0) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Selection index is out of range");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        dbus_bool_t value = invoke_callback(object, object.node->set_selection_action_id,
+            0.0, nullptr, object.node->selection_end, object.node->selection_end) != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "ScrollSubstringTo") == 0 ||
+        std::strcmp(member, "ScrollSubstringToPoint") == 0) {
         dbus_bool_t value = FALSE;
         return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    return nullptr;
+}
+
+DBusMessage *handle_editable_text(DBusMessage *message, const Object &object) {
+    if (!object.node || !node_is_editable(*object.node)) return nullptr;
+    const char *member = dbus_message_get_member(message);
+    if (!member) return nullptr;
+    if (std::strcmp(member, "SetTextContents") == 0) {
+        const char *contents = nullptr;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_STRING, &contents, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid replacement text");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        dbus_bool_t value = invoke_callback(object, object.node->set_text_action_id,
+            0.0, contents, 0, 0) != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "InsertText") == 0) {
+        int32_t position = 0, length = 0;
+        const char *contents = nullptr;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &position,
+                DBUS_TYPE_STRING, &contents, DBUS_TYPE_INT32, &length, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid inserted text");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        const std::string inserted = utf8_prefix_bytes(safe(contents), length);
+        dbus_bool_t value = invoke_callback(object, object.node->insert_text_action_id,
+            0.0, inserted.c_str(), position, position) != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "CopyText") == 0 || std::strcmp(member, "CutText") == 0) {
+        int32_t start = 0, end = 0;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &start,
+                DBUS_TYPE_INT32, &end, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid clipboard text range");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        const int32_t action_id = std::strcmp(member, "CopyText") == 0
+            ? object.node->copy_action_id : object.node->cut_action_id;
+        const int result = invoke_callback(object, action_id, 0.0, nullptr, start, end);
+        if (std::strcmp(member, "CopyText") == 0) return new_reply(message);
+        dbus_bool_t value = result != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "DeleteText") == 0) {
+        int32_t start = 0, end = 0;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &start,
+                DBUS_TYPE_INT32, &end, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid deletion range");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        const auto offsets = utf8_offsets(object.node->text);
+        const int32_t count = static_cast<int32_t>(offsets.size()) - 1;
+        start = std::max(0, std::min(start, count));
+        end = std::max(start, std::min(end, count));
+        const std::string replacement = object.node->text.substr(0, offsets[start]) +
+            object.node->text.substr(offsets[end]);
+        dbus_bool_t value = invoke_callback(object, object.node->set_text_action_id,
+            0.0, replacement.c_str(), 0, 0) != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "PasteText") == 0) {
+        int32_t position = 0;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &position, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid paste position");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        dbus_bool_t value = invoke_callback(object, object.node->paste_action_id,
+            0.0, nullptr, position, position) != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    return nullptr;
+}
+
+DBusMessage *handle_image(DBusMessage *message, const Object &object) {
+    if (!object.node || object.node->role != role_image) return nullptr;
+    const char *member = dbus_message_get_member(message);
+    if (!member) return nullptr;
+    if (std::strcmp(member, "GetImageExtents") == 0 ||
+        std::strcmp(member, "GetImagePosition") == 0) {
+        uint32_t coord_type = 1;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_UINT32, &coord_type, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid image coordinate type");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        int32_t x, y, width, height;
+        object_rect(object, coord_type, x, y, width, height);
+        DBusMessage *reply = new_reply(message);
+        if (std::strcmp(member, "GetImagePosition") == 0) {
+            dbus_message_append_args(reply, DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y, DBUS_TYPE_INVALID);
+        } else {
+            DBusMessageIter iter, extents;
+            dbus_message_iter_init_append(reply, &iter);
+            dbus_message_iter_open_container(&iter, DBUS_TYPE_STRUCT, nullptr, &extents);
+            dbus_message_iter_append_basic(&extents, DBUS_TYPE_INT32, &x);
+            dbus_message_iter_append_basic(&extents, DBUS_TYPE_INT32, &y);
+            dbus_message_iter_append_basic(&extents, DBUS_TYPE_INT32, &width);
+            dbus_message_iter_append_basic(&extents, DBUS_TYPE_INT32, &height);
+            dbus_message_iter_close_container(&iter, &extents);
+        }
+        return reply;
+    }
+    if (std::strcmp(member, "GetImageSize") == 0) {
+        int32_t x, y, width, height;
+        object_rect(object, 1, x, y, width, height);
+        DBusMessage *reply = new_reply(message);
+        dbus_message_append_args(reply, DBUS_TYPE_INT32, &width,
+            DBUS_TYPE_INT32, &height, DBUS_TYPE_INVALID);
+        return reply;
+    }
+    return nullptr;
+}
+
+DBusMessage *handle_selection(DBusMessage *message, const Object &object) {
+    if (!supports_selection(object)) return nullptr;
+    const char *member = dbus_message_get_member(message);
+    if (!member) return nullptr;
+    if (std::strcmp(member, "GetSelectedChild") == 0) {
+        int32_t index = -1;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &index, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid selected-child index");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        const auto selected = selected_children(object);
+        return reference_reply(message,
+            index >= 0 && static_cast<size_t>(index) < selected.size() ? selected[index] : Object{});
+    }
+    if (std::strcmp(member, "SelectAll") == 0 || std::strcmp(member, "ClearSelection") == 0) {
+        dbus_bool_t value = FALSE;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "SelectChild") == 0 || std::strcmp(member, "DeselectChild") == 0 ||
+        std::strcmp(member, "DeselectSelectedChild") == 0 ||
+        std::strcmp(member, "IsChildSelected") == 0) {
+        int32_t index = -1;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &index, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid selection child index");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        const auto children = object_children(object);
+        Object child;
+        if (std::strcmp(member, "DeselectSelectedChild") == 0) {
+            const auto selected = selected_children(object);
+            if (index >= 0 && static_cast<size_t>(index) < selected.size()) child = selected[index];
+        } else if (index >= 0 && static_cast<size_t>(index) < children.size()) {
+            child = children[index];
+        }
+        if (!child.node) return basic_reply(message, DBUS_TYPE_BOOLEAN, FALSE);
+        const bool selected = node_has_state(*child.node, state_selected);
+        if (std::strcmp(member, "IsChildSelected") == 0) {
+            return basic_reply(message, DBUS_TYPE_BOOLEAN, selected ? TRUE : FALSE);
+        }
+        const bool wants_selected = std::strcmp(member, "SelectChild") == 0;
+        if (selected == wants_selected) return basic_reply(message, DBUS_TYPE_BOOLEAN, TRUE);
+        const Action *click = action_named(*child.node, "click");
+        dbus_bool_t value = click && invoke_callback(child, click->callback_id) != 0;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    return nullptr;
+}
+
+DBusMessage *handle_table(DBusMessage *message, const Object &object) {
+    if (!object.node || !object.node->has_collection) return nullptr;
+    const char *member = dbus_message_get_member(message);
+    if (!member) return nullptr;
+    if (std::strcmp(member, "GetAccessibleAt") == 0 || std::strcmp(member, "GetIndexAt") == 0 ||
+        std::strcmp(member, "GetRowExtentAt") == 0 || std::strcmp(member, "GetColumnExtentAt") == 0 ||
+        std::strcmp(member, "IsSelected") == 0) {
+        int32_t row = -1, column = -1;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &row,
+                DBUS_TYPE_INT32, &column, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid table position");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        const Object cell = table_cell_at(object, row, column);
+        if (std::strcmp(member, "GetAccessibleAt") == 0) return reference_reply(message, cell);
+        if (std::strcmp(member, "GetIndexAt") == 0) {
+            return basic_reply(message, DBUS_TYPE_INT32, table_cell_index_at(object, row, column));
+        }
+        if (std::strcmp(member, "GetRowExtentAt") == 0) {
+            return basic_reply(message, DBUS_TYPE_INT32, cell.node ? cell.node->row_span : 0);
+        }
+        if (std::strcmp(member, "GetColumnExtentAt") == 0) {
+            return basic_reply(message, DBUS_TYPE_INT32, cell.node ? cell.node->column_span : 0);
+        }
+        return basic_reply(message, DBUS_TYPE_BOOLEAN,
+            cell.node && node_has_state(*cell.node, state_selected) ? TRUE : FALSE);
+    }
+    if (std::strcmp(member, "GetRowAtIndex") == 0 ||
+        std::strcmp(member, "GetColumnAtIndex") == 0) {
+        int32_t index = -1;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &index, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid table child index");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        const auto children = object_children(object);
+        const Node *cell = index >= 0 && static_cast<size_t>(index) < children.size()
+            ? children[index].node : nullptr;
+        const int32_t value = !cell || !cell->has_collection_item ? -1 :
+            (std::strcmp(member, "GetRowAtIndex") == 0 ? cell->row_index : cell->column_index);
+        return basic_reply(message, DBUS_TYPE_INT32, value);
+    }
+    if (std::strcmp(member, "GetRowDescription") == 0 ||
+        std::strcmp(member, "GetColumnDescription") == 0) {
+        return string_reply(message, "");
+    }
+    if (std::strcmp(member, "GetRowHeader") == 0 ||
+        std::strcmp(member, "GetColumnHeader") == 0) {
+        return reference_reply(message, {});
+    }
+    if (std::strcmp(member, "GetSelectedRows") == 0 ||
+        std::strcmp(member, "GetSelectedColumns") == 0) {
+        DBusMessage *reply = new_reply(message);
+        DBusMessageIter iter;
+        dbus_message_iter_init_append(reply, &iter);
+        append_int_array(&iter, {});
+        return reply;
+    }
+    if (std::strcmp(member, "IsRowSelected") == 0 ||
+        std::strcmp(member, "IsColumnSelected") == 0 ||
+        std::strcmp(member, "AddRowSelection") == 0 ||
+        std::strcmp(member, "AddColumnSelection") == 0 ||
+        std::strcmp(member, "RemoveRowSelection") == 0 ||
+        std::strcmp(member, "RemoveColumnSelection") == 0) {
+        dbus_bool_t value = FALSE;
+        return basic_reply(message, DBUS_TYPE_BOOLEAN, value);
+    }
+    if (std::strcmp(member, "GetRowColumnExtentsAtIndex") == 0) {
+        int32_t index = -1;
+        DBusError error;
+        dbus_error_init(&error);
+        if (!dbus_message_get_args(message, &error, DBUS_TYPE_INT32, &index, DBUS_TYPE_INVALID)) {
+            DBusMessage *reply = new_error(message, DBUS_ERROR_INVALID_ARGS, "Invalid table child index");
+            dbus_error_free(&error);
+            return reply;
+        }
+        dbus_error_free(&error);
+        const auto children = object_children(object);
+        const Node *cell = index >= 0 && static_cast<size_t>(index) < children.size()
+            ? children[index].node : nullptr;
+        dbus_bool_t valid = cell && cell->has_collection_item;
+        int32_t row = valid ? cell->row_index : -1;
+        int32_t column = valid ? cell->column_index : -1;
+        int32_t row_span = valid ? cell->row_span : 0;
+        int32_t column_span = valid ? cell->column_span : 0;
+        dbus_bool_t selected = valid && node_has_state(*cell, state_selected);
+        DBusMessage *reply = new_reply(message);
+        dbus_message_append_args(reply, DBUS_TYPE_BOOLEAN, &valid, DBUS_TYPE_INT32, &row,
+            DBUS_TYPE_INT32, &column, DBUS_TYPE_INT32, &row_span,
+            DBUS_TYPE_INT32, &column_span, DBUS_TYPE_BOOLEAN, &selected, DBUS_TYPE_INVALID);
+        return reply;
+    }
+    return nullptr;
+}
+
+DBusMessage *handle_table_cell(DBusMessage *message, const Object &object) {
+    if (!object.node || !object.node->has_collection_item) return nullptr;
+    const char *member = dbus_message_get_member(message);
+    if (!member) return nullptr;
+    if (std::strcmp(member, "GetRowColumnSpan") == 0) {
+        dbus_bool_t valid = TRUE;
+        DBusMessage *reply = new_reply(message);
+        dbus_message_append_args(reply, DBUS_TYPE_BOOLEAN, &valid,
+            DBUS_TYPE_INT32, &object.node->row_index,
+            DBUS_TYPE_INT32, &object.node->column_index,
+            DBUS_TYPE_INT32, &object.node->row_span,
+            DBUS_TYPE_INT32, &object.node->column_span,
+            DBUS_TYPE_INVALID);
+        return reply;
+    }
+    if (std::strcmp(member, "GetColumnHeaderCells") == 0 ||
+        std::strcmp(member, "GetRowHeaderCells") == 0) {
+        DBusMessage *reply = new_reply(message);
+        DBusMessageIter iter;
+        dbus_message_iter_init_append(reply, &iter);
+        append_object_array(&iter, {});
+        return reply;
     }
     return nullptr;
 }
@@ -1208,6 +1794,73 @@ const char *introspection_xml = R"XML(
   <property name="CharacterCount" type="i" access="read"/>
   <property name="CaretOffset" type="i" access="read"/>
  </interface>
+ <interface name="org.a11y.atspi.EditableText">
+  <method name="SetTextContents"><arg direction="in" type="s" name="newContents"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="InsertText"><arg direction="in" type="i" name="position"/><arg direction="in" type="s" name="text"/><arg direction="in" type="i" name="length"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="CopyText"><arg direction="in" type="i" name="startPos"/><arg direction="in" type="i" name="endPos"/></method>
+  <method name="CutText"><arg direction="in" type="i" name="startPos"/><arg direction="in" type="i" name="endPos"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="DeleteText"><arg direction="in" type="i" name="startPos"/><arg direction="in" type="i" name="endPos"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="PasteText"><arg direction="in" type="i" name="position"/><arg direction="out" type="b" name="accepted"/></method>
+  <property name="version" type="u" access="read"/>
+ </interface>
+ <interface name="org.a11y.atspi.Image">
+  <method name="GetImageExtents"><arg direction="in" type="u" name="coordType"/><arg direction="out" type="(iiii)" name="extents"/></method>
+  <method name="GetImagePosition"><arg direction="in" type="u" name="coordType"/><arg direction="out" type="i" name="x"/><arg direction="out" type="i" name="y"/></method>
+  <method name="GetImageSize"><arg direction="out" type="i" name="width"/><arg direction="out" type="i" name="height"/></method>
+  <property name="version" type="u" access="read"/>
+  <property name="ImageDescription" type="s" access="read"/>
+  <property name="ImageLocale" type="s" access="read"/>
+ </interface>
+ <interface name="org.a11y.atspi.Selection">
+  <method name="GetSelectedChild"><arg direction="in" type="i" name="selectedChildIndex"/><arg direction="out" type="(so)" name="child"/></method>
+  <method name="SelectChild"><arg direction="in" type="i" name="childIndex"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="DeselectSelectedChild"><arg direction="in" type="i" name="selectedChildIndex"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="IsChildSelected"><arg direction="in" type="i" name="childIndex"/><arg direction="out" type="b" name="selected"/></method>
+  <method name="SelectAll"><arg direction="out" type="b" name="accepted"/></method>
+  <method name="ClearSelection"><arg direction="out" type="b" name="accepted"/></method>
+  <method name="DeselectChild"><arg direction="in" type="i" name="childIndex"/><arg direction="out" type="b" name="accepted"/></method>
+  <property name="version" type="u" access="read"/>
+  <property name="NSelectedChildren" type="i" access="read"/>
+ </interface>
+ <interface name="org.a11y.atspi.Table">
+  <method name="GetAccessibleAt"><arg direction="in" type="i" name="row"/><arg direction="in" type="i" name="column"/><arg direction="out" type="(so)" name="cell"/></method>
+  <method name="GetIndexAt"><arg direction="in" type="i" name="row"/><arg direction="in" type="i" name="column"/><arg direction="out" type="i" name="index"/></method>
+  <method name="GetRowAtIndex"><arg direction="in" type="i" name="index"/><arg direction="out" type="i" name="row"/></method>
+  <method name="GetColumnAtIndex"><arg direction="in" type="i" name="index"/><arg direction="out" type="i" name="column"/></method>
+  <method name="GetRowDescription"><arg direction="in" type="i" name="row"/><arg direction="out" type="s" name="description"/></method>
+  <method name="GetColumnDescription"><arg direction="in" type="i" name="column"/><arg direction="out" type="s" name="description"/></method>
+  <method name="GetRowExtentAt"><arg direction="in" type="i" name="row"/><arg direction="in" type="i" name="column"/><arg direction="out" type="i" name="extent"/></method>
+  <method name="GetColumnExtentAt"><arg direction="in" type="i" name="row"/><arg direction="in" type="i" name="column"/><arg direction="out" type="i" name="extent"/></method>
+  <method name="GetRowHeader"><arg direction="in" type="i" name="row"/><arg direction="out" type="(so)" name="header"/></method>
+  <method name="GetColumnHeader"><arg direction="in" type="i" name="column"/><arg direction="out" type="(so)" name="header"/></method>
+  <method name="GetSelectedRows"><arg direction="out" type="ai" name="rows"/></method>
+  <method name="GetSelectedColumns"><arg direction="out" type="ai" name="columns"/></method>
+  <method name="IsRowSelected"><arg direction="in" type="i" name="row"/><arg direction="out" type="b" name="selected"/></method>
+  <method name="IsColumnSelected"><arg direction="in" type="i" name="column"/><arg direction="out" type="b" name="selected"/></method>
+  <method name="IsSelected"><arg direction="in" type="i" name="row"/><arg direction="in" type="i" name="column"/><arg direction="out" type="b" name="selected"/></method>
+  <method name="AddRowSelection"><arg direction="in" type="i" name="row"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="AddColumnSelection"><arg direction="in" type="i" name="column"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="RemoveRowSelection"><arg direction="in" type="i" name="row"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="RemoveColumnSelection"><arg direction="in" type="i" name="column"/><arg direction="out" type="b" name="accepted"/></method>
+  <method name="GetRowColumnExtentsAtIndex"><arg direction="in" type="i" name="index"/><arg direction="out" type="b" name="valid"/><arg direction="out" type="i" name="row"/><arg direction="out" type="i" name="column"/><arg direction="out" type="i" name="rowExtent"/><arg direction="out" type="i" name="columnExtent"/><arg direction="out" type="b" name="selected"/></method>
+  <property name="version" type="u" access="read"/>
+  <property name="NRows" type="i" access="read"/>
+  <property name="NColumns" type="i" access="read"/>
+  <property name="Caption" type="(so)" access="read"/>
+  <property name="Summary" type="(so)" access="read"/>
+  <property name="NSelectedRows" type="i" access="read"/>
+  <property name="NSelectedColumns" type="i" access="read"/>
+ </interface>
+ <interface name="org.a11y.atspi.TableCell">
+  <method name="GetRowColumnSpan"><arg direction="out" type="b" name="valid"/><arg direction="out" type="i" name="row"/><arg direction="out" type="i" name="column"/><arg direction="out" type="i" name="rowSpan"/><arg direction="out" type="i" name="columnSpan"/></method>
+  <method name="GetColumnHeaderCells"><arg direction="out" type="a(so)" name="headers"/></method>
+  <method name="GetRowHeaderCells"><arg direction="out" type="a(so)" name="headers"/></method>
+  <property name="version" type="u" access="read"/>
+  <property name="ColumnSpan" type="i" access="read"/>
+  <property name="Position" type="(ii)" access="read"/>
+  <property name="RowSpan" type="i" access="read"/>
+  <property name="Table" type="(so)" access="read"/>
+ </interface>
  <interface name="org.a11y.atspi.Value">
   <method name="SetCurrentValue"><arg direction="in" type="d" name="value"/><arg direction="out" type="b" name="accepted"/></method>
   <property name="version" type="u" access="read"/>
@@ -1260,6 +1913,11 @@ DBusHandlerResult message_handler(DBusConnection *, DBusMessage *message, void *
     else if (interface_name && std::strcmp(interface_name, component_interface) == 0) reply = handle_component(message, object);
     else if (interface_name && std::strcmp(interface_name, action_interface) == 0) reply = handle_action(message, object);
     else if (interface_name && std::strcmp(interface_name, text_interface) == 0) reply = handle_text(message, object);
+    else if (interface_name && std::strcmp(interface_name, editable_text_interface) == 0) reply = handle_editable_text(message, object);
+    else if (interface_name && std::strcmp(interface_name, image_interface) == 0) reply = handle_image(message, object);
+    else if (interface_name && std::strcmp(interface_name, selection_interface) == 0) reply = handle_selection(message, object);
+    else if (interface_name && std::strcmp(interface_name, table_interface) == 0) reply = handle_table(message, object);
+    else if (interface_name && std::strcmp(interface_name, table_cell_interface) == 0) reply = handle_table_cell(message, object);
     else if (interface_name && std::strcmp(interface_name, value_interface) == 0) reply = handle_value(message, object);
 
     if (!reply) reply = new_error(message, DBUS_ERROR_UNKNOWN_METHOD, "Unsupported AT-SPI method");
@@ -1601,6 +2259,56 @@ int kld_atspi_window_set_value(
     found->second.current = current;
     found->second.increment = increment;
     found->second.value_action_id = action_id;
+    return 1;
+}
+
+int kld_atspi_window_set_collection(
+    void *raw,
+    int32_t node_id,
+    int32_t row_count,
+    int32_t column_count,
+    int32_t row_index,
+    int32_t row_span,
+    int32_t column_index,
+    int32_t column_span
+) {
+    Window *window = window_from_raw(raw);
+    if (!window) return 0;
+    auto found = window->pending_nodes.find(node_id);
+    if (found == window->pending_nodes.end()) return 0;
+    Node &node = found->second;
+    node.has_collection = row_count >= 0 && column_count >= 0;
+    node.row_count = row_count;
+    node.column_count = column_count;
+    node.has_collection_item = row_index >= 0 && column_index >= 0;
+    node.row_index = row_index;
+    node.row_span = std::max(0, row_span);
+    node.column_index = column_index;
+    node.column_span = std::max(0, column_span);
+    return 1;
+}
+
+int kld_atspi_window_set_editable_actions(
+    void *raw,
+    int32_t node_id,
+    int32_t set_text_action_id,
+    int32_t insert_text_action_id,
+    int32_t set_selection_action_id,
+    int32_t copy_action_id,
+    int32_t cut_action_id,
+    int32_t paste_action_id
+) {
+    Window *window = window_from_raw(raw);
+    if (!window) return 0;
+    auto found = window->pending_nodes.find(node_id);
+    if (found == window->pending_nodes.end()) return 0;
+    Node &node = found->second;
+    node.set_text_action_id = set_text_action_id;
+    node.insert_text_action_id = insert_text_action_id;
+    node.set_selection_action_id = set_selection_action_id;
+    node.copy_action_id = copy_action_id;
+    node.cut_action_id = cut_action_id;
+    node.paste_action_id = paste_action_id;
     return 1;
 }
 

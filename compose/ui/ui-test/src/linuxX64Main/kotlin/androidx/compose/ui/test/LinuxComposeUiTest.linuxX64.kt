@@ -30,7 +30,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.node.RootForTest
+import androidx.compose.ui.platform.PlatformRootForTest
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.platform.makeSynchronizedObject
 import androidx.compose.ui.test.platform.synchronized
 import androidx.compose.ui.unit.Density
@@ -193,6 +196,10 @@ private class LinuxComposeUiTestEnvironment(
                 Snapshot.isApplyObserverNotificationPending
         }
 
+    fun captureToImage(root: PlatformRootForTest, boundsInWindow: androidx.compose.ui.geometry.Rect): ImageBitmap =
+        checkNotNull(composeWindow) { "The SDL test window is not attached" }
+            .captureToImage(root, boundsInWindow)
+
     fun close() {
         if (!closed.compareAndSet(expect = false, update = true)) return
         if (!hostReady.value) return
@@ -214,7 +221,7 @@ private class LinuxComposeUiTestEnvironment(
 private class LinuxComposeUiTest(
     private val environment: LinuxComposeUiTestEnvironment,
     private val timeout: Duration,
-) : ComposeUiTest {
+) : ComposeUiTest, IdlingResourceOwner {
     override val density: Density = Density(1f)
     private val clock = LinuxMainTestClock(::waitForIdle)
     override val mainClock: MainTestClock
@@ -222,6 +229,8 @@ private class LinuxComposeUiTest(
 
     private val owner = LinuxTestOwner()
     private val context = TestContext(owner)
+    private val idlingResourceLock = makeSynchronizedObject()
+    private val idlingResources = mutableSetOf<IdlingResource>()
 
     override fun <T> runOnUiThread(action: () -> T): T = environment.runOnUiThread(action)
 
@@ -242,7 +251,7 @@ private class LinuxComposeUiTest(
 
     override fun waitForIdle() {
         val started = TimeSource.Monotonic.markNow()
-        while (environment.hasPendingWork()) {
+        while (hasPendingWork()) {
             if (timeout != Duration.INFINITE && started.elapsedNow() > timeout) {
                 throw ComposeTimeoutException("waitForIdle timed out after $timeout")
             }
@@ -275,7 +284,19 @@ private class LinuxComposeUiTest(
         environment.setContent(composable)
     }
 
-    override fun hasPendingWork(): Boolean = environment.hasPendingWork()
+    override fun hasPendingWork(): Boolean =
+        environment.hasPendingWork() || !areAllIdlingResourcesIdle()
+
+    private fun areAllIdlingResourcesIdle(): Boolean =
+        synchronized(idlingResourceLock) { idlingResources.all { it.isIdleNow } }
+
+    override fun registerIdlingResource(idlingResource: IdlingResource) {
+        synchronized(idlingResourceLock) { idlingResources += idlingResource }
+    }
+
+    override fun unregisterIdlingResource(idlingResource: IdlingResource) {
+        synchronized(idlingResourceLock) { idlingResources -= idlingResource }
+    }
 
     override fun onNode(
         matcher: SemanticsMatcher,
@@ -288,7 +309,7 @@ private class LinuxComposeUiTest(
     ): SemanticsNodeInteractionCollection =
         SemanticsNodeInteractionCollection(context, useUnmergedTree, matcher)
 
-    private inner class LinuxTestOwner : TestOwner {
+    private inner class LinuxTestOwner : TestOwner, LinuxScreenshotTestOwner {
         override var isImplicitWaitSuppressed: Boolean = false
         override val mainClock: MainTestClock
             get() = clock
@@ -307,7 +328,26 @@ private class LinuxComposeUiTest(
         override fun runCurrent() {
             clock.scheduler.runCurrent()
         }
+
+        override fun captureToImage(semanticsNode: SemanticsNode): ImageBitmap {
+            if (!isImplicitWaitSuppressed) waitForIdle()
+            val root = semanticsNode.root as? PlatformRootForTest
+                ?: error("The semantics node is not attached to a Linux Compose test root")
+            return environment.captureToImage(root, semanticsNode.boundsInWindow)
+        }
     }
+}
+
+private interface LinuxScreenshotTestOwner {
+    fun captureToImage(semanticsNode: SemanticsNode): ImageBitmap
+}
+
+/** Captures the composed SDL window region occupied by this semantics node. */
+fun SemanticsNodeInteraction.captureToImage(): ImageBitmap {
+    val semanticsNode = fetchSemanticsNode("Failed to capture a node to bitmap.")
+    return (testContext.testOwner as? LinuxScreenshotTestOwner)
+        ?.captureToImage(semanticsNode)
+        ?: error("captureToImage is only available inside runLinuxComposeUiTest")
 }
 
 private class LinuxMainTestClock(

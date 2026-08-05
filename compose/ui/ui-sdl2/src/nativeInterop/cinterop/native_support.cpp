@@ -30,6 +30,7 @@ struct KGpuContext {
     SDL_GLContext gl = nullptr;
     int width = 1;
     int height = 1;
+    bool transparent = false;
     const char *renderer = "unknown";
 };
 
@@ -169,6 +170,11 @@ void kgpu_context_destroy(void *raw_context) {
     delete context;
 }
 
+void kgpu_context_set_transparent(void *raw_context, int transparent) {
+    KGpuContext *context = static_cast<KGpuContext *>(raw_context);
+    if (context) context->transparent = transparent != 0;
+}
+
 void kgpu_context_begin(void *raw_context, int width, int height) {
     KGpuContext *context = static_cast<KGpuContext *>(raw_context);
     if (!context) return;
@@ -179,7 +185,7 @@ void kgpu_context_begin(void *raw_context, int width, int height) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, context->width, context->height);
     glDisable(GL_SCISSOR_TEST);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, context->transparent ? 0.0f : 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
@@ -361,6 +367,34 @@ void kgpu_texture_draw(
     );
 }
 
+int kgpu_context_read_pixels(
+    void *raw_context,
+    unsigned char *pixels,
+    int width,
+    int height,
+    int stride
+) {
+    KGpuContext *context = static_cast<KGpuContext *>(raw_context);
+    if (!context || !pixels || width <= 0 || height <= 0 || stride < width * 4) return 0;
+    kgpu_context_make_current(context);
+    std::vector<unsigned char> bottom_up(
+        static_cast<size_t>(width) * static_cast<size_t>(height) * 4u
+    );
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glReadBuffer(GL_BACK);
+    glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, bottom_up.data());
+    glFinish();
+    const size_t row_bytes = static_cast<size_t>(width) * 4u;
+    for (int y = 0; y < height; ++y) {
+        std::memcpy(
+            pixels + static_cast<size_t>(y) * static_cast<size_t>(stride),
+            bottom_up.data() + static_cast<size_t>(height - 1 - y) * row_bytes,
+            row_bytes
+        );
+    }
+    return width * height * 4;
+}
+
 void kgpu_context_present(void *raw_context) {
     KGpuContext *context = static_cast<KGpuContext *>(raw_context);
     if (context) SDL_GL_SwapWindow(context->window);
@@ -427,6 +461,45 @@ void kgpu_layer_finish(void *raw_context) {
 int kgpu_layer_framebuffer(void *raw_layer) {
     KGpuLayer *layer = static_cast<KGpuLayer *>(raw_layer);
     return layer ? static_cast<int>(layer->framebuffer) : 0;
+}
+
+int kgpu_layer_read_pixels(
+    void *raw_context,
+    void *raw_layer,
+    unsigned char *pixels,
+    int width,
+    int height,
+    int stride
+) {
+    KGpuContext *context = static_cast<KGpuContext *>(raw_context);
+    KGpuLayer *layer = static_cast<KGpuLayer *>(raw_layer);
+    if (!context || !layer || !layer->framebuffer || !pixels ||
+        width <= 0 || height <= 0 || stride < width * 4 ||
+        width != layer->width || height != layer->height) {
+        return 0;
+    }
+    kgpu_context_make_current(context);
+    glBindFramebuffer(GL_FRAMEBUFFER, layer->framebuffer);
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+    std::vector<unsigned char> bottom_up(
+        static_cast<size_t>(width) * static_cast<size_t>(height) * 4u
+    );
+    glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+    glReadPixels(0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, bottom_up.data());
+    glFinish();
+    const size_t row_bytes = static_cast<size_t>(width) * 4u;
+    for (int y = 0; y < height; ++y) {
+        std::memcpy(
+            pixels + static_cast<size_t>(y) * static_cast<size_t>(stride),
+            bottom_up.data() + static_cast<size_t>(height - 1 - y) * row_bytes,
+            row_bytes
+        );
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glReadBuffer(GL_BACK);
+    glViewport(0, 0, context->width, context->height);
+    return width * height * 4;
 }
 
 void kgpu_layer_draw(

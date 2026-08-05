@@ -14,18 +14,36 @@
  * limitations under the License.
  */
 
+@file:OptIn(kotlin.native.concurrent.ObsoleteWorkersApi::class)
+
 package androidx.compose.ui.test
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogWindow
+import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.rememberWindowState
+import kotlin.native.concurrent.TransferMode
+import kotlin.native.concurrent.Worker
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.atomicfu.atomic
+import platform.posix.usleep
 
 @OptIn(ExperimentalTestApi::class)
 class LinuxComposeUiTestTest {
@@ -45,5 +63,92 @@ class LinuxComposeUiTestTest {
 
             onNodeWithTag("counter").assertTextEquals("Clicks: 0").performClick()
             onNodeWithTag("counter").assertTextEquals("Clicks: 1")
+        }
+
+    @Test
+    fun registersRootsFromSecondaryWindows() =
+        runLinuxComposeUiTest(testTimeout = 10.seconds) {
+            setContent {
+                var showSecondary by remember { mutableStateOf(true) }
+                BasicText(
+                    text = "Toggle",
+                    modifier = Modifier.testTag("toggle").clickable { showSecondary = false },
+                )
+                if (showSecondary) {
+                    Window(
+                        onCloseRequest = { showSecondary = false },
+                        state = rememberWindowState(size = DpSize(160.dp, 100.dp)),
+                        title = "Secondary test window",
+                    ) {
+                        BasicText("Secondary", Modifier.testTag("secondary"))
+                    }
+                }
+            }
+
+            onNodeWithTag("secondary").assertTextEquals("Secondary")
+            onNodeWithTag("toggle").performClick()
+            onNodeWithTag("secondary").assertDoesNotExist()
+        }
+
+    @Test
+    fun registersRootsFromDialogWindows() =
+        runLinuxComposeUiTest(testTimeout = 10.seconds) {
+            setContent {
+                DialogWindow(
+                    onCloseRequest = {},
+                    state = androidx.compose.ui.window.rememberDialogState(
+                        size = DpSize(160.dp, 100.dp)
+                    ),
+                    title = "Dialog test window",
+                ) {
+                    BasicText("Dialog", Modifier.testTag("dialog-node"))
+                }
+            }
+
+            onNodeWithTag("dialog-node").assertTextEquals("Dialog")
+        }
+
+    @Test
+    fun capturesNodePixelsFromOwningWindow() =
+        runLinuxComposeUiTest(testTimeout = 10.seconds) {
+            setContent {
+                Box(
+                    Modifier
+                        .size(24.dp)
+                        .background(Color.Red)
+                        .testTag("red"),
+                )
+            }
+
+            val image = onNodeWithTag("red").captureToImage()
+            val pixels = image.toPixelMap()
+            assertTrue(image.width > 0 && image.height > 0)
+            assertEquals(Color.Red, pixels[image.width / 2, image.height / 2])
+        }
+
+    @Test
+    fun waitsForRegisteredIdlingResources() =
+        runLinuxComposeUiTest(testTimeout = 10.seconds) {
+            setContent { BasicText("Ready", Modifier.testTag("ready")) }
+            val idle = atomic(false)
+            val resource = object : IdlingResource {
+                override val isIdleNow: Boolean
+                    get() = idle.value
+            }
+            assertTrue(registerIdlingResource(resource))
+            val worker = Worker.start(name = "Linux idling-resource test")
+            val future = worker.execute(TransferMode.UNSAFE, { idle }) {
+                usleep(50_000u)
+                it.value = true
+            }
+            try {
+                waitForIdle()
+                assertTrue(idle.value)
+                onNodeWithTag("ready").assertTextEquals("Ready")
+            } finally {
+                future.result
+                worker.requestTermination().result
+                assertTrue(unregisterIdlingResource(resource))
+            }
         }
 }

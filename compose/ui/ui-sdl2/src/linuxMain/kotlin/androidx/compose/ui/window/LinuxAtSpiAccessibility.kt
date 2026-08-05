@@ -11,6 +11,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsConfiguration
 import androidx.compose.ui.semantics.SemanticsNode
@@ -35,6 +36,8 @@ import linuxdesktop.kld_atspi_window_begin_update
 import linuxdesktop.kld_atspi_window_commit_update
 import linuxdesktop.kld_atspi_window_create
 import linuxdesktop.kld_atspi_window_destroy
+import linuxdesktop.kld_atspi_window_set_collection
+import linuxdesktop.kld_atspi_window_set_editable_actions
 import linuxdesktop.kld_atspi_window_set_value
 import platform.posix.getenv
 
@@ -54,6 +57,8 @@ private object AtSpiRole {
     const val RadioButton = 44u
     const val ScrollPane = 49u
     const val Slider = 51u
+    const val Table = 55u
+    const val TableCell = 56u
     const val Text = 61u
     const val Unknown = 67u
     const val Entry = 79u
@@ -99,6 +104,12 @@ private object AtSpiActionId {
     const val PageDown = 9
     const val PageLeft = 10
     const val PageRight = 11
+    const val SetText = 12
+    const val InsertText = 13
+    const val SetSelection = 14
+    const val CopyText = 15
+    const val CutText = 16
+    const val PasteText = 17
     const val CustomStart = 1000
 }
 
@@ -251,7 +262,7 @@ internal class LinuxAtSpiAccessibility(
                 config.getOrNull(SemanticsProperties.TestTag)?.takeIf(String::isNotBlank)
                     ?: "compose-${node.id}"
             val selection = config.getOrNull(SemanticsProperties.TextSelectionRange)
-            val role = config.atSpiRole(text)
+            val role = config.atSpiRole(text, node.isInTabularCollection())
             val stateBits = config.atSpiStates(state.visible, bounds, text)
 
             kld_atspi_window_add_node(
@@ -272,7 +283,9 @@ internal class LinuxAtSpiAccessibility(
                 selection?.end ?: 0,
             )
 
+            addCollection(handle, node, config)
             addActions(handle, node, config)
+            addEditableText(handle, node, config)
             addValue(handle, node, config)
         }
         kld_atspi_window_commit_update(handle)
@@ -385,6 +398,100 @@ internal class LinuxAtSpiAccessibility(
         }
     }
 
+    private fun addCollection(
+        handle: COpaquePointer,
+        node: SemanticsNode,
+        config: SemanticsConfiguration,
+    ) {
+        val collection = config.getOrNull(SemanticsProperties.CollectionInfo)
+        val item = config.getOrNull(SemanticsProperties.CollectionItemInfo)
+        if (collection == null && item == null) return
+        kld_atspi_window_set_collection(
+            handle,
+            node.id,
+            collection?.rowCount ?: -1,
+            collection?.columnCount ?: -1,
+            item?.rowIndex ?: -1,
+            item?.rowSpan ?: 0,
+            item?.columnIndex ?: -1,
+            item?.columnSpan ?: 0,
+        )
+    }
+
+    private fun addEditableText(
+        handle: COpaquePointer,
+        node: SemanticsNode,
+        config: SemanticsConfiguration,
+    ) {
+        fun register(actionId: Int, invocation: AtSpiInvocation): Int {
+            actions[actionKey(node.id, actionId)] = invocation
+            return actionId
+        }
+
+        val setText =
+            config.getOrNull(SemanticsActions.SetText)?.action?.let {
+                register(AtSpiActionId.SetText) { _, text, _, _ ->
+                    currentConfig(node.id)
+                        ?.getOrNull(SemanticsActions.SetText)
+                        ?.action
+                        ?.invoke(AnnotatedString(text.orEmpty())) == true
+                }
+            } ?: -1
+        val insertText =
+            config.getOrNull(SemanticsActions.InsertTextAtCursor)?.action?.let {
+                register(AtSpiActionId.InsertText) { _, text, position, _ ->
+                    val current = currentConfig(node.id) ?: return@register false
+                    val moved =
+                        current.getOrNull(SemanticsActions.SetSelection)?.action
+                            ?.invoke(position, position, false) ?: true
+                    moved &&
+                        current.getOrNull(SemanticsActions.InsertTextAtCursor)?.action
+                            ?.invoke(AnnotatedString(text.orEmpty())) == true
+                }
+            } ?: -1
+        val setSelection =
+            config.getOrNull(SemanticsActions.SetSelection)?.action?.let {
+                register(AtSpiActionId.SetSelection) { _, _, start, end ->
+                    currentConfig(node.id)
+                        ?.getOrNull(SemanticsActions.SetSelection)
+                        ?.action
+                        ?.invoke(start, end, false) == true
+                }
+            } ?: -1
+        fun registerClipboard(
+            actionId: Int,
+            key: androidx.compose.ui.semantics.SemanticsPropertyKey<
+                androidx.compose.ui.semantics.AccessibilityAction<() -> Boolean>
+            >,
+        ): Int =
+            config.getOrNull(key)?.action?.let {
+                register(actionId) { _, _, start, end ->
+                    val current = currentConfig(node.id) ?: return@register false
+                    val moved =
+                        current.getOrNull(SemanticsActions.SetSelection)?.action
+                            ?.invoke(start, end, false) ?: true
+                    moved && current.getOrNull(key)?.action?.invoke() == true
+                }
+            } ?: -1
+
+        val copyText = registerClipboard(AtSpiActionId.CopyText, SemanticsActions.CopyText)
+        val cutText = registerClipboard(AtSpiActionId.CutText, SemanticsActions.CutText)
+        val pasteText = registerClipboard(AtSpiActionId.PasteText, SemanticsActions.PasteText)
+        if (setText < 0 && insertText < 0 && setSelection < 0 &&
+            copyText < 0 && cutText < 0 && pasteText < 0
+        ) return
+        kld_atspi_window_set_editable_actions(
+            handle,
+            node.id,
+            setText,
+            insertText,
+            setSelection,
+            copyText,
+            cutText,
+            pasteText,
+        )
+    }
+
     private fun addValue(
         handle: COpaquePointer,
         node: SemanticsNode,
@@ -477,6 +584,16 @@ private fun Rect.toLogicalBounds(scaleX: Float, scaleY: Float): LogicalBounds {
     return LogicalBounds(left, top, (right - left).coerceAtLeast(0), (bottom - top).coerceAtLeast(0))
 }
 
+private fun SemanticsNode.isInTabularCollection(): Boolean {
+    var candidate = parent
+    while (candidate != null) {
+        val collection = candidate.config.getOrNull(SemanticsProperties.CollectionInfo)
+        if (collection != null) return collection.columnCount > 1
+        candidate = candidate.parent
+    }
+    return false
+}
+
 private fun SemanticsNode.nearestAccessibleParentId(includedIds: Set<Int>): Int {
     var candidate = parent
     while (candidate != null) {
@@ -503,7 +620,7 @@ private fun SemanticsConfiguration.accessibleName(text: String): String =
         ?: getOrNull(SemanticsProperties.PaneTitle)?.takeIf(String::isNotBlank)
         ?: text
 
-private fun SemanticsConfiguration.atSpiRole(text: String): UInt {
+private fun SemanticsConfiguration.atSpiRole(text: String, tabularItem: Boolean): UInt {
     if (getOrNull(SemanticsProperties.IsDialog) != null) return AtSpiRole.Dialog
     if (getOrNull(SemanticsProperties.Heading) != null) return AtSpiRole.Heading
     when (getOrNull(SemanticsProperties.Role)) {
@@ -525,7 +642,10 @@ private fun SemanticsConfiguration.atSpiRole(text: String): UInt {
             if (getOrNull(SemanticsActions.SetProgress) != null) AtSpiRole.Slider
             else AtSpiRole.ProgressBar
         getOrNull(SemanticsActions.ScrollBy) != null -> AtSpiRole.ScrollPane
-        getOrNull(SemanticsProperties.CollectionItemInfo) != null -> AtSpiRole.ListItem
+        getOrNull(SemanticsProperties.CollectionItemInfo) != null ->
+            if (tabularItem) AtSpiRole.TableCell else AtSpiRole.ListItem
+        getOrNull(SemanticsProperties.CollectionInfo)?.columnCount?.let { it > 1 } == true ->
+            AtSpiRole.Table
         getOrNull(SemanticsProperties.CollectionInfo) != null -> AtSpiRole.List
         getOrNull(SemanticsProperties.IsTraversalGroup) == true -> AtSpiRole.Grouping
         text.isNotEmpty() -> AtSpiRole.Label

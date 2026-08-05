@@ -41,6 +41,7 @@ void kp_bytes_free(unsigned char *value);
 void *kgpu_context_create(void *sdl_window);
 void kgpu_context_make_current(void *context);
 void kgpu_context_destroy(void *context);
+void kgpu_context_set_transparent(void *context, int transparent);
 void kgpu_context_begin(void *context, int width, int height);
 void *kgpu_texture_create(void);
 void kgpu_texture_destroy(void *context, void *texture);
@@ -74,6 +75,12 @@ void kgpu_texture_draw(
     float width,
     float height,
     int cpu_top_down);
+int kgpu_context_read_pixels(
+    void *context,
+    unsigned char *pixels,
+    int width,
+    int height,
+    int stride);
 void kgpu_context_present(void *context);
 const char *kgpu_context_renderer(void *context);
 void *kgpu_layer_create(void);
@@ -81,6 +88,13 @@ void kgpu_layer_destroy(void *context, void *layer);
 int kgpu_layer_prepare(void *context, void *layer, int width, int height);
 void kgpu_layer_finish(void *context);
 int kgpu_layer_framebuffer(void *layer);
+int kgpu_layer_read_pixels(
+    void *context,
+    void *layer,
+    unsigned char *pixels,
+    int width,
+    int height,
+    int stride);
 void kgpu_layer_draw(void *context, void *layer, int x, int y, int width, int height);
 void kgpu_layer_draw_mesh(
     void *context,

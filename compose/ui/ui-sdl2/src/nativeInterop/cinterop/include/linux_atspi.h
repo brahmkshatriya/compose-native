@@ -71,6 +71,28 @@ int kld_atspi_window_set_value(
     int32_t action_id
 );
 
+int kld_atspi_window_set_collection(
+    void *window,
+    int32_t node_id,
+    int32_t row_count,
+    int32_t column_count,
+    int32_t row_index,
+    int32_t row_span,
+    int32_t column_index,
+    int32_t column_span
+);
+
+int kld_atspi_window_set_editable_actions(
+    void *window,
+    int32_t node_id,
+    int32_t set_text_action_id,
+    int32_t insert_text_action_id,
+    int32_t set_selection_action_id,
+    int32_t copy_action_id,
+    int32_t cut_action_id,
+    int32_t paste_action_id
+);
+
 void kld_atspi_window_commit_update(void *window);
 void kld_atspi_window_destroy(void *window);
 

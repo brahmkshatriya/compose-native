@@ -20,7 +20,9 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.cairo.CairoCanvas
+import androidx.compose.ui.graphics.cairo.CairoImage
 import androidx.compose.ui.graphics.cairo.CairoSurface
+import androidx.compose.ui.viewinterop.GpuInteropEmission
 import androidx.compose.ui.viewinterop.GpuInteropLayerCommand
 import cairo.kc_create
 import cairo.kc_destroy
@@ -36,7 +38,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(InternalComposeUiApi::class)
@@ -116,7 +117,7 @@ class SdlComposeCompositorTest {
 
         try {
             canvas.drawRect(0f, 0f, 8f, 8f, white)
-            assertTrue(recorder.emit(external, canvas, mask))
+            assertEquals(GpuInteropEmission.External, recorder.emit(external, canvas, mask, mask))
             canvas.drawRect(3f, 3f, 5f, 5f, red)
 
             val capture = recorder.finish()
@@ -141,18 +142,14 @@ class SdlComposeCompositorTest {
     }
 
     @Test
-    fun nonRootBoundaryMarksOwningCanvasForFlattening() {
+    fun nonRootBoundaryRasterizesIntoOwningCanvas() {
         val root = CairoSurface(8, 8)
         val rootContext = checkNotNull(kc_create(root.handle))
         val offscreen = CairoSurface(8, 8)
+        offscreen.clear()
         val offscreenContext = checkNotNull(kc_create(offscreen.handle))
         var marked = false
-        val external =
-            object : GpuInteropLayerCommand {
-                override val compositionId = 9L
-
-                override fun draw(gpu: COpaquePointer): Boolean = true
-            }
+        val external = solidSnapshotCommand(9L, Color.Blue)
         val recorder =
             SdlOrderedCompositionRecorder(
                 rootCanvas = CairoCanvas(rootContext),
@@ -161,19 +158,29 @@ class SdlComposeCompositorTest {
                 height = 8,
                 damage = FrameDamage(0, 0, 8, 8),
             )
+        val mask = CairoGraphics.createPath().apply { addRect(Rect(2f, 2f, 6f, 6f)) }
 
         try {
-            assertFalse(
+            assertEquals(
+                GpuInteropEmission.Rasterized,
                 recorder.emit(
                     external,
                     CairoCanvas(offscreenContext) { marked = true },
-                    CairoGraphics.createPath(),
-                )
+                    mask,
+                    mask,
+                ),
             )
-            assertTrue(marked)
+            assertEquals(false, marked)
+            offscreen.flush()
+            val pixels = offscreen.data.reinterpret<IntVar>()
+            val stride = offscreen.stride / 4
+            assertEquals(0, pixels[1 * stride + 1])
+            assertEquals(0xff0000ffu.toInt(), pixels[4 * stride + 4])
             val capture = recorder.finish()
             try {
-                assertEquals(SdlOrderedFallbackReason.NonRootCanvas, capture.fallbackReason)
+                assertEquals(SdlOrderedFallbackReason.None, capture.fallbackReason)
+                assertTrue(capture.segments.isEmpty())
+                assertTrue(capture.externalLayers.isEmpty())
             } finally {
                 capture.close()
             }
@@ -186,17 +193,12 @@ class SdlComposeCompositorTest {
     }
 
     @Test
-    fun rejectsBoundaryWhileRootContextTargetsSaveLayer() {
+    fun boundaryInsideSaveLayerRasterizesBeforeGroupComposition() {
         val root = CairoSurface(8, 8)
         root.clear()
         val context = checkNotNull(kc_create(root.handle))
         val canvas = CairoCanvas(context)
-        val external =
-            object : GpuInteropLayerCommand {
-                override val compositionId = 11L
-
-                override fun draw(gpu: COpaquePointer): Boolean = true
-            }
+        val external = solidSnapshotCommand(11L, Color.Red)
         val recorder =
             SdlOrderedCompositionRecorder(
                 rootCanvas = canvas,
@@ -205,15 +207,24 @@ class SdlComposeCompositorTest {
                 height = 8,
                 damage = FrameDamage(0, 0, 8, 8),
             )
+        val mask = CairoGraphics.createPath().apply { addRect(Rect(1f, 1f, 7f, 7f)) }
 
         try {
             canvas.saveLayer(Rect(0f, 0f, 8f, 8f), CairoGraphics.createPaint())
-            assertFalse(recorder.emit(external, canvas, CairoGraphics.createPath()))
+            assertEquals(
+                GpuInteropEmission.Rasterized,
+                recorder.emit(external, canvas, mask, mask),
+            )
             canvas.restore()
+            root.flush()
+            val pixels = root.data.reinterpret<IntVar>()
+            val stride = root.stride / 4
+            assertEquals(0xffff0000u.toInt(), pixels[4 * stride + 4])
             val capture = recorder.finish()
             try {
-                assertEquals(SdlOrderedFallbackReason.NestedCairoGroup, capture.fallbackReason)
+                assertEquals(SdlOrderedFallbackReason.None, capture.fallbackReason)
                 assertTrue(capture.segments.isEmpty())
+                assertTrue(capture.externalLayers.isEmpty())
             } finally {
                 capture.close()
             }
@@ -267,4 +278,25 @@ class SdlComposeCompositorTest {
         assertEquals(1, released)
         context.close()
     }
+
+    private fun solidSnapshotCommand(id: Long, color: Color): GpuInteropLayerCommand =
+        object : GpuInteropLayerCommand {
+            override val compositionId = id
+
+            override fun draw(gpu: COpaquePointer): Boolean = true
+
+            override fun snapshot(gpu: COpaquePointer?): CairoImage {
+                val image = CairoImage(8, 8)
+                val context = checkNotNull(kc_create(image.surface.handle))
+                try {
+                    val paint = CairoGraphics.createPaint().also { it.color = color }
+                    CairoCanvas(context).drawRect(0f, 0f, 8f, 8f, paint)
+                } finally {
+                    kc_destroy(context)
+                }
+                image.surface.flush()
+                return image
+            }
+        }
+
 }

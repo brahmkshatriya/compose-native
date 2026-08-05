@@ -1,0 +1,162 @@
+/*
+ * Copyright 2026 The Android Open Source Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ */
+
+@file:OptIn(androidx.compose.ui.InternalComposeUiApi::class)
+
+package androidx.compose.ui.window
+
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.KeyShortcut
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+
+class WindowPlatformFeaturesTest {
+    @Test
+    fun rasterizesPainterForWindowIcon() {
+        val image = rasterizeWindowIcon(ColorPainter(Color.Red), size = 8)
+        try {
+            val pixels = image.toPixelMap()
+            assertEquals(8, image.width)
+            assertEquals(8, image.height)
+            assertEquals(Color.Red, pixels[4, 4])
+        } finally {
+            image.close()
+        }
+    }
+
+    @Test
+    fun modelessDialogNeverBlocksInput() {
+        assertFalse(
+            modalityBlocksInput(
+                DialogModalityType.Modeless,
+                modalActive = true,
+                sameDocument = true,
+                targetIsModalOrDescendant = false,
+            )
+        )
+    }
+
+    @Test
+    fun documentModalBlocksOnlyItsDocument() {
+        assertTrue(
+            modalityBlocksInput(
+                DialogModalityType.DocumentModal,
+                modalActive = true,
+                sameDocument = true,
+                targetIsModalOrDescendant = false,
+            )
+        )
+        assertFalse(
+            modalityBlocksInput(
+                DialogModalityType.DocumentModal,
+                modalActive = true,
+                sameDocument = false,
+                targetIsModalOrDescendant = false,
+            )
+        )
+    }
+
+    @Test
+    fun applicationModalBlocksOtherDocumentsButNotDescendants() {
+        assertTrue(
+            modalityBlocksInput(
+                DialogModalityType.ApplicationModal,
+                modalActive = true,
+                sameDocument = false,
+                targetIsModalOrDescendant = false,
+            )
+        )
+        assertFalse(
+            modalityBlocksInput(
+                DialogModalityType.ApplicationModal,
+                modalActive = true,
+                sameDocument = false,
+                targetIsModalOrDescendant = true,
+            )
+        )
+    }
+
+    @Test
+    fun menuShortcutRequiresExactModifiersAndInvokesCurrentAction() {
+        var activations = 0
+        val model =
+            LinuxMenuModel(
+                listOf(
+                    LinuxMenuEntry.Menu(
+                        id = 1,
+                        text = "File",
+                        enabled = true,
+                        mnemonic = null,
+                        children =
+                            listOf(
+                                LinuxMenuEntry.Item(
+                                    id = 2,
+                                    text = "Save",
+                                    icon = null,
+                                    enabled = true,
+                                    mnemonic = null,
+                                    shortcut = KeyShortcut(Key.S, ctrl = true),
+                                    checked = null,
+                                    radio = false,
+                                    action = { activations++ },
+                                )
+                            ),
+                    )
+                )
+            )
+
+        assertFalse(model.activateShortcut(KeyEvent(Key.S, KeyEventType.KeyDown)))
+        assertFalse(
+            model.activateShortcut(
+                KeyEvent(Key.S, KeyEventType.KeyDown, isCtrlPressed = true, isShiftPressed = true)
+            )
+        )
+        assertTrue(
+            model.activateShortcut(
+                KeyEvent(Key.S, KeyEventType.KeyDown, isCtrlPressed = true)
+            )
+        )
+        assertEquals(1, activations)
+    }
+
+    @Test
+    fun menuPresentationSignatureTracksCheckStateButNotActionIdentity() {
+        fun model(checked: Boolean, action: () -> Unit) =
+            LinuxMenuModel(
+                listOf(
+                    LinuxMenuEntry.Item(
+                        id = 1,
+                        text = "Enabled",
+                        icon = null,
+                        enabled = true,
+                        mnemonic = null,
+                        shortcut = null,
+                        checked = checked,
+                        radio = false,
+                        action = action,
+                    )
+                )
+            )
+
+        assertEquals(
+            model(checked = true) {}.presentationSignature,
+            model(checked = true) { error("different action") }.presentationSignature,
+        )
+        assertTrue(
+            model(checked = true) {}.presentationSignature !=
+                model(checked = false) {}.presentationSignature
+        )
+    }
+
+}

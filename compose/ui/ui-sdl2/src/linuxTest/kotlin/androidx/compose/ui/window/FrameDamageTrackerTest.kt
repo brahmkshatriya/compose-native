@@ -24,7 +24,7 @@ import kotlin.test.assertNull
 class FrameDamageTrackerTest {
     @Test
     fun expandsFractionalBoundsForAntialiasing() {
-        val tracker = FrameDamageTracker(drawOverflowPaddingDp = 0f)
+        val tracker = FrameDamageTracker()
 
         tracker.add(Rect(10.25f, 20.75f, 58.1f, 68.2f))
 
@@ -33,21 +33,8 @@ class FrameDamageTrackerTest {
 
 
     @Test
-    fun includesDensityScaledOverflowForUnboundedMaterialIndications() {
-        val tracker = FrameDamageTracker()
-        tracker.updateDensity(1.5f)
-
-        // A 24 dp / 36 px radio draw node with a 20 dp / 30 px state-layer radius needs
-        // 12 px of overflow on every side at this density. The production margin is deliberately
-        // conservative and also includes the antialias fringe.
-        tracker.add(Rect(100f, 100f, 136f, 136f))
-
-        assertEquals(FrameDamage(80, 80, 76, 76), tracker.take(300, 300))
-    }
-
-    @Test
     fun unionsDamageAndClipsToFramebuffer() {
-        val tracker = FrameDamageTracker(drawOverflowPaddingDp = 0f)
+        val tracker = FrameDamageTracker()
 
         tracker.add(Rect(-10f, 5f, 12f, 18f))
         tracker.add(Rect(80f, 70f, 120f, 110f))
@@ -57,7 +44,7 @@ class FrameDamageTrackerTest {
 
     @Test
     fun consumingDamageResetsTracker() {
-        val tracker = FrameDamageTracker(drawOverflowPaddingDp = 0f)
+        val tracker = FrameDamageTracker()
         tracker.add(Rect(1f, 1f, 4f, 4f))
 
         tracker.take(20, 20)
@@ -67,7 +54,7 @@ class FrameDamageTrackerTest {
 
     @Test
     fun fullFrameRequestOverridesBoundedDamage() {
-        val tracker = FrameDamageTracker(drawOverflowPaddingDp = 0f)
+        val tracker = FrameDamageTracker()
         tracker.add(Rect(4f, 4f, 8f, 8f))
         tracker.requireFullFrame()
         tracker.add(Rect(10f, 10f, 12f, 12f))
@@ -79,7 +66,7 @@ class FrameDamageTrackerTest {
 
     @Test
     fun ignoresEmptyAndNonFiniteDamage() {
-        val tracker = FrameDamageTracker(drawOverflowPaddingDp = 0f)
+        val tracker = FrameDamageTracker()
 
         tracker.add(Rect.Zero)
         tracker.add(Rect(Float.NaN, 0f, 10f, 10f))

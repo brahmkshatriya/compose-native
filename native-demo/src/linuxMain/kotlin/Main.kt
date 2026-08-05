@@ -17,6 +17,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyShortcut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -33,7 +40,15 @@ import androidx.compose.ui.viewinterop.InteropPointerEventType
 import androidx.compose.ui.viewinterop.LinuxInteropView
 import androidx.compose.ui.viewinterop.NativeView
 import androidx.compose.ui.viewinterop.OpenGlInteropRenderTarget
+import androidx.compose.ui.window.DialogModalityType
+import androidx.compose.ui.window.DialogWindow
+import androidx.compose.ui.window.MenuBar
+import androidx.compose.ui.window.Notification
+import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.isTraySupported
+import androidx.compose.ui.window.rememberDialogState
+import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import app.webview.app_webview_create
@@ -324,31 +339,213 @@ private fun YouTube() {
     }
 }
 
+private object CatalogueIcon : Painter() {
+    override val intrinsicSize = Size(64f, 64f)
+
+    override fun DrawScope.onDraw() {
+        drawRoundRect(
+            color = Color(0xff6750a4),
+            cornerRadius = CornerRadius(size.minDimension * .22f),
+        )
+        drawCircle(
+            color = Color(0xffd0bcff),
+            radius = size.minDimension * .23f,
+            center = androidx.compose.ui.geometry.Offset(size.width * .36f, size.height * .38f),
+        )
+        drawCircle(
+            color = Color(0xff4fd8c8),
+            radius = size.minDimension * .18f,
+            center = androidx.compose.ui.geometry.Offset(size.width * .67f, size.height * .67f),
+        )
+    }
+}
+
 fun main() {
     application {
         var previewWindow by remember { mutableStateOf(false) }
+        var transparentWindow by remember { mutableStateOf(false) }
+        var previewAlwaysOnTop by remember { mutableStateOf(true) }
+        var dialogModality by remember { mutableStateOf<DialogModalityType?>(null) }
+        var accentChoice by remember { mutableStateOf(0) }
+        val trayAvailable = isTraySupported
+        val trayState = rememberTrayState()
+        val colorScheme =
+            if (accentChoice == 0) {
+                darkColorScheme(
+                    primary = Color(0xffd0bcff),
+                    secondary = Color(0xffccc2dc),
+                    tertiary = Color(0xffefb8c8),
+                )
+            } else {
+                darkColorScheme(
+                    primary = Color(0xff4fd8c8),
+                    secondary = Color(0xffb4ccc7),
+                    tertiary = Color(0xffffb59d),
+                )
+            }
+
+        if (trayAvailable) {
+            Tray(
+                icon = CatalogueIcon,
+                state = trayState,
+                tooltip = "Compose Linux Component Catalogue",
+                onAction = { previewWindow = true },
+            ) {
+                CheckboxItem(
+                    text = "Preview window",
+                    checked = previewWindow,
+                    onCheckedChange = { previewWindow = it },
+                )
+                CheckboxItem(
+                    text = "Transparent surface",
+                    checked = transparentWindow,
+                    onCheckedChange = { transparentWindow = it },
+                )
+                Separator()
+                Item("Send notification") {
+                    trayState.sendNotification(
+                        Notification(
+                            title = "Compose Linux",
+                            message = "The catalogue tray is active.",
+                            type = Notification.Type.Info,
+                        )
+                    )
+                }
+                Item("Exit", onClick = ::exitApplication)
+            }
+        }
+
         val state = rememberWindowState(size = DpSize(1240.dp, 800.dp))
         Window(
             onCloseRequest = ::exitApplication,
             state = state,
             title = "Compose Linux · Component Catalogue",
+            icon = CatalogueIcon,
         ) {
             DisposableEffect(window) {
                 window.minimumSize = DpSize(640.dp, 420.dp)
                 onDispose {}
             }
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                CatalogueApp(onOpenPreview = { previewWindow = true })
+            MenuBar {
+                Menu("File", mnemonic = 'F') {
+                    CheckboxItem(
+                        text = "Preview window",
+                        checked = previewWindow,
+                        icon = CatalogueIcon,
+                        shortcut = KeyShortcut(Key.N, ctrl = true),
+                        onCheckedChange = { previewWindow = it },
+                    )
+                    CheckboxItem(
+                        text = "Transparent surface",
+                        checked = transparentWindow,
+                        shortcut = KeyShortcut(Key.T, ctrl = true, shift = true),
+                        onCheckedChange = { transparentWindow = it },
+                    )
+                    Separator()
+                    Item(
+                        text = "Exit",
+                        shortcut = KeyShortcut(Key.Q, ctrl = true),
+                        onClick = ::exitApplication,
+                    )
+                }
+                Menu("View", mnemonic = 'V') {
+                    CheckboxItem(
+                        text = "Preview always on top",
+                        checked = previewAlwaysOnTop,
+                        onCheckedChange = { previewAlwaysOnTop = it },
+                    )
+                    Menu("Accent") {
+                        RadioButtonItem(
+                            text = "Purple",
+                            selected = accentChoice == 0,
+                            onClick = { accentChoice = 0 },
+                        )
+                        RadioButtonItem(
+                            text = "Teal",
+                            selected = accentChoice == 1,
+                            onClick = { accentChoice = 1 },
+                        )
+                    }
+                }
+                Menu("Window", mnemonic = 'W') {
+                    Item("Open modeless dialog") {
+                        dialogModality = DialogModalityType.Modeless
+                    }
+                    Item("Open document-modal dialog") {
+                        dialogModality = DialogModalityType.DocumentModal
+                    }
+                    Item("Open application-modal dialog") {
+                        dialogModality = DialogModalityType.ApplicationModal
+                    }
+                }
+                Menu("Help", mnemonic = 'H') {
+                    Item("Desktop integration status") {
+                        trayState.sendNotification(
+                            Notification(
+                                title = "Desktop integration",
+                                message =
+                                    if (trayAvailable) {
+                                        "Window icons, menus, tray, transparency, modality and drag source are enabled."
+                                    } else {
+                                        "Window icons, menus, transparency, modality and drag source are enabled. No tray watcher was detected."
+                                    },
+                                type = Notification.Type.Info,
+                            )
+                        )
+                    }
+                }
+            }
+            MaterialTheme(colorScheme = colorScheme) {
+                CatalogueApp(
+                    onOpenPreview = { previewWindow = true },
+                    onOpenTransparentWindow = { transparentWindow = true },
+                    onOpenDialog = { dialogModality = it },
+                    traySupported = trayAvailable,
+                )
+                dialogModality?.let { modality ->
+                    DialogWindow(
+                        onCloseRequest = { dialogModality = null },
+                        state = rememberDialogState(size = DpSize(460.dp, 300.dp)),
+                        title = "${modality.name} modal dialog",
+                        icon = CatalogueIcon,
+                        modalityType = modality,
+                    ) {
+                        MaterialTheme(colorScheme = colorScheme) {
+                            ModalityDemoDialog(
+                                modality = modality,
+                                onClose = { dialogModality = null },
+                            )
+                        }
+                    }
+                }
             }
         }
+
         if (previewWindow) {
             Window(
                 onCloseRequest = { previewWindow = false },
                 title = "Live preview",
+                icon = CatalogueIcon,
                 state = rememberWindowState(size = DpSize(520.dp, 420.dp)),
+                alwaysOnTop = previewAlwaysOnTop,
+            ) {
+                MaterialTheme(colorScheme = colorScheme) { PreviewWindow() }
+            }
+        }
+
+        if (transparentWindow) {
+            Window(
+                onCloseRequest = { transparentWindow = false },
+                title = "Transparent Compose surface",
+                icon = CatalogueIcon,
+                state = rememberWindowState(size = DpSize(680.dp, 480.dp)),
+                undecorated = true,
+                transparent = true,
                 alwaysOnTop = true,
             ) {
-                MaterialTheme(colorScheme = darkColorScheme()) { PreviewWindow() }
+                MaterialTheme(colorScheme = colorScheme) {
+                    TransparentPreviewWindow(onClose = { transparentWindow = false })
+                }
             }
         }
     }

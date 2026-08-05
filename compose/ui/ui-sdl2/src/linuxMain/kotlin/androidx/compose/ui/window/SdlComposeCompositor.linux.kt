@@ -22,11 +22,14 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.cairo.CairoCanvas
+import androidx.compose.ui.graphics.cairo.CairoGraphics
+import androidx.compose.ui.graphics.cairo.CairoImage
 import androidx.compose.ui.graphics.cairo.CairoLayerCompositor
 import androidx.compose.ui.graphics.cairo.CairoLayerRegistration
 import androidx.compose.ui.graphics.cairo.CairoSurface
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.viewinterop.GpuInteropCompositionRecorder
+import androidx.compose.ui.viewinterop.GpuInteropEmission
 import androidx.compose.ui.viewinterop.GpuInteropLayerCommand
 import cairo.kc_create
 import cairo.kc_destroy
@@ -36,7 +39,9 @@ import cairo.kgpu_context_create
 import cairo.kgpu_context_destroy
 import cairo.kgpu_context_make_current
 import cairo.kgpu_context_present
+import cairo.kgpu_context_read_pixels
 import cairo.kgpu_context_renderer
+import cairo.kgpu_context_set_transparent
 import cairo.kgpu_texture_create
 import cairo.kgpu_texture_destroy
 import cairo.kgpu_texture_draw
@@ -260,6 +265,7 @@ internal class SdlOrderedCompositionRecorder(
     private val width: Int,
     private val height: Int,
     private val damage: FrameDamage,
+    private val gpu: COpaquePointer? = null,
 ) : GpuInteropCompositionRecorder {
     private val segments = mutableListOf<CairoSurface>()
     private val externalLayers = mutableListOf<GpuInteropLayerCommand>()
@@ -271,22 +277,24 @@ internal class SdlOrderedCompositionRecorder(
         layer: GpuInteropLayerCommand,
         canvas: Canvas,
         maskInRoot: Path,
-    ): Boolean {
+        maskInLocal: Path,
+    ): GpuInteropEmission {
         check(!finished) { "Ordered composition recording already finished" }
-        val cairoCanvas = canvas as? CairoCanvas
-        if (cairoCanvas == null || cairoCanvas.context != rootCanvas.context) {
-            cairoCanvas?.markExternalBoundary()
-            fallbackReason = SdlOrderedFallbackReason.NonRootCanvas
-            return false
+        val cairoCanvas = canvas as? CairoCanvas ?: return GpuInteropEmission.Unsupported
+        val isRootTarget =
+            cairoCanvas.context == rootCanvas.context &&
+                kc_get_group_target(cairoCanvas.context) == rootSurface.handle
+        if (isRootTarget) {
+            captureSegment()
+            externalLayers += layer
+            masksInRoot += CairoGraphics.createPath().also { it.addPath(maskInRoot) }
+            return GpuInteropEmission.External
         }
-        if (kc_get_group_target(cairoCanvas.context) != rootSurface.handle) {
-            fallbackReason = SdlOrderedFallbackReason.NestedCairoGroup
-            return false
+        return if (layer.drawRasterized(gpu, cairoCanvas, maskInLocal)) {
+            GpuInteropEmission.Rasterized
+        } else {
+            GpuInteropEmission.Unsupported
         }
-        captureSegment()
-        externalLayers += layer
-        masksInRoot += maskInRoot
-        return true
     }
 
     private fun captureSegment() {
@@ -398,6 +406,12 @@ internal class SdlComposeCompositor private constructor(
         kgpu_context_make_current(context)
     }
 
+    fun setTransparent(value: Boolean) {
+        check(!closed) { "Compositor is closed" }
+        kgpu_context_set_transparent(context, if (value) 1 else 0)
+        rootTextureDirty = true
+    }
+
     fun beginFrame(width: Int, height: Int) {
         check(!closed) { "Compositor is closed" }
         counters.onFrameStarted()
@@ -417,7 +431,7 @@ internal class SdlComposeCompositor private constructor(
         height: Int,
         damage: FrameDamage,
     ): SdlOrderedCompositionRecorder =
-        SdlOrderedCompositionRecorder(rootCanvas, rootSurface, width, height, damage)
+        SdlOrderedCompositionRecorder(rootCanvas, rootSurface, width, height, damage, context)
 
     /**
      * Commits a captured stream. Returns true when topology changed during bounded damage and a
@@ -551,6 +565,24 @@ internal class SdlComposeCompositor private constructor(
         check(!closed) { "Compositor is closed" }
         kgpu_context_present(context)
         counters.onFramePresented()
+    }
+
+    fun capture(width: Int, height: Int): CairoImage {
+        check(!closed) { "Compositor is closed" }
+        val image = CairoImage(width, height)
+        check(
+            kgpu_context_read_pixels(
+                context,
+                image.surface.data.reinterpret(),
+                width,
+                height,
+                image.surface.stride,
+            ) > 0
+        ) {
+            "Could not read the composed OpenGL framebuffer"
+        }
+        image.surface.markDirty()
+        return image
     }
 
     fun statsSnapshot(): SdlCompositorStatsSnapshot = counters.snapshot()

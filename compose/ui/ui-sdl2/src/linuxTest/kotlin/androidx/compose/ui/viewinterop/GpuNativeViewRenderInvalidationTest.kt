@@ -51,4 +51,24 @@ class GpuNativeViewRenderInvalidationTest {
         assertTrue(invalidation.consume { true })
         assertFalse(invalidation.consume { true })
     }
+    @Test
+    fun rasterSnapshotIsReusedUntilAnotherNativeFrameRenders() {
+        val cache = GpuNativeViewSnapshotCacheState()
+
+        assertTrue(cache.needsReadback)
+        cache.onReadback()
+        assertFalse(cache.needsReadback)
+
+        // Geometry and ancestor-property redraws reuse the existing CPU snapshot.
+        assertFalse(cache.needsReadback)
+
+        cache.onRendered()
+        assertTrue(cache.needsReadback)
+        cache.onReadback()
+        assertFalse(cache.needsReadback)
+
+        cache.invalidateSnapshot()
+        assertTrue(cache.needsReadback)
+    }
+
 }
