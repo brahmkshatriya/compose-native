@@ -15,7 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposableOpenTarget
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -58,12 +57,6 @@ import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.isDialogAnimationEnabled
 import androidx.compose.ui.platform.FrameRecomposer
-import androidx.compose.ui.platform.LinuxDesktopEvent
-import androidx.compose.ui.platform.LinuxNotificationAction
-import androidx.compose.ui.platform.LinuxNotificationHint
-import androidx.compose.ui.platform.LinuxPlatformServices
-import androidx.compose.ui.platform.LinuxPlatformServicesRegistry
-import androidx.compose.ui.platform.LinuxProgressUpdate
 import androidx.compose.ui.platform.LocalPlatformAccentColor
 import androidx.compose.ui.platform.PlatformArchitectureComponentsOwner
 import androidx.compose.ui.platform.PlatformContext
@@ -104,14 +97,11 @@ import kotlin.system.exitProcess
 import kotlinx.atomicfu.atomic
 import kotlinx.atomicfu.locks.SynchronizedObject
 import kotlinx.atomicfu.locks.synchronized
-import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.FloatVar
 import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.StableRef
-import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.asStableRef
@@ -129,17 +119,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import linuxdesktop.*
-import org.jetbrains.skiko.GpuPriority
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.SkikoRenderDelegate
-import org.jetbrains.skiko.SystemTheme as SkikoSystemTheme
-import org.jetbrains.skiko.updateLinuxSystemTheme
-import platform.posix.getenv
-import platform.posix.setenv
-import platform.posix.usleep
 import sdl2.SDLK_ESCAPE
 import sdl2.SDL_BUTTON_LEFT
 import sdl2.SDL_BUTTON_MIDDLE
@@ -183,9 +166,6 @@ import sdl2.SDL_EVENT_WINDOW_RESIZED
 import sdl2.SDL_EVENT_WINDOW_RESTORED
 import sdl2.SDL_EVENT_WINDOW_SHOWN
 import sdl2.SDL_Event
-import sdl2.SDL_GLAttr
-import sdl2.SDL_GL_SetAttribute
-import sdl2.SDL_GetClipboardText
 import sdl2.SDL_GetError
 import sdl2.SDL_GetMouseState
 import sdl2.SDL_GetPerformanceCounter
@@ -200,7 +180,6 @@ import sdl2.SDL_HitTestResult
 import sdl2.SDL_Init
 import sdl2.SDL_MaximizeWindow
 import sdl2.SDL_MinimizeWindow
-import sdl2.SDL_OpenURL
 import sdl2.SDL_PIXELFORMAT_ARGB8888
 import sdl2.SDL_Point
 import sdl2.SDL_PollEvent
@@ -210,7 +189,6 @@ import sdl2.SDL_RaiseWindow
 import sdl2.SDL_Rect
 import sdl2.SDL_RegisterEvents
 import sdl2.SDL_RestoreWindow
-import sdl2.SDL_SetClipboardText
 import sdl2.SDL_SetCursor
 import sdl2.SDL_SetTextInputArea
 import sdl2.SDL_SetWindowAlwaysOnTop
@@ -234,11 +212,9 @@ import sdl2.SDL_WINDOW_BORDERLESS
 import sdl2.SDL_WINDOW_HIDDEN
 import sdl2.SDL_WINDOW_HIGH_PIXEL_DENSITY
 import sdl2.SDL_WINDOW_MAXIMIZED
-import sdl2.SDL_WINDOW_OPENGL
 import sdl2.SDL_WINDOW_RESIZABLE
 import sdl2.SDL_WINDOW_TRANSPARENT
 import sdl2.SDL_WaitEventTimeout
-import sdl2.SDL_free
 
 @Stable
 interface ApplicationScope {
@@ -746,24 +722,25 @@ fun application(
     content: @Composable ApplicationScope.() -> Unit,
 ) {
     PlatformDispatcherRegistry.installPostDelayedDispatcher(Dispatchers.Default)
-    if (getenv("KTNATIVE_INPUT_SELF_TEST") != null) {
+    if (nativeGetEnvironmentVariable("KTNATIVE_INPUT_SELF_TEST") != null) {
         runNativeInputSelfTests()
         return
     }
     registerSkikoComposeImplementation()
     configureNativeComposeUiFlags()
-    if (getenv("WAYLAND_DISPLAY") != null) setenv("SDL_VIDEODRIVER", "wayland", 0)
+    configureNativeSdlEnvironment()
     check(SDL_Init(sdl2.SDL_INIT_VIDEO)) {
         "SDL initialization failed: ${SDL_GetError()?.toKString()}"
     }
-    LinuxPlatformServicesRegistry.install(SdlPlatformServices)
-    val isWindowSelfTest = getenv("KTNATIVE_WINDOW_SELF_TEST") != null
+    NativeDesktopIntegration.install()
+    val isWindowSelfTest = nativeGetEnvironmentVariable("KTNATIVE_WINDOW_SELF_TEST") != null
     if (isWindowSelfTest) NativeWindowSelfTestRootListener.reset()
     val nativeApplication = NativeApplication()
     try {
         nativeApplication.run(
             when {
-                getenv("KTNATIVE_DESKTOP_SELF_TEST") != null -> NativeDesktopSelfTestContent
+                nativeGetEnvironmentVariable("KTNATIVE_DESKTOP_SELF_TEST") != null ->
+                    NativeDesktopSelfTestContent
                 isWindowSelfTest -> NativeWindowSelfTestContent
                 else -> content
             }
@@ -771,9 +748,7 @@ fun application(
         if (isWindowSelfTest) NativeWindowSelfTestRootListener.checkDisposed()
     } finally {
         nativeApplication.close()
-        LinuxPlatformServicesRegistry.install(null)
-        kld_atspi_shutdown()
-        kld_shutdown()
+        NativeDesktopIntegration.close()
         SDL_Quit()
         clearSkikoComposeImplementation()
     }
@@ -788,209 +763,6 @@ fun CoroutineScope.launchApplication(content: @Composable ApplicationScope.() ->
     launch {
         awaitApplication(content)
     }
-
-private object SdlPlatformServices : LinuxPlatformServices {
-    override fun getClipboardText(): String? {
-        val text = SDL_GetClipboardText() ?: return null
-        return try {
-            text.toKString()
-        } finally {
-            SDL_free(text)
-        }
-    }
-
-    override fun setClipboardText(text: String) {
-        check(SDL_SetClipboardText(text)) {
-            "Could not set clipboard text: ${SDL_GetError()?.toKString()}"
-        }
-    }
-
-    override fun openUri(uri: String) {
-        check(SDL_OpenURL(uri)) { "Could not open URI '$uri': ${SDL_GetError()?.toKString()}" }
-    }
-
-    override fun areNotificationsSupported(): Boolean = kld_notifications_supported() != 0
-
-    override fun notificationCapabilities(): Set<String> = memScoped {
-        if (!areNotificationsSupported()) return@memScoped emptySet()
-        val errorPointer = alloc<CPointerVar<ByteVar>>()
-        errorPointer.value = null
-        val capabilities = kld_notification_capabilities(errorPointer.ptr)
-        checkDesktopError(errorPointer.value, "query notification capabilities")
-        if (capabilities == null) return@memScoped emptySet()
-        try {
-            capabilities.toKString().lineSequence().filter { it.isNotEmpty() }.toSet()
-        } finally {
-            kld_free_string(capabilities)
-        }
-    }
-
-    override fun sendNotification(
-        applicationName: String,
-        title: String,
-        message: String,
-        iconName: String,
-        replacesId: UInt,
-        actions: List<LinuxNotificationAction>,
-        hints: Map<String, LinuxNotificationHint>,
-        timeoutMillis: Int,
-    ): UInt = memScoped {
-        val builder =
-            checkNotNull(
-                kld_notification_create(
-                    applicationName,
-                    title,
-                    message,
-                    iconName,
-                    replacesId,
-                    timeoutMillis,
-                )
-            ) {
-                "Could not allocate a desktop notification"
-            }
-        try {
-            actions.forEach { action ->
-                check(kld_notification_add_action(builder, action.id, action.label) != 0) {
-                    "Could not add notification action '${action.id}'"
-                }
-            }
-            hints.forEach { (name, hint) ->
-                val added =
-                    when (hint) {
-                        is LinuxNotificationHint.ByteValue ->
-                            kld_notification_add_hint_byte(builder, name, hint.value)
-                        is LinuxNotificationHint.IntValue ->
-                            kld_notification_add_hint_int32(builder, name, hint.value)
-                        is LinuxNotificationHint.UIntValue ->
-                            kld_notification_add_hint_uint32(builder, name, hint.value)
-                        is LinuxNotificationHint.LongValue ->
-                            kld_notification_add_hint_int64(builder, name, hint.value)
-                        is LinuxNotificationHint.ULongValue ->
-                            kld_notification_add_hint_uint64(builder, name, hint.value)
-                        is LinuxNotificationHint.DoubleValue ->
-                            kld_notification_add_hint_double(builder, name, hint.value)
-                        is LinuxNotificationHint.BooleanValue ->
-                            kld_notification_add_hint_bool(builder, name, if (hint.value) 1 else 0)
-                        is LinuxNotificationHint.StringValue ->
-                            kld_notification_add_hint_string(builder, name, hint.value)
-                    }
-                check(added != 0) { "Could not add notification hint '$name'" }
-            }
-            val errorPointer = alloc<CPointerVar<ByteVar>>()
-            errorPointer.value = null
-            val id = kld_notification_send(builder, errorPointer.ptr)
-            checkDesktopError(errorPointer.value, "send desktop notification")
-            check(id != 0u) { "The notification service returned an invalid identifier" }
-            id
-        } finally {
-            kld_notification_destroy(builder)
-        }
-    }
-
-    override fun closeNotification(id: UInt) = memScoped {
-        val errorPointer = alloc<CPointerVar<ByteVar>>()
-        errorPointer.value = null
-        check(kld_notification_close(id, errorPointer.ptr) != 0) {
-            checkDesktopError(errorPointer.value, "close desktop notification")
-            "Could not close desktop notification"
-        }
-        checkDesktopError(errorPointer.value, "close desktop notification")
-    }
-
-    override fun isProgressServiceSupported(): Boolean = kld_progress_supported() != 0
-
-    override fun startProgressJob(
-        applicationName: String,
-        iconName: String,
-        capabilities: Int,
-    ): String = memScoped {
-        val errorPointer = alloc<CPointerVar<ByteVar>>()
-        errorPointer.value = null
-        val path = kld_progress_start(applicationName, iconName, capabilities, errorPointer.ptr)
-        checkDesktopError(errorPointer.value, "start desktop progress job")
-        checkNotNull(path) { "The desktop progress service returned no object path" }
-            .let {
-                try {
-                    it.toKString()
-                } finally {
-                    kld_free_string(it)
-                }
-            }
-    }
-
-    override fun updateProgressJob(path: String, update: LinuxProgressUpdate) = memScoped {
-        val errorPointer = alloc<CPointerVar<ByteVar>>()
-        errorPointer.value = null
-        val updated =
-            kld_progress_update(
-                path,
-                update.totalBytes,
-                update.processedBytes,
-                update.bytesPerSecond,
-                update.elapsedMillis,
-                update.percent,
-                update.message,
-                errorPointer.ptr,
-            )
-        checkDesktopError(errorPointer.value, "update desktop progress job")
-        check(updated != 0) { "Could not update desktop progress job" }
-    }
-
-    override fun terminateProgressJob(path: String, errorMessage: String) = memScoped {
-        val errorPointer = alloc<CPointerVar<ByteVar>>()
-        errorPointer.value = null
-        val terminated = kld_progress_terminate(path, errorMessage, errorPointer.ptr)
-        checkDesktopError(errorPointer.value, "terminate desktop progress job")
-        check(terminated != 0) { "Could not terminate desktop progress job" }
-    }
-
-    override fun pollDesktopEvent(): LinuxDesktopEvent? = memScoped {
-        val id = alloc<UIntVar>()
-        val reason = alloc<UIntVar>()
-        val value = alloc<CPointerVar<ByteVar>>()
-        id.value = 0u
-        reason.value = 0u
-        value.value = null
-        val type = kld_poll_event(id.ptr, reason.ptr, value.ptr)
-        val text =
-            value.value
-                ?.let {
-                    try {
-                        it.toKString()
-                    } finally {
-                        kld_free_string(it)
-                    }
-                }
-                .orEmpty()
-        when (type) {
-            1 -> LinuxDesktopEvent.NotificationAction(id.value, text)
-            2 -> LinuxDesktopEvent.NotificationClosed(id.value, reason.value)
-            3 ->
-                LinuxDesktopEvent.ProgressRequested(
-                    text,
-                    LinuxDesktopEvent.ProgressRequested.Action.Cancel,
-                )
-            4 ->
-                LinuxDesktopEvent.ProgressRequested(
-                    text,
-                    LinuxDesktopEvent.ProgressRequested.Action.Suspend,
-                )
-            5 ->
-                LinuxDesktopEvent.ProgressRequested(
-                    text,
-                    LinuxDesktopEvent.ProgressRequested.Action.Resume,
-                )
-            else -> null
-        }
-    }
-}
-
-private fun checkDesktopError(failure: CPointer<ByteVar>?, operation: String) {
-    if (failure == null) return
-    val detail = failure.toKString()
-    kld_free_string(failure)
-    error("Could not $operation: $detail")
-}
 
 private object NativeWindowSelfTestRootListener : PlatformContext.RootForTestListener {
     private val activeRoots = mutableSetOf<PlatformRootForTest>()
@@ -1054,101 +826,6 @@ private val NativeWindowSelfTestContent: @Composable ApplicationScope.() -> Unit
     }
 }
 
-private val NativeDesktopSelfTestContent: @Composable ApplicationScope.() -> Unit = {
-    val applicationScope = this
-    Window(
-        onCloseRequest = ::exitApplication,
-        state = rememberWindowState(size = DpSize(320.dp, 200.dp)),
-        visible = false,
-        title = "Native desktop integration test",
-    ) {
-        LaunchedEffect(Unit) {
-            check(isNotificationSupported) { "Desktop notifications are unavailable" }
-            val notification =
-                sendNotification(
-                    NotificationRequest(
-                        title = "Native Compose self-test",
-                        message = "Initial notification",
-                        applicationName = "Native Compose",
-                        actions = listOf(NotificationAction("default", "Open")),
-                        hints =
-                            mapOf(
-                                "transient" to NotificationHint.BooleanValue(true),
-                                "desktop-entry" to NotificationHint.StringValue("ktnative"),
-                                "value" to NotificationHint.IntValue(10),
-                            ),
-                        progress = 0.1f,
-                        timeoutMillis = 3000,
-                    )
-                )
-            val originalId = notification.id
-            var closeReason: NotificationEvent.Closed.Reason? = null
-            notification.addEventListener { event ->
-                if (event is NotificationEvent.Closed) closeReason = event.reason
-            }
-            notification.update(
-                NotificationRequest(
-                    title = "Native Compose self-test",
-                    message = "Updated in place",
-                    applicationName = "Native Compose",
-                    progress = 0.6f,
-                    timeoutMillis = 3000,
-                )
-            )
-            check(notification.id == originalId) { "Notification replacement changed its ID" }
-
-            val progress =
-                startProgressJob(
-                    ProgressJobRequest(
-                        title = "Testing native progress",
-                        applicationName = "Native Compose",
-                        totalBytes = 64uL * 1024uL * 1024uL,
-                        cancellable = true,
-                    )
-                )
-            repeat(5) { sample ->
-                progress.update(
-                    ProgressJobUpdate(
-                        processedBytes = (sample + 1).toULong() * 64uL * 1024uL * 1024uL / 5uL,
-                        bytesPerSecond = (40 + sample * 7).toULong() * 1024uL * 1024uL,
-                        elapsedMillis = (sample * 50).toULong(),
-                        message = "Testing update ${sample + 1}/5",
-                    )
-                )
-                delay(50)
-            }
-            progress.complete()
-
-            val fallbackProgress =
-                startProgressJob(
-                    ProgressJobRequest(
-                        title = "Testing portable progress fallback",
-                        applicationName = "Native Compose",
-                        totalBytes = 10uL,
-                    ),
-                    backend = NotificationProgressJobBackend,
-                )
-            fallbackProgress.update(
-                ProgressJobUpdate(processedBytes = 7uL, bytesPerSecond = 1024uL * 1024uL)
-            )
-            fallbackProgress.complete()
-            notification.close()
-            repeat(50) {
-                if (closeReason != null) return@repeat
-                delay(10)
-            }
-            check(closeReason == NotificationEvent.Closed.Reason.ClosedByApplication) {
-                "Notification close event was not dispatched: $closeReason"
-            }
-            println(
-                "Native desktop self-test passed: capabilities, typed hints, actions, " +
-                    "replacement, close, native progress, and notification progress fallback"
-            )
-            applicationScope.exitApplication()
-        }
-    }
-}
-
 fun singleWindowApplication(
     state: WindowState = WindowState(),
     visible: Boolean = true,
@@ -1196,7 +873,7 @@ internal fun portalAccentColor(value: Int): Color? {
     return Color(0xFF000000.toInt() or (value and 0x00FFFFFF))
 }
 
-private class LinuxSystemThemeObserver(colorSchemeEventType: UInt, accentColorEventType: UInt) :
+private class NativeSystemThemeObserver(colorSchemeEventType: UInt, accentColorEventType: UInt) :
     AutoCloseable {
     private var handle =
         kld_system_theme_observer_create(colorSchemeEventType, accentColorEventType)
@@ -1249,7 +926,7 @@ internal class NativeApplication : ApplicationScope {
             }
         }
     private val systemThemeObserver =
-        LinuxSystemThemeObserver(systemThemeEventType, systemAccentEventType)
+        NativeSystemThemeObserver(systemThemeEventType, systemAccentEventType)
     internal val systemDarkThemeState = mutableStateOf(systemThemeObserver.current)
     internal val systemAccentColorState = mutableStateOf(systemThemeObserver.accent)
 
@@ -1257,7 +934,7 @@ internal class NativeApplication : ApplicationScope {
         FrameRecomposer(coroutineContext = Dispatchers.Unconfined, invalidate = ::requestFrame)
 
     init {
-        updateLinuxSystemTheme(systemDarkThemeState.value.asSkikoSystemTheme())
+        NativeDesktopIntegration.updateSystemTheme(systemDarkThemeState.value)
         eventWatchHandle =
             checkNotNull(
                 kgl_event_watch_add(NativeApplicationEventWatch, eventWatchReference.asCPointer())
@@ -1276,7 +953,7 @@ internal class NativeApplication : ApplicationScope {
         eventWatchHandle = null
         eventWatchReference.dispose()
         systemThemeObserver.close()
-        updateLinuxSystemTheme(SkikoSystemTheme.UNKNOWN)
+        NativeDesktopIntegration.updateSystemTheme(null)
     }
 
     fun add(window: NativeWindowHost) {
@@ -1335,7 +1012,7 @@ internal class NativeApplication : ApplicationScope {
                 result.completed.value = true
             }
         }
-        while (!result.completed.value) usleep(1_000u)
+        while (!result.completed.value) nativeSleepMicroseconds(1_000u)
         result.failure?.let { throw it }
         @Suppress("UNCHECKED_CAST")
         return result.value as T
@@ -1382,7 +1059,7 @@ internal class NativeApplication : ApplicationScope {
         if (event.type == systemThemeEventType) {
             val next = portalColorSchemePrefersDark(event.user.code)
             if (systemDarkThemeState.value != next) systemDarkThemeState.value = next
-            updateLinuxSystemTheme(next.asSkikoSystemTheme())
+            NativeDesktopIntegration.updateSystemTheme(next)
             requestFrame()
             return
         }
@@ -1432,8 +1109,7 @@ internal class NativeApplication : ApplicationScope {
         val frequency = performanceFrequency.toDouble()
         val start = SDL_GetPerformanceCounter()
         val configuredFramesPerSecond =
-            getenv("KTNATIVE_MAX_FPS")
-                ?.toKString()
+            nativeGetEnvironmentVariable("KTNATIVE_MAX_FPS")
                 ?.toIntOrNull()
                 ?.coerceIn(1, MaximumConfiguredFramesPerSecond)
         val framePacer =
@@ -1463,9 +1139,9 @@ internal class NativeApplication : ApplicationScope {
                 }
 
                 drainHostTasks()
-                dispatchLinuxDesktopEvents()
+                NativeDesktopIntegration.pollEvents()
                 LinuxTrayRegistry.poll()
-                if (kld_atspi_poll() != 0) {
+                if (NativeDesktopIntegration.pollAccessibility()) {
                     windows.toList().forEach { it.onAccessibilityBusConnected() }
                 }
 
@@ -1570,7 +1246,7 @@ private class SdlRootForTestListener : PlatformContext.RootForTestListener {
 }
 
 private class SdlPlatformContext(
-    private val accessibility: LinuxAtSpiAccessibility,
+    private val accessibility: NativeAccessibility,
     private val damageTracker: FrameDamageTracker,
     private val graphicsContextFactory: () -> PlatformGraphicsContext,
 ) : PlatformContext by PlatformContext.Empty() {
@@ -1780,7 +1456,7 @@ internal class NativeWindowHost(
     private val droppedFiles = mutableListOf<String>()
     private var droppedText: String? = null
     private var dropAccepted = false
-    private val accessibility = LinuxAtSpiAccessibility(application::dispatchToHost)
+    private val accessibility = NativeAccessibility(application::dispatchToHost)
     private val damageTracker = FrameDamageTracker()
     private val platformContext =
         SdlPlatformContext(accessibility, damageTracker) { SkiaGraphicsContext() }
@@ -1868,7 +1544,7 @@ internal class NativeWindowHost(
     private val forcedRenderScheduled = atomic(false)
     private val exposedFrameRendering = atomic(false)
     private val rendering = atomic(false)
-    private val renderStats = getenv("KTNATIVE_RENDER_STATS") != null
+    private val renderStats = nativeGetEnvironmentVariable("KTNATIVE_RENDER_STATS") != null
     private var hitTestReference: StableRef<NativeWindowHost>? = null
     private val draggableAreas = mutableMapOf<Any, Rect>()
 
@@ -1978,20 +1654,7 @@ internal class NativeWindowHost(
                 initialSize.height.value.roundToInt().coerceAtLeast(1)
             else 600
         val nativeLayer = SkiaLayer()
-        if (getenv("DRI_PRIME") == null) {
-            when (nativeLayer.properties.adapterPriority) {
-                GpuPriority.Integrated -> setenv("DRI_PRIME", "0", 0)
-                GpuPriority.Discrete -> setenv("DRI_PRIME", "1", 0)
-                GpuPriority.Auto -> Unit
-            }
-        }
-        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_CONTEXT_MAJOR_VERSION, 3)
-        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_CONTEXT_MINOR_VERSION, 3)
-        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_CONTEXT_PROFILE_MASK, 0x0001)
-        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_DOUBLEBUFFER, 1)
-        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_ALPHA_SIZE, 8)
-        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_DEPTH_SIZE, 0)
-        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_STENCIL_SIZE, 8)
+        configureNativeGraphics(nativeLayer)
         val baseFlags =
             SDL_WINDOW_HIGH_PIXEL_DENSITY or
                 (if (visible) 0uL else SDL_WINDOW_HIDDEN) or
@@ -2009,17 +1672,9 @@ internal class NativeWindowHost(
                 title,
                 windowWidth,
                 windowHeight,
-                baseFlags or
-                    (if (nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
-                        SDL_WINDOW_OPENGL
-                    } else {
-                        0uL
-                    }),
+                baseFlags or nativeGraphicsWindowFlags(nativeLayer),
             )
-        if (
-            candidateWindow == null &&
-                nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL
-        ) {
+        if (candidateWindow == null && nativeGraphicsWindowFlags(nativeLayer) != 0uL) {
             nativeLayer.renderApi = org.jetbrains.skiko.GraphicsApi.SOFTWARE_FAST
             candidateWindow = SDL_CreateWindow(title, windowWidth, windowHeight, baseFlags)
         }
@@ -2045,21 +1700,20 @@ internal class NativeWindowHost(
             }
         }
         SDL_StartTextInput(window)
-        nativeLayer.attachTo(
-            SdlSkiaLayerComponent(
-                window = window,
-                transparency = transparent,
-                queryContentScale = { queryMetrics(window).density },
-                queryFullscreen = { currentPlacement == WindowPlacement.Fullscreen },
-                updateFullscreen = { fullscreen ->
-                    val placement =
-                        if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
-                    currentPlacement = placement
-                    state.placement = placement
-                    applyPlacement()
-                },
-                onRenderRequested = application::requestFrame,
-            )
+        attachNativeSkiaLayer(
+            layer = nativeLayer,
+            window = window,
+            transparency = transparent,
+            queryContentScale = { queryMetrics(window).density },
+            queryFullscreen = { currentPlacement == WindowPlacement.Fullscreen },
+            updateFullscreen = { fullscreen ->
+                val placement =
+                    if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
+                currentPlacement = placement
+                state.placement = placement
+                applyPlacement()
+            },
+            onRenderRequested = application::requestFrame,
         )
         skiaLayer = nativeLayer
         gpuInteropRegistry =
@@ -2906,13 +2560,6 @@ internal class NativeWindowHost(
         updateAccessibility()
     }
 }
-
-private fun Boolean?.asSkikoSystemTheme(): SkikoSystemTheme =
-    when (this) {
-        true -> SkikoSystemTheme.DARK
-        false -> SkikoSystemTheme.LIGHT
-        null -> SkikoSystemTheme.UNKNOWN
-    }
 
 private val NativeWindowHitTest =
     staticCFunction { _: CPointer<SDL_Window>?, point: CPointer<SDL_Point>?, data: COpaquePointer?

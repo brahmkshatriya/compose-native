@@ -61,6 +61,7 @@ androidXMultiplatform {
     mac()
     ios()
     linux()
+    mingwX64()
     js()
     wasmJs()
 
@@ -267,8 +268,17 @@ androidXMultiplatform {
             dependsOn(nonJvmTest)
         }
 
-        linuxMain {
+        desktopNativeMain {
+            dependsOn(nativeMain)
             dependsOn(skikoBackendMain)
+        }
+
+        linuxMain {
+            dependsOn(desktopNativeMain)
+        }
+
+        mingwX64Main {
+            dependsOn(desktopNativeMain)
         }
 
         macosMain {

@@ -178,6 +178,15 @@ androidXMultiplatform {
             dependsOn(nonJvmTest)
         }
 
+        desktopNativeMain {
+            dependsOn(nativeMain)
+            dependsOn(skikoBackendMain)
+        }
+
+        linuxMain {
+            dependsOn(desktopNativeMain)
+        }
+
         darwinMain {
             dependsOn(nativeMain)
             dependsOn(skikoBackendMain)

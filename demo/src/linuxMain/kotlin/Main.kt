@@ -51,6 +51,7 @@ import androidx.compose.ui.window.isTraySupported
 import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.window.sendNotification
 import app.mpv.app_mpv_create
 import app.mpv.app_mpv_destroy
 import app.mpv.app_mpv_render
@@ -383,7 +384,7 @@ fun main() {
             Tray(
                 icon = CatalogueIcon,
                 state = trayState,
-                tooltip = "Compose Linux Component Catalogue",
+                tooltip = "Compose $desktopPlatformName Component Catalogue",
                 onAction = { previewWindow = true },
             ) {
                 CheckboxItem(
@@ -400,7 +401,7 @@ fun main() {
                 Item("Send notification") {
                     trayState.sendNotification(
                         Notification(
-                            title = "Compose Linux",
+                            title = "Compose $desktopPlatformName",
                             message = "The catalogue tray is active.",
                             type = Notification.Type.Info,
                         )
@@ -414,7 +415,7 @@ fun main() {
         Window(
             onCloseRequest = ::exitApplication,
             state = state,
-            title = "Compose Linux · Component Catalogue",
+            title = "Compose $desktopPlatformName · Component Catalogue",
             icon = CatalogueIcon,
         ) {
             DisposableEffect(window) {

@@ -40,11 +40,7 @@ import linuxdesktop.kld_tray_update
 val isTraySupported: Boolean
     get() = kld_tray_supported() != 0
 
-class TrayState {
-    fun sendNotification(notification: Notification) {
-        androidx.compose.ui.window.sendNotification(notification)
-    }
-}
+class TrayState {}
 
 @Composable fun rememberTrayState(): TrayState = remember { TrayState() }
 

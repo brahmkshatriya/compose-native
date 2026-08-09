@@ -65,6 +65,9 @@ internal fun ResourceDemoPage() {
     ) {
         Icon(painter = painterResource(Res.drawable.ic_home_filled), contentDescription = null)
         Text(text = stringResource(Res.string.app_name), fontFamily = FontFamily(font))
-        Text("String, vector, and byte-backed font resources are loaded by the Linux runtime.")
+        Text(
+            "String, vector, and byte-backed font resources are loaded by the " +
+                "$desktopPlatformName runtime."
+        )
     }
 }

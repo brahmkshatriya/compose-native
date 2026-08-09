@@ -167,6 +167,14 @@ androidXMultiplatform {
             dependsOn(nonJvmTest)
         }
 
+        desktopNativeMain {
+            dependsOn(nativeMain)
+        }
+
+        linuxMain {
+            dependsOn(desktopNativeMain)
+        }
+
         darwinMain {
             dependsOn(nativeMain)
         }

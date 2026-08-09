@@ -46,6 +46,7 @@ androidXMultiplatform {
     mac()
     ios()
     linux()
+    mingwX64()
     js()
     wasmJs()
 
@@ -165,6 +166,18 @@ androidXMultiplatform {
 
         nativeTest {
             dependsOn(nonJvmTest)
+        }
+
+        desktopNativeMain {
+            dependsOn(nativeMain)
+        }
+
+        linuxMain {
+            dependsOn(desktopNativeMain)
+        }
+
+        mingwX64Main {
+            dependsOn(desktopNativeMain)
         }
 
         darwinMain {

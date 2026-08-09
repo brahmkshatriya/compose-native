@@ -1,3 +1,5 @@
+@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("AndroidXComposePlugin")
@@ -8,7 +10,27 @@ group = "org.jetbrains.compose.components"
 version = "9999.0.0-SNAPSHOT"
 
 kotlin {
+    applyHierarchyTemplate {
+        common {
+            group("desktopNative") {
+                group("linux") { withLinux() }
+                group("mingw") { withMingw() }
+            }
+        }
+    }
+
     linuxX64 {
+        compilerOptions {
+            freeCompilerArgs.addAll(
+                "-Xbackend-threads=0",
+                "-opt-in=org.jetbrains.compose.resources.ExperimentalResourceApi",
+                "-opt-in=org.jetbrains.compose.resources.InternalResourceApi",
+                "-opt-in=androidx.compose.ui.InternalComposeUiApi",
+                "-opt-in=androidx.compose.ui.text.ExperimentalTextApi",
+            )
+        }
+    }
+    mingwX64 {
         compilerOptions {
             freeCompilerArgs.addAll(
                 "-Xbackend-threads=0",
@@ -21,14 +43,19 @@ kotlin {
     }
 
     sourceSets {
-        commonMain.dependencies {
-            api(project(":compose:runtime:runtime"))
-            api(project(":compose:foundation:foundation"))
-            api(project(":compose:ui:ui"))
-            implementation(libs.kotlinCoroutinesCore)
+        val commonMain by getting {
+            dependencies {
+                api(project(":compose:runtime:runtime"))
+                api(project(":compose:foundation:foundation"))
+                api(project(":compose:ui:ui"))
+                implementation(libs.kotlinCoroutinesCore)
+            }
         }
-        linuxMain.dependencies {
-            implementation(project(":compose:ui:ui-sdl2"))
+
+        val desktopNativeMain by getting {
+            dependencies {
+                implementation(project(":compose:ui:ui-sdl2"))
+            }
         }
     }
 }

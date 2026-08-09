@@ -32,6 +32,7 @@ androidXMultiplatform {
     mac()
     ios()
     linuxX64()
+    mingwX64()
     js()
     wasmJs()
 

@@ -76,13 +76,21 @@ import kotlin.math.roundToInt
 import kotlinx.cinterop.UByteVar
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.set
+import kotlinx.cinterop.toKString
 import kotlinx.coroutines.launch
+import org.jetbrains.skiko.OS
+import org.jetbrains.skiko.hostOs
 import platform.posix.fclose
 import platform.posix.fopen
 import platform.posix.fputs
+import platform.posix.getenv
+
+internal val desktopPlatformName = if (hostOs == OS.Windows) "Windows" else "Linux"
+
+private val isWindowsCatalogue = hostOs == OS.Windows
 
 private enum class Page(val title: String, val note: String) {
-    Home("Catalogue", "Linux Compose, exercised for real"),
+    Home("Catalogue", "$desktopPlatformName Compose, exercised for real"),
     Hello("Hello", "Platform accent color and system theme"),
     Resources("Resources", "Strings, vectors, and packaged fonts"),
     Controls("Buttons & Controls", "Buttons, choices, sliders and chips"),
@@ -92,8 +100,15 @@ private enum class Page(val title: String, val note: String) {
     Overlays("Dialogs & Overlays", "Dialogs, sheets, menus and pickers"),
     Graphics("Images & Graphics", "Images, gradients, paths and effects"),
     Animations("Animations", "Motion, loading and expansion"),
-    WebView("WebView", "WPE WebKit with browser controls"),
-    Video("Video Player", "Native MPV video surface"),
+    WebView(
+        "WebView",
+        if (isWindowsCatalogue) "WebView2 integration status"
+        else "WPE WebKit with browser controls",
+    ),
+    Video(
+        "Video Player",
+        if (isWindowsCatalogue) "Windows media integration status" else "Native MPV video surface",
+    ),
     NativeViews("Native Views", "CPU and OpenGL interop surfaces"),
     Windows("Desktop Windows", "Icons, transparency, modality and multi-window"),
     Desktop("Desktop Features", "Menus, tray, notifications, URLs and drag source"),
@@ -243,7 +258,7 @@ private fun HomePage(navigate: (Page) -> Unit) {
     ) {
         item {
             Text(
-                "Compose Linux",
+                "Compose $desktopPlatformName",
                 style = MaterialTheme.typography.displaySmall,
                 fontWeight = FontWeight.Bold,
             )
@@ -759,6 +774,15 @@ private fun AnimationsPage() {
 
 @Composable
 private fun WebViewPage() {
+    if (isWindowsCatalogue) {
+        UnavailableNativePage(
+            title = "Embedded WebView",
+            message =
+                "The catalogue UI is shared with Linux. Its WPE WebKit surface is Linux-only; " +
+                    "the Windows host needs a WebView2 composition adapter.",
+        )
+        return
+    }
     val initial = "https://www.youtube.com/"
     val browser = remember { WpeBrowser(initial) }
     var address by remember { mutableStateOf(initial) }
@@ -791,6 +815,15 @@ private fun WebViewPage() {
 
 @Composable
 private fun VideoPage() {
+    if (isWindowsCatalogue) {
+        UnavailableNativePage(
+            title = "Native video surface",
+            message =
+                "The catalogue UI is shared with Linux. Package libmpv for Windows to enable " +
+                    "the same embedded HLS player here.",
+        )
+        return
+    }
     val player = remember { MpvPlayer("https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8") }
     var playing by remember { mutableStateOf(false) }
     var seek by remember { mutableFloatStateOf(0f) }
@@ -850,6 +883,21 @@ private fun VideoPage() {
                     )
                     Text("HLS · MPV")
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnavailableNativePage(title: String, message: String) {
+    Box(Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
+        ElevatedCard(Modifier.widthIn(max = 620.dp)) {
+            Column(
+                Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(title, style = MaterialTheme.typography.headlineSmall)
+                Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1013,7 +1061,7 @@ private fun DesktopPage(traySupported: Boolean) {
                 Button({
                     sendNotification(
                         Notification(
-                            "Compose Linux",
+                            "Compose $desktopPlatformName",
                             "The catalogue notification works.",
                             Notification.Type.Info,
                         )
@@ -1035,7 +1083,9 @@ private fun DesktopPage(traySupported: Boolean) {
                 }
                 OutlinedButton({
                     coroutineScope.launch {
-                        clipboard.setClipEntry(ClipEntry.withPlainText("Hello from Compose Linux"))
+                        clipboard.setClipEntry(
+                            ClipEntry.withPlainText("Hello from Compose $desktopPlatformName")
+                        )
                         copied = "Copied to clipboard"
                     }
                 }) {
@@ -1081,7 +1131,8 @@ private fun DesktopPage(traySupported: Boolean) {
                                 },
                                 transferData = {
                                     DragAndDropTransferData(
-                                        text = "Dragged from the Compose Linux catalogue"
+                                        text =
+                                            "Dragged from the Compose $desktopPlatformName catalogue"
                                     )
                                 },
                             ),
@@ -1091,7 +1142,10 @@ private fun DesktopPage(traySupported: Boolean) {
                     Box(contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Drag text", fontWeight = FontWeight.Bold)
-                            Text("Native Wayland / Xdnd offer")
+                            Text(
+                                if (isWindowsCatalogue) "Native OLE offer"
+                                else "Native Wayland / Xdnd offer"
+                            )
                         }
                     }
                 }
@@ -1100,7 +1154,7 @@ private fun DesktopPage(traySupported: Boolean) {
                         Modifier.weight(1f).height(128.dp).dragAndDropSource {
                             DragAndDropTransferData(
                                 files = listOf(dragFile),
-                                text = "Compose Linux catalogue file",
+                                text = "Compose $desktopPlatformName catalogue file",
                             )
                         },
                     shape = RoundedCornerShape(18.dp),
@@ -1192,10 +1246,16 @@ private class CatalogueDropState {
 }
 
 private fun createDragDemoFile(): String {
-    val path = "/tmp/compose-linux-catalogue.txt"
+    val path =
+        if (isWindowsCatalogue) {
+            val temporaryDirectory = getenv("TEMP")?.toKString()?.trimEnd('\\', '/') ?: "."
+            "$temporaryDirectory\\compose-windows-catalogue.txt"
+        } else {
+            "/tmp/compose-linux-catalogue.txt"
+        }
     fopen(path, "w")?.let { file ->
         fputs(
-            "Compose Linux catalogue drag source\n" +
+            "Compose $desktopPlatformName catalogue drag source\n" +
                 "This file was created by the native desktop integration demo.\n",
             file,
         )
@@ -1214,7 +1274,7 @@ fun PreviewWindow() {
         Card(Modifier.padding(36.dp)) {
             Column(Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Live preview", style = MaterialTheme.typography.headlineMedium)
-                Text("A second native Linux window")
+                Text("A second native $desktopPlatformName window")
                 Spacer(Modifier.height(16.dp))
                 CircularProgressIndicator()
             }

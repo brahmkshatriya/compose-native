@@ -6,6 +6,41 @@
 
 #include "include/linux_gl.h"
 
+using ActiveTextureFunction = void (*)(GLenum texture);
+using BindFramebufferFunction = void (*)(GLenum target, GLuint framebuffer);
+using CheckFramebufferStatusFunction = GLenum (*)(GLenum target);
+using DeleteFramebuffersFunction = void (*)(GLsizei count, const GLuint *framebuffers);
+using FramebufferTexture2DFunction =
+    void (*)(GLenum target, GLenum attachment, GLenum texture_target, GLuint texture, GLint level);
+using GenFramebuffersFunction = void (*)(GLsizei count, GLuint *framebuffers);
+
+static ActiveTextureFunction kglActiveTexture = nullptr;
+static BindFramebufferFunction kglBindFramebuffer = nullptr;
+static CheckFramebufferStatusFunction kglCheckFramebufferStatus = nullptr;
+static DeleteFramebuffersFunction kglDeleteFramebuffers = nullptr;
+static FramebufferTexture2DFunction kglFramebufferTexture2D = nullptr;
+static GenFramebuffersFunction kglGenFramebuffers = nullptr;
+
+template <typename T>
+static T resolveGlFunction(const char *name) {
+    return reinterpret_cast<T>(SDL_GL_GetProcAddress(name));
+}
+
+static bool ensureFramebufferFunctions() {
+    if (kglBindFramebuffer) return true;
+    kglActiveTexture = resolveGlFunction<ActiveTextureFunction>("glActiveTexture");
+    kglBindFramebuffer = resolveGlFunction<BindFramebufferFunction>("glBindFramebuffer");
+    kglCheckFramebufferStatus =
+        resolveGlFunction<CheckFramebufferStatusFunction>("glCheckFramebufferStatus");
+    kglDeleteFramebuffers =
+        resolveGlFunction<DeleteFramebuffersFunction>("glDeleteFramebuffers");
+    kglFramebufferTexture2D =
+        resolveGlFunction<FramebufferTexture2DFunction>("glFramebufferTexture2D");
+    kglGenFramebuffers = resolveGlFunction<GenFramebuffersFunction>("glGenFramebuffers");
+    return kglActiveTexture && kglBindFramebuffer && kglCheckFramebufferStatus &&
+        kglDeleteFramebuffers && kglFramebufferTexture2D && kglGenFramebuffers;
+}
+
 
 struct KglEventWatch {
     kgl_event_watch_callback callback = nullptr;
@@ -32,16 +67,16 @@ struct KglLayer {
 
 static void restoreState(KglLayer *layer) {
     if (!layer || !layer->prepared) return;
-    glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(layer->previousFramebuffer));
+    kglBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(layer->previousFramebuffer));
     glViewport(
         layer->previousViewport[0],
         layer->previousViewport[1],
         layer->previousViewport[2],
         layer->previousViewport[3]
     );
-    glActiveTexture(GL_TEXTURE0);
+    kglActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(layer->previousTexture));
-    glActiveTexture(static_cast<GLenum>(layer->previousActiveTexture));
+    kglActiveTexture(static_cast<GLenum>(layer->previousActiveTexture));
     layer->prepared = false;
 }
 
@@ -81,9 +116,13 @@ void *kgl_layer_create(void) {
 void kgl_layer_destroy(void *rawLayer) {
     KglLayer *layer = static_cast<KglLayer *>(rawLayer);
     if (!layer) return;
-    if (SDL_GL_GetCurrentContext()) {
+    // Skiko owns the WGL context on Windows, so SDL does not necessarily know
+    // about it even though OpenGL is current on this thread.
+    if (glGetString(GL_VERSION)) {
         restoreState(layer);
-        if (layer->framebuffer) glDeleteFramebuffers(1, &layer->framebuffer);
+        if (layer->framebuffer && ensureFramebufferFunctions()) {
+            kglDeleteFramebuffers(1, &layer->framebuffer);
+        }
         if (layer->texture) glDeleteTextures(1, &layer->texture);
     }
     delete layer;
@@ -91,18 +130,19 @@ void kgl_layer_destroy(void *rawLayer) {
 
 int kgl_layer_prepare(void *rawLayer, int width, int height) {
     KglLayer *layer = static_cast<KglLayer *>(rawLayer);
-    if (!layer || width <= 0 || height <= 0 || layer->prepared) return 0;
+    if (!layer || width <= 0 || height <= 0 || layer->prepared ||
+        !ensureFramebufferFunctions()) return 0;
 
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &layer->previousFramebuffer);
     glGetIntegerv(GL_VIEWPORT, layer->previousViewport);
     glGetIntegerv(GL_ACTIVE_TEXTURE, &layer->previousActiveTexture);
-    glActiveTexture(GL_TEXTURE0);
+    kglActiveTexture(GL_TEXTURE0);
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &layer->previousTexture);
     layer->prepared = true;
 
     if (layer->width != width || layer->height != height) {
         if (!layer->texture) glGenTextures(1, &layer->texture);
-        if (!layer->framebuffer) glGenFramebuffers(1, &layer->framebuffer);
+        if (!layer->framebuffer) kglGenFramebuffers(1, &layer->framebuffer);
 
         glBindTexture(GL_TEXTURE_2D, layer->texture);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -121,22 +161,22 @@ int kgl_layer_prepare(void *rawLayer, int width, int height) {
             nullptr
         );
 
-        glBindFramebuffer(GL_FRAMEBUFFER, layer->framebuffer);
-        glFramebufferTexture2D(
+        kglBindFramebuffer(GL_FRAMEBUFFER, layer->framebuffer);
+        kglFramebufferTexture2D(
             GL_FRAMEBUFFER,
             GL_COLOR_ATTACHMENT0,
             GL_TEXTURE_2D,
             layer->texture,
             0
         );
-        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+        if (kglCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
             restoreState(layer);
             return 0;
         }
         layer->width = width;
         layer->height = height;
     } else {
-        glBindFramebuffer(GL_FRAMEBUFFER, layer->framebuffer);
+        kglBindFramebuffer(GL_FRAMEBUFFER, layer->framebuffer);
     }
 
     glViewport(0, 0, width, height);

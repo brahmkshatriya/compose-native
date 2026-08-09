@@ -321,7 +321,6 @@ def includeProject(String name, filePath, List<BuildType> filter = []) {
             ":compose:foundation:foundation-lint",
             ":compose:foundation:foundation:foundation-samples",
             ":compose:material3:material3:material3-samples",
-            ":compose:material:material",
             ":compose:test-utils",
             ":compose:ui:ui-android-stubs",
             ":compose:ui:ui-graphics:ui-graphics-samples",
@@ -586,3 +585,4 @@ gradle.ext.allProjectConsumers = allProjectsConsumers(projectDependencyGraph)
 
 include(":demo")
 include(":text-morph-demo")
+include(":windows-native-demo")

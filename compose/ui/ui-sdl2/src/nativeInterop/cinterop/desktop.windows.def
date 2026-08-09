@@ -1,0 +1,5 @@
+headers = linux_desktop.h linux_atspi.h linux_tray.h linux_drag.h linux_gl.h
+headerFilter = linux_desktop.h linux_atspi.h linux_tray.h linux_drag.h linux_gl.h
+package = linuxdesktop
+compilerOpts = -D_WIN32_WINNT=0x0A00 -DUNICODE -D_UNICODE
+linkerOpts = -Lbuild/windows-sdl/SDL3-3.4.10/x86_64-w64-mingw32/lib -lSDL3 -lopengl32 -ldwmapi -lole32 -lshell32 -luuid -luser32 -lgdi32 -lstdc++

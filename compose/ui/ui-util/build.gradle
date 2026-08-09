@@ -85,6 +85,14 @@ androidXMultiplatform {
             dependsOn(nonJvmTest)
         }
 
+        desktopNativeMain {
+            dependsOn(nativeMain)
+        }
+
+        linuxMain {
+            dependsOn(desktopNativeMain)
+        }
+
         iosMain {
             dependencies {
                 implementation(project(":compose:ui:ui-uikit"))
