@@ -387,6 +387,7 @@ includeProject(":compose:animation:animation-graphics:animation-graphics-samples
 includeProject(":compose:desktop")
 includeProject(":compose:desktop:desktop")
 includeProject(":compose:desktop:desktop:desktop-samples", "compose/desktop/desktop/samples")
+includeProject(":compose:components:components-resources")
 includeProject(":compose:mpp")
 includeProject(":compose:mpp:demo")
 includeProject(":compose:mpp:demo-swiftui")
@@ -583,4 +584,5 @@ void includeRequestedProjectsAndDependencies() {
 includeRequestedProjectsAndDependencies()
 gradle.ext.allProjectConsumers = allProjectsConsumers(projectDependencyGraph)
 
-include(":native-demo")
+include(":demo")
+include(":text-morph-demo")

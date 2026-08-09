@@ -16,12 +16,12 @@
 
 package androidx.compose.foundation.lazy.grid
 
-import androidx.collection.IntList
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.internal.requirePrecondition
 import androidx.compose.foundation.lazy.layout.LazyLayoutKeyIndexMap
 import androidx.compose.foundation.lazy.layout.LazyLayoutMeasureScope
 import androidx.compose.foundation.lazy.layout.LazyLayoutMeasuredItemProvider
+import androidx.compose.foundation.lazy.layout.StickyItems
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.unit.Constraints
 
@@ -87,8 +87,8 @@ internal abstract class LazyGridMeasuredItemProvider(
     val keyIndexMap: LazyLayoutKeyIndexMap
         get() = itemProvider.keyIndexMap
 
-    val headerIndices: IntList
-        get() = itemProvider.headerIndexes
+    val stickyItems: StickyItems
+        get() = itemProvider.stickyItems
 
     abstract fun createItem(
         index: Int,

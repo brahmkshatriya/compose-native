@@ -16,12 +16,12 @@
 
 package androidx.compose.foundation.lazy
 
-import androidx.collection.IntList
 import androidx.collection.MutableIntList
-import androidx.collection.emptyIntList
 import androidx.collection.mutableIntListOf
+import androidx.compose.foundation.lazy.layout.EmptyStickyItems
 import androidx.compose.foundation.lazy.layout.LazyLayoutIntervalContent
 import androidx.compose.foundation.lazy.layout.MutableIntervalList
+import androidx.compose.foundation.lazy.layout.StickyItems
 import androidx.compose.runtime.Composable
 
 internal class LazyListIntervalContent(content: LazyListScope.() -> Unit) :
@@ -29,11 +29,23 @@ internal class LazyListIntervalContent(content: LazyListScope.() -> Unit) :
     override val intervals: MutableIntervalList<LazyListInterval> = MutableIntervalList()
 
     private var _headerIndexes: MutableIntList? = null
-    val headerIndexes: IntList
-        get() = _headerIndexes ?: emptyIntList()
+    private var _nonSlidingHeaderIndexes: MutableIntList? = null
+    private var _stickyItems: StickyItems? = null
+    val stickyItems: StickyItems
+        get() = _stickyItems ?: EmptyStickyItems
 
     init {
         apply(content)
+    }
+
+    private fun getOrCreateHeaderIndexes(): MutableIntList {
+        return _headerIndexes
+            ?: mutableIntListOf().also { headerIndexes ->
+                val nonSlidingHeaderIndexes = mutableIntListOf()
+                _headerIndexes = headerIndexes
+                _nonSlidingHeaderIndexes = nonSlidingHeaderIndexes
+                _stickyItems = StickyItems(headerIndexes, nonSlidingHeaderIndexes)
+            }
     }
 
     override fun items(
@@ -62,11 +74,15 @@ internal class LazyListIntervalContent(content: LazyListScope.() -> Unit) :
     override fun stickyHeader(
         key: Any?,
         contentType: Any?,
+        isSlidable: Boolean,
         content: @Composable LazyItemScope.(Int) -> Unit,
     ) {
-        val headersIndexes = _headerIndexes ?: mutableIntListOf().also { _headerIndexes = it }
-        headersIndexes.add(intervals.size)
+        val headerIndexes = getOrCreateHeaderIndexes()
+        headerIndexes.add(intervals.size)
         val headerIndex = intervals.size
+        if (!isSlidable) {
+            checkNotNull(_nonSlidingHeaderIndexes).add(headerIndex)
+        }
 
         item(key, contentType) { content(headerIndex) }
     }

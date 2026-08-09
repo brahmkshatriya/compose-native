@@ -1,15 +1,27 @@
 #include "linux_desktop.h"
 
 #include <dbus/dbus.h>
+#include <SDL3/SDL.h>
 
+#include <atomic>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <poll.h>
 #include <string>
+#include <thread>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
 namespace {
 
+constexpr const char *portal_service = "org.freedesktop.portal.Desktop";
+constexpr const char *portal_path = "/org/freedesktop/portal/desktop";
+constexpr const char *portal_settings_interface = "org.freedesktop.portal.Settings";
+constexpr const char *appearance_namespace = "org.freedesktop.appearance";
+constexpr const char *color_scheme_key = "color-scheme";
+constexpr const char *accent_color_key = "accent-color";
 constexpr const char *notification_service = "org.freedesktop.Notifications";
 constexpr const char *notification_path = "/org/freedesktop/Notifications";
 constexpr const char *notification_interface = "org.freedesktop.Notifications";
@@ -157,6 +169,208 @@ DBusMessage *progress_message(const char *path, const char *method) {
     return dbus_message_new_method_call(progress_service, path, progress_view_interface, method);
 }
 
+bool unwrap_variant(DBusMessageIter *value) {
+    while (dbus_message_iter_get_arg_type(value) == DBUS_TYPE_VARIANT) {
+        DBusMessageIter nested;
+        dbus_message_iter_recurse(value, &nested);
+        *value = nested;
+    }
+    return dbus_message_iter_get_arg_type(value) != DBUS_TYPE_INVALID;
+}
+
+bool read_uint32_variant(DBusMessageIter value, uint32_t *result) {
+    if (!unwrap_variant(&value) ||
+        dbus_message_iter_get_arg_type(&value) != DBUS_TYPE_UINT32) return false;
+    dbus_uint32_t raw = 0;
+    dbus_message_iter_get_basic(&value, &raw);
+    if (result) *result = raw <= 2u ? raw : 0u;
+    return true;
+}
+
+bool read_accent_color_variant(DBusMessageIter value, uint32_t *result) {
+    if (!unwrap_variant(&value) ||
+        dbus_message_iter_get_arg_type(&value) != DBUS_TYPE_STRUCT) return false;
+    DBusMessageIter components;
+    dbus_message_iter_recurse(&value, &components);
+    double channels[3] = {};
+    for (int index = 0; index < 3; ++index) {
+        if (dbus_message_iter_get_arg_type(&components) != DBUS_TYPE_DOUBLE) return false;
+        dbus_message_iter_get_basic(&components, &channels[index]);
+        if (!std::isfinite(channels[index]) || channels[index] < 0.0 || channels[index] > 1.0) {
+            return false;
+        }
+        if (index < 2 && !dbus_message_iter_next(&components)) return false;
+    }
+    const uint32_t red = static_cast<uint32_t>(std::lround(channels[0] * 255.0));
+    const uint32_t green = static_cast<uint32_t>(std::lround(channels[1] * 255.0));
+    const uint32_t blue = static_cast<uint32_t>(std::lround(channels[2] * 255.0));
+    if (result) *result = 0x01000000u | (red << 16u) | (green << 8u) | blue;
+    return true;
+}
+
+using PortalValueReader = bool (*)(DBusMessageIter, uint32_t *);
+
+uint32_t read_portal_setting(
+    DBusConnection *bus,
+    const char *key,
+    PortalValueReader reader
+) {
+    if (!bus) return 0;
+    const char *methods[] = {"ReadOne", "Read"};
+    for (const char *method : methods) {
+        DBusMessage *message = dbus_message_new_method_call(
+            portal_service, portal_path, portal_settings_interface, method);
+        if (!message) continue;
+        const char *name_space = appearance_namespace;
+        if (!dbus_message_append_args(
+                message,
+                DBUS_TYPE_STRING,
+                &name_space,
+                DBUS_TYPE_STRING,
+                &key,
+                DBUS_TYPE_INVALID)) {
+            dbus_message_unref(message);
+            continue;
+        }
+        DBusError error;
+        dbus_error_init(&error);
+        DBusMessage *reply =
+            dbus_connection_send_with_reply_and_block(bus, message, 3000, &error);
+        dbus_message_unref(message);
+        dbus_error_free(&error);
+        if (!reply) continue;
+        DBusMessageIter value;
+        uint32_t result = 0;
+        const bool parsed = dbus_message_iter_init(reply, &value) && reader(value, &result);
+        dbus_message_unref(reply);
+        if (parsed) return result;
+    }
+    return 0;
+}
+
+uint32_t read_portal_color_scheme(DBusConnection *bus) {
+    return read_portal_setting(bus, color_scheme_key, read_uint32_variant);
+}
+
+uint32_t read_portal_accent_color(DBusConnection *bus) {
+    return read_portal_setting(bus, accent_color_key, read_accent_color_variant);
+}
+
+struct SystemThemeObserver {
+    DBusConnection *bus = nullptr;
+    int bus_fd = -1;
+    int wake_pipe[2] = {-1, -1};
+    uint32_t color_scheme_event_type = 0;
+    uint32_t accent_color_event_type = 0;
+    std::atomic<uint32_t> current{0};
+    std::atomic<uint32_t> accent{0};
+    std::atomic<bool> running{true};
+    std::thread worker;
+
+    void push_event(uint32_t event_type, uint32_t value) {
+        SDL_Event event{};
+        event.type = event_type;
+        event.user.type = event_type;
+        event.user.code = static_cast<Sint32>(value);
+        (void)SDL_PushEvent(&event);
+    }
+
+    void notify_color_scheme(uint32_t value) {
+        value = value <= 2u ? value : 0u;
+        if (current.exchange(value) == value) return;
+        push_event(color_scheme_event_type, value);
+    }
+
+    void notify_accent_color(uint32_t value) {
+        if ((value & 0x01000000u) == 0u) value = 0u;
+        if (accent.exchange(value) == value) return;
+        push_event(accent_color_event_type, value);
+    }
+
+    void refresh() {
+        notify_color_scheme(read_portal_color_scheme(bus));
+        notify_accent_color(read_portal_accent_color(bus));
+    }
+
+    bool drain_messages() {
+        if (!dbus_connection_read_write(bus, 0)) {
+            notify_color_scheme(0);
+            notify_accent_color(0);
+            return false;
+        }
+        while (DBusMessage *message = dbus_connection_pop_message(bus)) {
+            if (dbus_message_is_signal(message, portal_settings_interface, "SettingChanged")) {
+                DBusMessageIter arguments;
+                if (dbus_message_iter_init(message, &arguments) &&
+                    dbus_message_iter_get_arg_type(&arguments) == DBUS_TYPE_STRING) {
+                    const char *name_space = nullptr;
+                    dbus_message_iter_get_basic(&arguments, &name_space);
+                    if (dbus_message_iter_next(&arguments) &&
+                        dbus_message_iter_get_arg_type(&arguments) == DBUS_TYPE_STRING) {
+                        const char *key = nullptr;
+                        dbus_message_iter_get_basic(&arguments, &key);
+                        if (name_space && key &&
+                            std::strcmp(name_space, appearance_namespace) == 0 &&
+                            dbus_message_iter_next(&arguments)) {
+                            uint32_t value = 0;
+                            if (std::strcmp(key, color_scheme_key) == 0 &&
+                                read_uint32_variant(arguments, &value)) {
+                                notify_color_scheme(value);
+                            } else if (std::strcmp(key, accent_color_key) == 0 &&
+                                       read_accent_color_variant(arguments, &value)) {
+                                notify_accent_color(value);
+                            }
+                        }
+                    }
+                }
+            } else if (dbus_message_is_signal(
+                           message, DBUS_INTERFACE_DBUS, "NameOwnerChanged")) {
+                DBusError error;
+                dbus_error_init(&error);
+                const char *name = nullptr;
+                const char *old_owner = nullptr;
+                const char *new_owner = nullptr;
+                if (dbus_message_get_args(
+                        message,
+                        &error,
+                        DBUS_TYPE_STRING,
+                        &name,
+                        DBUS_TYPE_STRING,
+                        &old_owner,
+                        DBUS_TYPE_STRING,
+                        &new_owner,
+                        DBUS_TYPE_INVALID) &&
+                    name && std::strcmp(name, portal_service) == 0) {
+                    if (new_owner && new_owner[0] != '\0') refresh();
+                    else {
+                        notify_color_scheme(0);
+                        notify_accent_color(0);
+                    }
+                }
+                dbus_error_free(&error);
+            }
+            dbus_message_unref(message);
+        }
+        return true;
+    }
+
+    void run() {
+        if (!drain_messages()) return;
+        pollfd descriptors[2] = {
+            {bus_fd, POLLIN | POLLERR | POLLHUP, 0},
+            {wake_pipe[0], POLLIN | POLLERR | POLLHUP, 0},
+        };
+        while (running.load()) {
+            descriptors[0].revents = 0;
+            descriptors[1].revents = 0;
+            const int result = poll(descriptors, 2, -1);
+            if (result < 0) continue;
+            if (descriptors[1].revents != 0) break;
+            if (descriptors[0].revents != 0 && !drain_messages()) break;
+        }
+    }
+};
+
 bool add_event_matches() {
     if (event_matches_installed) return true;
     DBusConnection *bus = session_bus();
@@ -176,6 +390,93 @@ bool add_event_matches() {
 } // namespace
 
 extern "C" {
+
+void *kld_system_theme_observer_create(
+    uint32_t color_scheme_event_type,
+    uint32_t accent_color_event_type
+) {
+    dbus_threads_init_default();
+    DBusError error;
+    dbus_error_init(&error);
+    DBusConnection *bus = dbus_bus_get_private(DBUS_BUS_SESSION, &error);
+    dbus_error_free(&error);
+    if (!bus) return nullptr;
+    dbus_connection_set_exit_on_disconnect(bus, FALSE);
+
+    auto *observer = new SystemThemeObserver();
+    observer->bus = bus;
+    observer->color_scheme_event_type = color_scheme_event_type;
+    observer->accent_color_event_type = accent_color_event_type;
+    if (!dbus_connection_get_unix_fd(bus, &observer->bus_fd) ||
+        pipe(observer->wake_pipe) != 0) {
+        dbus_connection_close(bus);
+        dbus_connection_unref(bus);
+        delete observer;
+        return nullptr;
+    }
+
+    DBusError match_error;
+    dbus_error_init(&match_error);
+    dbus_bus_add_match(
+        bus,
+        "type='signal',sender='org.freedesktop.portal.Desktop',"
+        "path='/org/freedesktop/portal/desktop',"
+        "interface='org.freedesktop.portal.Settings',member='SettingChanged',"
+        "arg0='org.freedesktop.appearance'",
+        &match_error);
+    if (!dbus_error_is_set(&match_error)) {
+        dbus_bus_add_match(
+            bus,
+            "type='signal',sender='org.freedesktop.DBus',"
+            "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
+            "arg0='org.freedesktop.portal.Desktop'",
+            &match_error);
+    }
+    const bool matched = !dbus_error_is_set(&match_error);
+    dbus_error_free(&match_error);
+    if (!matched) {
+        close(observer->wake_pipe[0]);
+        close(observer->wake_pipe[1]);
+        dbus_connection_close(bus);
+        dbus_connection_unref(bus);
+        delete observer;
+        return nullptr;
+    }
+
+    dbus_connection_flush(bus);
+    observer->current.store(read_portal_color_scheme(bus));
+    observer->accent.store(read_portal_accent_color(bus));
+    observer->worker = std::thread([observer] { observer->run(); });
+    return observer;
+}
+
+int kld_system_theme_observer_current(void *raw) {
+    auto *observer = static_cast<SystemThemeObserver *>(raw);
+    return observer ? static_cast<int>(observer->current.load()) : 0;
+}
+
+uint32_t kld_system_theme_observer_accent(void *raw) {
+    auto *observer = static_cast<SystemThemeObserver *>(raw);
+    return observer ? observer->accent.load() : 0u;
+}
+
+void kld_system_theme_observer_destroy(void *raw) {
+    auto *observer = static_cast<SystemThemeObserver *>(raw);
+    if (!observer) return;
+    observer->running.store(false);
+    if (observer->wake_pipe[1] >= 0) {
+        const char wake = 1;
+        (void)write(observer->wake_pipe[1], &wake, 1);
+    }
+    if (observer->worker.joinable()) observer->worker.join();
+    if (observer->wake_pipe[0] >= 0) close(observer->wake_pipe[0]);
+    if (observer->wake_pipe[1] >= 0) close(observer->wake_pipe[1]);
+    if (observer->bus) {
+        dbus_connection_close(observer->bus);
+        dbus_connection_unref(observer->bus);
+    }
+    delete observer;
+}
 
 int kld_notifications_supported(void) { return name_has_owner(notification_service); }
 

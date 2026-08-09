@@ -114,13 +114,20 @@ interface LazyListScope {
     @Deprecated(
         "Please use the overload with indexing capabilities.",
         level = DeprecationLevel.HIDDEN,
-        replaceWith = ReplaceWith("stickyHeader(key, contentType, { _ -> content() })"),
+        replaceWith = ReplaceWith("stickyHeader(key, contentType, true, { _ -> content() })"),
     )
     fun stickyHeader(
         key: Any? = null,
         contentType: Any? = null,
         content: @Composable LazyItemScope.() -> Unit,
-    ) = stickyHeader(key, contentType) { _ -> content() }
+    ) = stickyHeader(key, contentType, true) { _ -> content() }
+
+    @Deprecated("Maintained for binary compatibility", level = DeprecationLevel.HIDDEN)
+    fun stickyHeader(
+        key: Any? = null,
+        contentType: Any? = null,
+        content: @Composable LazyItemScope.(Int) -> Unit,
+    ) = stickyHeader(key, contentType, true, content)
 
     /**
      * Adds a sticky header item, which will remain pinned even when scrolling after it. The header
@@ -138,12 +145,15 @@ interface LazyListScope {
      * @param contentType the type of the content of this item. The item compositions of the same
      *   type could be reused more efficiently. Note that null is a valid type and items of such
      *   type will be considered compatible.
+     * @param isSlidable whether this header can be slid away by the next sticky header. If false,
+     *   the next sticky header will stack after this one instead.
      * @param content the content of the header, the header index is provided, this is the item
      *   position within the total set of items in this lazy list (the global index).
      */
     fun stickyHeader(
         key: Any? = null,
         contentType: Any? = null,
+        isSlidable: Boolean = true,
         content: @Composable LazyItemScope.(Int) -> Unit,
     ) {
         item(key, contentType) { content.invoke(this, 0) }

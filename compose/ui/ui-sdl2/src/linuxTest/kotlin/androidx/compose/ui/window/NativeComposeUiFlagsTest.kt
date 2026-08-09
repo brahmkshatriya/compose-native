@@ -21,17 +21,17 @@ package androidx.compose.ui.window
 import androidx.compose.ui.ComposeUiFlags
 import androidx.compose.ui.isDialogAnimationEnabled
 import kotlin.test.Test
-import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class NativeComposeUiFlagsTest {
     @Test
-    fun disablesDetachedDialogExitAnimation() {
+    fun enablesDialogAnimationForSkiko() {
         val previous = ComposeUiFlags.isDialogAnimationEnabled
         try {
             ComposeUiFlags.isDialogAnimationEnabled = true
             configureNativeComposeUiFlags()
 
-            assertFalse(ComposeUiFlags.isDialogAnimationEnabled)
+            assertTrue(ComposeUiFlags.isDialogAnimationEnabled)
         } finally {
             ComposeUiFlags.isDialogAnimationEnabled = previous
         }

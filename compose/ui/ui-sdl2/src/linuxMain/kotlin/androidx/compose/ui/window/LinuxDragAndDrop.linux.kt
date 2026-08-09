@@ -16,16 +16,13 @@ package androidx.compose.ui.window
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.cairo.CairoCanvas
-import androidx.compose.ui.graphics.cairo.CairoImage
+import androidx.compose.ui.graphics.SkiaRasterImage
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.PlatformDragAndDropManager
 import androidx.compose.ui.platform.PlatformDragAndDropSource
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import cairo.kc_create
-import cairo.kc_destroy
 import cnames.structs.SDL_Window
 import kotlin.math.ceil
 import kotlinx.cinterop.ByteVar
@@ -35,7 +32,6 @@ import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
-import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.value
 import linuxdesktop.kdrag_active
 import linuxdesktop.kdrag_create
@@ -85,14 +81,12 @@ internal class SdlDragAndDropManager : PlatformDragAndDropManager, AutoCloseable
                     return started
                 }
             }
-        with(source) {
-            scope.startDragAndDropTransfer(offset) { started }
-        }
+        with(source) { scope.startDragAndDropTransfer(offset) { started } }
     }
 
     private fun startTransfer(
         data: DragAndDropTransferData,
-        decoration: CairoImage?,
+        decoration: SkiaRasterImage?,
     ): Boolean {
         val native = handle ?: return false
         val text = data.text?.takeIf { it.isNotEmpty() }
@@ -109,10 +103,10 @@ internal class SdlDragAndDropManager : PlatformDragAndDropManager, AutoCloseable
                     native,
                     text,
                     uriList,
-                    decoration?.surface?.data?.reinterpret(),
+                    decoration?.pixels,
                     decoration?.width ?: 0,
                     decoration?.height ?: 0,
-                    decoration?.surface?.stride ?: 0,
+                    decoration?.stride ?: 0,
                     error.ptr,
                 ) != 0
             error.value?.let {
@@ -123,28 +117,20 @@ internal class SdlDragAndDropManager : PlatformDragAndDropManager, AutoCloseable
         }
     }
 
-    private fun renderDecoration(
-        size: Size,
-        draw: DrawScope.() -> Unit,
-    ): CairoImage? {
+    private fun renderDecoration(size: Size, draw: DrawScope.() -> Unit): SkiaRasterImage? {
         val width = ceil(size.width).toInt()
         val height = ceil(size.height).toInt()
         if (width <= 0 || height <= 0) return null
-        val image = CairoImage(width, height)
-        image.surface.clear()
-        val context = checkNotNull(kc_create(image.surface.handle))
-        try {
-            CanvasDrawScope().draw(
+        val image = SkiaRasterImage(width, height)
+        CanvasDrawScope()
+            .draw(
                 density = Density(1f),
                 layoutDirection = LayoutDirection.Ltr,
-                canvas = CairoCanvas(context),
+                canvas = image.canvas,
                 size = Size(width.toFloat(), height.toFloat()),
                 block = draw,
             )
-        } finally {
-            kc_destroy(context)
-        }
-        image.surface.flush()
+        image.notifyPixelsChanged()
         return image
     }
 

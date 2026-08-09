@@ -1,7 +1,6 @@
 #include "linux_drag.h"
 
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include <SDL3/SDL.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
 #include <wayland-client.h>
@@ -12,6 +11,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -633,36 +633,79 @@ struct Drag {
     X11Drag x11;
 };
 
+std::vector<Drag *> x11_drags;
+
+bool SDLCALL handle_x11_event(void *, XEvent *event) {
+    if (!event) return true;
+    for (Drag *drag : x11_drags) {
+        if (drag && drag->backend == Backend::X11) x11_handle(&drag->x11, *event);
+    }
+    return true;
+}
+
+void register_x11_drag(Drag *drag) {
+    if (x11_drags.empty()) SDL_SetX11EventHook(handle_x11_event, nullptr);
+    x11_drags.push_back(drag);
+}
+
+void unregister_x11_drag(Drag *drag) {
+    x11_drags.erase(std::remove(x11_drags.begin(), x11_drags.end(), drag), x11_drags.end());
+    if (x11_drags.empty()) SDL_SetX11EventHook(nullptr, nullptr);
+}
+
 } // namespace
 
 extern "C" {
 
 void *kdrag_create(void *raw_window, char **error_message) {
     if (error_message) *error_message = nullptr;
+    // A drop target may close an offered MIME pipe before the source finishes writing. Treat that
+    // as an ordinary EPIPE result instead of letting SIGPIPE terminate the entire application.
+    std::signal(SIGPIPE, SIG_IGN);
     SDL_Window *window = static_cast<SDL_Window *>(raw_window);
     if (!window) {
         set_error(error_message, "SDL window is null");
         return nullptr;
     }
-    SDL_SysWMinfo info;
-    SDL_VERSION(&info.version);
-    if (!SDL_GetWindowWMInfo(window, &info)) {
+    SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+    if (!properties) {
         set_error(error_message, SDL_GetError());
         return nullptr;
     }
     Drag *drag = new Drag();
-    if (info.subsystem == SDL_SYSWM_WAYLAND) {
+    wl_display *wayland_display = static_cast<wl_display *>(SDL_GetPointerProperty(
+        properties,
+        SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER,
+        nullptr
+    ));
+    wl_surface *wayland_surface = static_cast<wl_surface *>(SDL_GetPointerProperty(
+        properties,
+        SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER,
+        nullptr
+    ));
+    Display *x11_display = static_cast<Display *>(SDL_GetPointerProperty(
+        properties,
+        SDL_PROP_WINDOW_X11_DISPLAY_POINTER,
+        nullptr
+    ));
+    Window x11_window = static_cast<Window>(SDL_GetNumberProperty(
+        properties,
+        SDL_PROP_WINDOW_X11_WINDOW_NUMBER,
+        0
+    ));
+    if (wayland_display && wayland_surface) {
         drag->backend = Backend::Wayland;
-        drag->wayland.context = wayland_acquire(info.info.wl.display, error_message);
-        drag->wayland.surface = info.info.wl.surface;
+        drag->wayland.context = wayland_acquire(wayland_display, error_message);
+        drag->wayland.surface = wayland_surface;
         if (!drag->wayland.context || !drag->wayland.surface) {
             wayland_release(&drag->wayland);
             delete drag;
             return nullptr;
         }
-    } else if (info.subsystem == SDL_SYSWM_X11) {
+    } else if (x11_display && x11_window != None) {
         drag->backend = Backend::X11;
-        x11_init(&drag->x11, info.info.x11.display, info.info.x11.window);
+        x11_init(&drag->x11, x11_display, x11_window);
+        register_x11_drag(drag);
     } else {
         set_error(error_message, "Outgoing drag is supported only by SDL Wayland and X11 backends");
         delete drag;
@@ -675,7 +718,10 @@ void kdrag_destroy(void *raw) {
     Drag *drag = static_cast<Drag *>(raw);
     if (!drag) return;
     if (drag->backend == Backend::Wayland) wayland_release(&drag->wayland);
-    else if (drag->backend == Backend::X11) x11_finish(&drag->x11);
+    else if (drag->backend == Backend::X11) {
+        unregister_x11_drag(drag);
+        x11_finish(&drag->x11);
+    }
     delete drag;
 }
 
@@ -723,10 +769,8 @@ void kdrag_pointer_release(void *raw) {
 }
 
 void kdrag_handle_syswm(void *raw, const void *raw_message) {
-    Drag *drag = static_cast<Drag *>(raw);
-    const SDL_SysWMmsg *message = static_cast<const SDL_SysWMmsg *>(raw_message);
-    if (!drag || !message || drag->backend != Backend::X11 || message->subsystem != SDL_SYSWM_X11) return;
-    x11_handle(&drag->x11, message->msg.x11.event);
+    (void)raw;
+    (void)raw_message;
 }
 
 int kdrag_active(void *raw) {
@@ -742,28 +786,9 @@ int kdrag_active(void *raw) {
 int kplatform_window_set_transparent(void *raw_window, int transparent) {
     SDL_Window *window = static_cast<SDL_Window *>(raw_window);
     if (!window) return 0;
-    SDL_SysWMinfo info;
-    SDL_VERSION(&info.version);
-    if (!SDL_GetWindowWMInfo(window, &info)) return 0;
-    if (info.subsystem == SDL_SYSWM_WAYLAND) {
-        if (!info.info.wl.surface) return 0;
-        // A null opaque region tells the compositor to honor the alpha channel of every buffer.
-        wl_surface_set_opaque_region(info.info.wl.surface, nullptr);
-        wl_display_flush(info.info.wl.display);
-        return 1;
-    }
-    if (info.subsystem == SDL_SYSWM_X11) {
-        if (!transparent) return 1;
-        XWindowAttributes attributes{};
-        if (!XGetWindowAttributes(info.info.x11.display, info.info.x11.window, &attributes) ||
-            attributes.depth != 32) {
-            return 0;
-        }
-        XSetWindowBackgroundPixmap(info.info.x11.display, info.info.x11.window, None);
-        XFlush(info.info.x11.display);
-        return 1;
-    }
-    return transparent ? 0 : 1;
+    const bool has_transparent_buffer =
+        (SDL_GetWindowFlags(window) & SDL_WINDOW_TRANSPARENT) != 0;
+    return transparent ? (has_transparent_buffer ? 1 : 0) : 1;
 }
 
 } // extern "C"

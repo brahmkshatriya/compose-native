@@ -16,12 +16,12 @@
 
 package androidx.compose.foundation.lazy.grid
 
-import androidx.collection.IntList
 import androidx.collection.MutableIntList
-import androidx.collection.emptyIntList
 import androidx.collection.mutableIntListOf
+import androidx.compose.foundation.lazy.layout.EmptyStickyItems
 import androidx.compose.foundation.lazy.layout.LazyLayoutIntervalContent
 import androidx.compose.foundation.lazy.layout.MutableIntervalList
+import androidx.compose.foundation.lazy.layout.StickyItems
 import androidx.compose.runtime.Composable
 
 internal class LazyGridIntervalContent(content: LazyGridScope.() -> Unit) :
@@ -33,12 +33,24 @@ internal class LazyGridIntervalContent(content: LazyGridScope.() -> Unit) :
     internal var hasCustomSpans = false
 
     private var _headerIndexes: MutableIntList? = null
+    private var _nonSlidingHeaderIndexes: MutableIntList? = null
+    private var _stickyItems: StickyItems? = null
 
-    val headerIndexes: IntList
-        get() = _headerIndexes ?: emptyIntList()
+    val stickyItems: StickyItems
+        get() = _stickyItems ?: EmptyStickyItems
 
     init {
         apply(content)
+    }
+
+    private fun getOrCreateHeaderIndexes(): MutableIntList {
+        return _headerIndexes
+            ?: mutableIntListOf().also { headerIndexes ->
+                val nonSlidingHeaderIndexes = mutableIntListOf()
+                _headerIndexes = headerIndexes
+                _nonSlidingHeaderIndexes = nonSlidingHeaderIndexes
+                _stickyItems = StickyItems(headerIndexes, nonSlidingHeaderIndexes)
+            }
     }
 
     override fun item(
@@ -82,10 +94,20 @@ internal class LazyGridIntervalContent(content: LazyGridScope.() -> Unit) :
         key: Any?,
         contentType: Any?,
         content: @Composable LazyGridItemScope.(Int) -> Unit,
+    ) = stickyHeader(key, contentType, true, content)
+
+    override fun stickyHeader(
+        key: Any?,
+        contentType: Any?,
+        isSlidable: Boolean,
+        content: @Composable LazyGridItemScope.(Int) -> Unit,
     ) {
-        val headersIndexes = _headerIndexes ?: mutableIntListOf().also { _headerIndexes = it }
+        val headerIndexes = getOrCreateHeaderIndexes()
         val headerIndex = intervals.size
-        headersIndexes.add(headerIndex)
+        headerIndexes.add(headerIndex)
+        if (!isSlidable) {
+            checkNotNull(_nonSlidingHeaderIndexes).add(headerIndex)
+        }
         item(key, { GridItemSpan(maxLineSpan) }, contentType) { content.invoke(this, headerIndex) }
     }
 

@@ -167,6 +167,10 @@ androidXMultiplatform {
             dependsOn(nonAndroidExcludingWebTest)
         }
 
+        linuxMain {
+            dependsOn(skikoMain)
+        }
+
         macosMain {
             dependsOn(skikoMain)
         }

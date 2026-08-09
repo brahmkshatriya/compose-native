@@ -356,9 +356,8 @@ internal constructor(
 
     internal var anchoredDraggableMotionSpec: AnimationSpec<Float> = BottomSheetAnimationSpec
 
-    @Suppress("Deprecation")
     internal var anchoredDraggableState: AnchoredDraggableState<SheetValue> =
-        AnchoredDraggableState(initialValue = initialValue, confirmValueChange = confirmValueChange)
+        AnchoredDraggableState(initialValue = initialValue)
 
     /**
      * Calculate the new offset for a [delta] to ensure it is coerced in the bounds
@@ -636,9 +635,11 @@ internal fun ConsumeSwipeWithinBottomSheetBoundsNestedScrollConnection(
     sheetState: SheetState,
     orientation: Orientation,
     flingBehavior: FlingBehavior,
+    isMouseWheelScroll: () -> Boolean = { false },
 ): NestedScrollConnection =
     object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (isMouseWheelScroll()) return Offset.Zero
             val delta = available.toFloat()
             return if (delta < 0 && source == NestedScrollSource.UserInput) {
                 sheetState.anchoredDraggableState.dispatchRawDelta(delta).toOffset()
@@ -652,6 +653,7 @@ internal fun ConsumeSwipeWithinBottomSheetBoundsNestedScrollConnection(
             available: Offset,
             source: NestedScrollSource,
         ): Offset {
+            if (isMouseWheelScroll()) return Offset.Zero
             return if (source == NestedScrollSource.UserInput) {
                 sheetState.anchoredDraggableState.dispatchRawDelta(available.toFloat()).toOffset()
             } else {
@@ -674,6 +676,10 @@ internal fun ConsumeSwipeWithinBottomSheetBoundsNestedScrollConnection(
 
         override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
             val toFling = available.toFloat()
+            if (toFling == 0f) {
+                sheetState.anchoredDraggableState.snapTo(sheetState.targetValue)
+                return Velocity.Zero
+            }
             val consumedByAnchoredDraggableFling = sheetState.anchoredDrag(flingBehavior, toFling)
             return Velocity(consumed.x, consumedByAnchoredDraggableFling)
         }

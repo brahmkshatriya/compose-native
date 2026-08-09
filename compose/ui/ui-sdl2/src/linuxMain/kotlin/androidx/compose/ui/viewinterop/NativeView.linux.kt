@@ -1,6 +1,7 @@
 @file:OptIn(
     kotlinx.cinterop.ExperimentalForeignApi::class,
     androidx.compose.ui.ExperimentalComposeUiApi::class,
+    org.jetbrains.skiko.InternalSkikoApi::class,
 )
 
 package androidx.compose.ui.viewinterop
@@ -19,18 +20,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Matrix
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.cairo.CairoCanvas
-import androidx.compose.ui.graphics.cairo.CairoImage
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.SkiaRasterImage
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.skiaCanvas
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -47,162 +46,72 @@ import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.onLayoutRectChanged
-import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.platform.LocalDensity
-import cairo.kgpu_layer_create
-import cairo.kgpu_layer_destroy
-import cairo.kgpu_layer_draw_mesh
-import cairo.kgpu_layer_finish
-import cairo.kgpu_layer_framebuffer
-import cairo.kgpu_layer_prepare
-import cairo.kgpu_layer_read_pixels
-import cairo.kgpu_context_renderer
+import androidx.compose.ui.unit.IntSize
 import kotlinx.cinterop.COpaquePointer
-import kotlinx.cinterop.addressOf
-import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.toKString
-import kotlinx.cinterop.usePinned
+import linuxdesktop.kgl_layer_create
+import linuxdesktop.kgl_layer_destroy
+import linuxdesktop.kgl_layer_finish
+import linuxdesktop.kgl_layer_framebuffer
+import linuxdesktop.kgl_layer_prepare
+import linuxdesktop.kgl_layer_texture
+import linuxdesktop.kgl_renderer
+import org.jetbrains.skiko.GraphicsApi
+import org.jetbrains.skiko.SkiaLayer
 
 internal val LocalGpuInteropRegistry = staticCompositionLocalOf<GpuInteropRegistry?> { null }
 
 internal val LocalNativeViewInvalidationDispatcher =
     staticCompositionLocalOf<((() -> Unit) -> Unit)> { { it() } }
 
-internal enum class GpuInteropEmission {
-    Unsupported,
-    External,
-    Rasterized,
-}
+internal class GpuInteropRegistry(private val layer: SkiaLayer) {
+    val rendererDescription: String =
+        layer.withOpenGlContext { kgl_renderer()?.toKString() ?: layer.rendererDescription }
 
-internal interface GpuInteropLayerCommand {
-    val compositionId: Long
-    fun draw(gpu: COpaquePointer): Boolean
-    fun snapshot(gpu: COpaquePointer?): CairoImage? = null
+    fun create(view: InteropView): GpuNativeViewLayer = GpuNativeViewLayer(this, view)
 
-    fun drawRasterized(
-        gpu: COpaquePointer?,
-        canvas: CairoCanvas,
-        maskInLocal: Path,
+    internal val isAvailable: Boolean
+        get() = layer.renderApi == GraphicsApi.OPENGL
+
+    internal fun withExternalGl(block: () -> Boolean): Boolean {
+        if (!isAvailable) return false
+        return try {
+            layer.withOpenGlContext(block)
+        } catch (failure: Throwable) {
+            if (isAvailable) throw failure
+            false
+        }
+    }
+
+    internal fun drawTexture(
+        textureId: Int,
+        width: Int,
+        height: Int,
+        canvas: androidx.compose.ui.graphics.Canvas,
     ): Boolean {
-        val image = snapshot(gpu) ?: return false
+        if (!isAvailable) return false
+        return try {
+            layer.drawOpenGlTexture(textureId, width, height, canvas.skiaCanvas)
+            true
+        } catch (failure: Throwable) {
+            if (isAvailable) throw failure
+            false
+        }
+    }
+
+    internal fun destroyLayer(handle: COpaquePointer) {
+        if (!isAvailable) {
+            kgl_layer_destroy(handle)
+            return
+        }
         try {
-            canvas.save()
-            try {
-                canvas.clipPath(maskInLocal)
-                canvas.drawSurface(image.surface, 0f, 0f, 1f, BlendMode.SrcOver)
-            } finally {
-                canvas.restore()
-            }
-        } finally {
-            image.close()
+            layer.withOpenGlContext { kgl_layer_destroy(handle) }
+        } catch (failure: Throwable) {
+            if (isAvailable) throw failure
+            kgl_layer_destroy(handle)
         }
-        return true
-    }
-}
-
-internal interface GpuInteropCompositionRecorder {
-    fun emit(
-        layer: GpuInteropLayerCommand,
-        canvas: androidx.compose.ui.graphics.Canvas,
-        maskInRoot: Path,
-        maskInLocal: Path,
-    ): GpuInteropEmission
-}
-
-internal class GpuInteropRegistry(
-    private val onFallbackDamage: (Rect) -> Unit = {},
-) {
-    var context: COpaquePointer? = null
-    var rootCanvas: CairoCanvas? = null
-    var compositionRecorder: GpuInteropCompositionRecorder? = null
-    private val layers = mutableListOf<GpuNativeViewLayer>()
-    private val fallbackMasks = mutableMapOf<Long, Path>()
-    private var nextCompositionId = 1L
-
-    fun create(view: InteropView): GpuNativeViewLayer =
-        GpuNativeViewLayer(this, nextCompositionId++, view).also(layers::add)
-
-    fun remove(layer: GpuNativeViewLayer) {
-        layers.remove(layer)
-        fallbackMasks.remove(layer.compositionId)
-    }
-
-    fun draw(): Int {
-        val gpu = context ?: return 0
-        val fallbackIds = fallbackMasks.keys.toSet()
-        var drawnLayers = 0
-        layers.toList().forEach {
-            if (it.compositionId in fallbackIds && it.draw(gpu)) drawnLayers++
-        }
-        return drawnLayers
-    }
-
-    fun emitBoundary(
-        layer: GpuInteropLayerCommand,
-        canvas: androidx.compose.ui.graphics.Canvas,
-        maskInRoot: Path,
-        maskInLocal: Path,
-    ): GpuInteropEmission {
-        val result =
-            compositionRecorder?.emit(layer, canvas, maskInRoot, maskInLocal)
-                ?: GpuInteropEmission.Unsupported
-        if (result != GpuInteropEmission.Unsupported) {
-            fallbackMasks.remove(layer.compositionId)
-        }
-        return result
-    }
-
-    fun setFallbackMask(layer: GpuInteropLayerCommand, path: Path) {
-        fallbackMasks[layer.compositionId] = Path().also { it.addPath(path) }
-    }
-
-    fun refreshFallbackMask(
-        layer: GpuInteropLayerCommand,
-        path: Path,
-        previousBounds: Rect,
-    ): Boolean {
-        if (layer.compositionId !in fallbackMasks) return false
-        setFallbackMask(layer, path)
-        onFallbackDamage(previousBounds)
-        onFallbackDamage(path.getBounds())
-        return true
-    }
-
-    fun applyFallbackMasks() {
-        val canvas = rootCanvas ?: return
-        fallbackMasks.values.forEach(canvas::clearInteropPathInRoot)
-    }
-
-    val rasterReadbacks: Long
-        get() = layers.sumOf(GpuNativeViewLayer::rasterReadbacks)
-
-    val rasterReadbackBytes: Long
-        get() = layers.sumOf(GpuNativeViewLayer::rasterReadbackBytes)
-}
-
-internal class GpuNativeViewSnapshotCacheState {
-    private var renderGeneration = 0L
-    private var snapshotGeneration = -1L
-
-    fun onRendered() {
-        renderGeneration++
-    }
-
-    fun invalidateSnapshot() {
-        snapshotGeneration = -1L
-    }
-
-    val needsReadback: Boolean
-        get() = snapshotGeneration != renderGeneration
-
-    fun onReadback() {
-        snapshotGeneration = renderGeneration
     }
 }
 
@@ -224,204 +133,90 @@ internal class GpuNativeViewRenderInvalidation {
 
 internal class GpuNativeViewLayer(
     private val registry: GpuInteropRegistry,
-    override val compositionId: Long,
     private val view: InteropView,
-) : GpuInteropLayerCommand, AutoCloseable {
-    private companion object {
-        // Matches the subdivision used by the Cairo graphics-layer perspective renderer.
-        const val MeshColumns = 12
-        const val MeshRows = 12
-        // Cairo antialiasing can expose a subpixel fringe between the transparent root cutout
-        // and an exactly coincident external polygon. Draw slightly underneath the cutout; the
-        // retained CPU scene remains the authoritative clip and covers this overdraw completely.
-        const val EdgeOverdrawPixels = 1.5f
-    }
-
-    private val handle = checkNotNull(kgpu_layer_create())
-    internal val transformedMask = Path()
-    private val localMask = Path()
+) : AutoCloseable {
+    private var handle: COpaquePointer? = checkNotNull(kgl_layer_create())
     private var size = IntSize.Zero
     private var density = 1f
-    private var meshPositions = FloatArray(0)
     private val renderInvalidation = GpuNativeViewRenderInvalidation()
-    private val snapshotCacheState = GpuNativeViewSnapshotCacheState()
-    private var cachedSnapshot: CairoImage? = null
     private var hasRendered = false
-
-    internal var rasterReadbacks = 0L
-        private set
-    internal var rasterReadbackBytes = 0L
-        private set
 
     fun resize(value: IntSize, density: Float) {
         if (size != value || this.density != density) {
             size = value
             this.density = density
             renderInvalidation.request()
-            snapshotCacheState.invalidateSnapshot()
         }
     }
 
-    fun updateDensity(value: Float) {
-        if (density != value) {
-            density = value
-            renderInvalidation.request()
-        }
+    fun updateDensity(value: Float): Boolean {
+        if (density == value) return false
+        density = value
+        renderInvalidation.request()
+        return true
     }
 
     fun requestRender() {
         renderInvalidation.request()
     }
 
-    fun updateGeometry(coordinates: LayoutCoordinates, mask: Path) {
-        localMask.reset()
-        localMask.fillType = mask.fillType
-        localMask.addPath(mask)
-        refreshGeometry(coordinates)
-    }
-
-    fun refreshGeometry(coordinates: LayoutCoordinates): Boolean {
-        if (!coordinates.isAttached || size.width <= 0 || size.height <= 0 || localMask.isEmpty) {
-            return false
-        }
-        val transform = Matrix()
-        coordinates.findRootCoordinates().transformFrom(coordinates, transform)
-        transformedMask.reset()
-        transformedMask.fillType = localMask.fillType
-        transformedMask.addPath(localMask)
-        transformedMask.transform(transform)
-
-        val stride = MeshColumns + 1
-        val requiredSize = (MeshRows + 1) * stride * 2
-        val positions =
-            if (meshPositions.size == requiredSize) meshPositions else FloatArray(requiredSize)
-        for (row in 0..MeshRows) {
-            for (column in 0..MeshColumns) {
-                val horizontalFraction = column.toFloat() / MeshColumns
-                val verticalFraction = row.toFloat() / MeshRows
-                val local =
-                    androidx.compose.ui.geometry.Offset(
-                        -EdgeOverdrawPixels +
-                            (size.width + EdgeOverdrawPixels * 2f) * horizontalFraction,
-                        -EdgeOverdrawPixels +
-                            (size.height + EdgeOverdrawPixels * 2f) * verticalFraction,
-                    )
-                val rootPosition = coordinates.localToRoot(local)
-                val index = (row * stride + column) * 2
-                positions[index] = rootPosition.x
-                positions[index + 1] = rootPosition.y
-            }
-        }
-        meshPositions = positions
-        return true
-    }
-
-    private fun render(gpu: COpaquePointer): Boolean {
+    private fun render(): Boolean {
+        val layer = handle ?: return false
+        if (!registry.isAvailable) return false
         if (size.width <= 0 || size.height <= 0) return false
-        if (kgpu_layer_prepare(gpu, handle, size.width, size.height) == 0) return false
-        return try {
-            view.renderOpenGl(
-                OpenGlInteropRenderTarget(
-                    framebuffer = kgpu_layer_framebuffer(handle),
-                    width = size.width,
-                    height = size.height,
-                    internalFormat = 0x8058, // GL_RGBA8
-                    renderer = kgpu_context_renderer(gpu)?.toKString() ?: "unknown",
-                    density = density,
+        return registry.withExternalGl {
+            if (kgl_layer_prepare(layer, size.width, size.height) == 0) {
+                return@withExternalGl false
+            }
+            try {
+                view.renderOpenGl(
+                    OpenGlInteropRenderTarget(
+                        framebuffer = kgl_layer_framebuffer(layer).toInt(),
+                        width = size.width,
+                        height = size.height,
+                        internalFormat = 0x8058, // GL_RGBA8
+                        renderer = registry.rendererDescription,
+                        density = density,
+                    )
                 )
-            )
-        } finally {
-            kgpu_layer_finish(gpu)
+            } finally {
+                kgl_layer_finish(layer)
+            }
         }
     }
 
-    private fun updateTexture(gpu: COpaquePointer): Boolean {
-        renderInvalidation.consume {
-            // The dirty bit is cleared before entering native code. An update callback raised
-            // during rendering therefore remains pending for the following compositor frame.
-            render(gpu).also { rendered ->
-                if (rendered) {
-                    hasRendered = true
-                    snapshotCacheState.onRendered()
-                }
-            }
-        }
+    private fun updateTexture(): Boolean {
+        if (renderInvalidation.consume(::render)) hasRendered = true
         return hasRendered
     }
 
-    override fun draw(gpu: COpaquePointer): Boolean {
-        val positions = meshPositions
-        if (positions.isEmpty() || !updateTexture(gpu)) return false
-        positions.usePinned {
-            kgpu_layer_draw_mesh(
-                gpu,
-                handle,
-                it.addressOf(0),
-                MeshColumns,
-                MeshRows,
-                1f,
-            )
-        }
-        return true
-    }
-
-    override fun drawRasterized(
-        gpu: COpaquePointer?,
-        canvas: CairoCanvas,
-        maskInLocal: Path,
-    ): Boolean {
-        val context = gpu ?: return false
-        if (size.width <= 0 || size.height <= 0 || !updateTexture(context)) return false
-        var image = cachedSnapshot
-        if (image == null || image.width != size.width || image.height != size.height) {
-            image?.close()
-            image = CairoImage(size.width, size.height)
-            cachedSnapshot = image
-            snapshotCacheState.invalidateSnapshot()
-        }
-        if (snapshotCacheState.needsReadback) {
-            val copied =
-                kgpu_layer_read_pixels(
-                    context,
-                    handle,
-                    image.surface.data.reinterpret(),
-                    size.width,
-                    size.height,
-                    image.surface.stride,
-                )
-            if (copied <= 0) return false
-            image.surface.markDirty()
-            snapshotCacheState.onReadback()
-            rasterReadbacks++
-            rasterReadbackBytes += copied
-        }
-        canvas.save()
-        try {
-            canvas.clipPath(maskInLocal)
-            canvas.drawSurface(image.surface, 0f, 0f, 1f, BlendMode.SrcOver)
-        } finally {
-            canvas.restore()
-        }
-        return true
+    fun draw(canvas: androidx.compose.ui.graphics.Canvas): Boolean {
+        val layer = handle ?: return false
+        if (!registry.isAvailable) return false
+        if (!updateTexture()) return false
+        val texture = kgl_layer_texture(layer).toInt()
+        if (texture == 0) return false
+        return registry.drawTexture(texture, size.width, size.height, canvas)
     }
 
     override fun close() {
-        registry.remove(this)
-        cachedSnapshot?.close()
-        cachedSnapshot = null
-        registry.context?.let { kgpu_layer_destroy(it, handle) }
+        val layer = handle ?: return
+        handle = null
+        registry.destroyLayer(layer)
     }
 }
 
 private class NativeViewFrame(size: IntSize) : AutoCloseable {
-    val image = CairoImage(size.width, size.height)
+    val image = SkiaRasterImage(size.width, size.height)
     val target =
         InteropRenderTarget(
-            pixels = image.surface.data,
+            pixels = image.pixels,
             width = size.width,
             height = size.height,
-            stride = image.surface.stride,
+            stride = image.stride,
         )
+
+    fun notifyPixelsChanged() = image.notifyPixelsChanged()
 
     override fun close() = image.close()
 }
@@ -429,13 +224,10 @@ private class NativeViewFrame(size: IntSize) : AutoCloseable {
 /**
  * Places a native framebuffer renderer inside Compose.
  *
- * [clipPath] supplies an optional local-coordinate alpha mask. GPU views are projected through
- * the current Compose transform (including perspective rotation), and the path is cut from the
- * Cairo frame with antialiased coverage before the external texture is composited. Root-level GPU
- * views remain zero-readback. When an isolated Compose layer requires CPU composition, one retained
- * snapshot is refreshed after each successful native render and reused for geometry-only redraws.
- *
- * Compose content can be drawn over the native view, and pointer input remains handled by Compose.
+ * CPU renderers receive a mutable Skia raster buffer. OpenGL renderers receive an FBO from the
+ * window's current SDL context; its color texture is borrowed by Skia and drawn without readback.
+ * Compose transforms, clipping, content drawn above the view, and pointer input remain native to
+ * the regular scene graph.
  */
 @Composable
 fun NativeView(
@@ -460,33 +252,25 @@ fun NativeView(
             }
         }
     var nativeFrame by remember { mutableStateOf<NativeViewFrame?>(null) }
-    val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
-    val lastLayoutBounds = remember { arrayOfNulls<IntRect>(1) }
     var renderRequest by remember(view) { mutableLongStateOf(1L) }
     val renderedRequest = remember(view) { longArrayOf(Long.MIN_VALUE) }
-    val lastGpuEmission = remember(view) { arrayOf(GpuInteropEmission.Unsupported) }
     val boundsMask = remember { Path() }
     val callbackActive = remember(view) { booleanArrayOf(false) }
-    val requestRender: () -> Unit = remember(view, gpuLayer, dispatchInvalidation) {
-        {
-            dispatchInvalidation {
-                if (callbackActive[0]) {
-                    if (gpuLayer != null) {
-                        gpuLayer.requestRender()
-                        if (lastGpuEmission[0] == GpuInteropEmission.Rasterized) {
-                            renderRequest += 1L
-                        }
-                    } else {
+    val requestRender: () -> Unit =
+        remember(view, gpuLayer, dispatchInvalidation) {
+            {
+                dispatchInvalidation {
+                    if (callbackActive[0]) {
+                        gpuLayer?.requestRender()
                         renderRequest += 1L
                     }
                 }
             }
         }
-    }
 
     SideEffect {
         update(view)
-        gpuLayer?.updateDensity(density)
+        if (gpuLayer?.updateDensity(density) == true) requestRender()
     }
 
     LaunchedEffect(view, view.continuousRendering) {
@@ -505,8 +289,6 @@ fun NativeView(
             view.setRenderInvalidationCallback(null)
             nativeFrame?.close()
             nativeFrame = null
-            coordinates[0] = null
-            lastLayoutBounds[0] = null
             gpuLayer?.close()
             onRelease(view)
         }
@@ -517,8 +299,7 @@ fun NativeView(
             modifier
                 .then(
                     if (view.acceptsInput) {
-                        Modifier
-                            .focusRequester(focusRequester)
+                        Modifier.focusRequester(focusRequester)
                             .onFocusChanged { view.setFocused(it.isFocused) }
                             .focusable()
                             .onKeyEvent { event ->
@@ -550,18 +331,24 @@ fun NativeView(
                                         val type =
                                             when (event.type) {
                                                 PointerEventType.Press,
-                                                PointerEventType.Release -> InteropPointerEventType.Button
-                                                PointerEventType.Scroll -> InteropPointerEventType.Scroll
+                                                PointerEventType.Release ->
+                                                    InteropPointerEventType.Button
+                                                PointerEventType.Scroll ->
+                                                    InteropPointerEventType.Scroll
                                                 else -> InteropPointerEventType.Move
                                             }
                                         if (event.type == PointerEventType.Press) {
                                             focusRequester.requestFocus()
                                         }
                                         var modifiers = 0
-                                        if (event.keyboardModifiers.isCtrlPressed) modifiers = modifiers or 1
-                                        if (event.keyboardModifiers.isShiftPressed) modifiers = modifiers or 2
-                                        if (event.keyboardModifiers.isAltPressed) modifiers = modifiers or 4
-                                        if (event.keyboardModifiers.isMetaPressed) modifiers = modifiers or 8
+                                        if (event.keyboardModifiers.isCtrlPressed)
+                                            modifiers = modifiers or 1
+                                        if (event.keyboardModifiers.isShiftPressed)
+                                            modifiers = modifiers or 2
+                                        if (event.keyboardModifiers.isAltPressed)
+                                            modifiers = modifiers or 4
+                                        if (event.keyboardModifiers.isMetaPressed)
+                                            modifiers = modifiers or 8
                                         val handled =
                                             view.sendPointerEvent(
                                                 InteropPointerEvent(
@@ -588,37 +375,18 @@ fun NativeView(
                     if (size.width <= 0 || size.height <= 0) return@onSizeChanged
                     if (gpuLayer != null) {
                         gpuLayer.resize(size, density)
+                        renderRequest += 1L
                         return@onSizeChanged
                     }
                     val current = nativeFrame
-                    if (current?.target?.width == size.width && current.target.height == size.height) {
+                    if (
+                        current?.target?.width == size.width && current.target.height == size.height
+                    ) {
                         return@onSizeChanged
                     }
                     current?.close()
                     nativeFrame = NativeViewFrame(size)
                     renderRequest += 1L
-                }
-                .onPlaced { coordinates[0] = it }
-                .onLayoutRectChanged(throttleMillis = 0, debounceMillis = 0) { bounds ->
-                    val nextBounds = bounds.boundsInRoot
-                    if (lastLayoutBounds[0] == nextBounds) return@onLayoutRectChanged
-                    lastLayoutBounds[0] = nextBounds
-                    val placed = coordinates[0] ?: return@onLayoutRectChanged
-                    dispatchInvalidation {
-                        val layer = gpuLayer
-                        if (callbackActive[0] && layer != null) {
-                            val previousBounds = layer.transformedMask.getBounds()
-                            if (layer.refreshGeometry(placed)) {
-                                val fallbackMoved =
-                                    gpuRegistry?.refreshFallbackMask(
-                                        layer,
-                                        layer.transformedMask,
-                                        previousBounds,
-                                    ) == true
-                                if (fallbackMoved) renderRequest += 1L
-                            }
-                        }
-                    }
                 }
     ) {
         val requestedRender = renderRequest
@@ -630,40 +398,18 @@ fun NativeView(
                 }
         if (gpuLayer != null) {
             renderedRequest[0] = requestedRender
-            coordinates[0]?.let { gpuLayer.updateGeometry(it, mask) }
-            val emission =
-                gpuRegistry?.emitBoundary(
-                    gpuLayer,
-                    drawContext.canvas,
-                    gpuLayer.transformedMask,
-                    mask,
-                ) ?: GpuInteropEmission.Unsupported
-            lastGpuEmission[0] = emission
-            when (emission) {
-                GpuInteropEmission.Rasterized -> Unit
-                GpuInteropEmission.External ->
-                    clipPath(mask) {
-                        drawRect(Color.Transparent, blendMode = BlendMode.Clear)
-                    }
-                GpuInteropEmission.Unsupported -> {
-                    gpuRegistry?.setFallbackMask(gpuLayer, gpuLayer.transformedMask)
-                    clipPath(mask) {
-                        drawRect(Color.Transparent, blendMode = BlendMode.Clear)
-                    }
-                }
-            }
+            clipPath(mask) { drawIntoCanvas { gpuLayer.draw(it) } }
             return@Canvas
         }
         val frame = nativeFrame ?: return@Canvas
         if (renderedRequest[0] != requestedRender) {
-            frame.image.surface.flush()
-            if (view.render(frame.target)) frame.image.surface.markDirty()
+            if (view.render(frame.target)) frame.notifyPixelsChanged()
             renderedRequest[0] = requestedRender
         }
         if (clipPath == null) {
-            drawImage(frame.image)
+            drawImage(frame.image.imageBitmap)
         } else {
-            clipPath(mask) { drawImage(frame.image) }
+            clipPath(mask) { drawImage(frame.image.imageBitmap) }
         }
     }
 }

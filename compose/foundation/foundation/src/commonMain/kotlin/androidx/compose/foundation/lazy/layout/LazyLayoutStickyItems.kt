@@ -17,34 +17,52 @@
 package androidx.compose.foundation.lazy.layout
 
 import androidx.collection.IntList
+import androidx.collection.MutableIntList
 import androidx.collection.emptyIntList
 import androidx.collection.intListOf
+import androidx.collection.mutableIntListOf
 import androidx.compose.ui.util.fastFilter
-import androidx.compose.ui.util.fastFirstOrNull
+import androidx.compose.ui.util.fastForEach
+
+internal class StickyItems(
+    val indexes: IntList,
+    private val nonSlidingIndexes: IntList = emptyIntList(),
+) {
+    val isEmpty: Boolean
+        get() = indexes.isEmpty()
+
+    fun contains(index: Int): Boolean = indexes.contains(index)
+
+    fun isSlidable(index: Int): Boolean = !nonSlidingIndexes.contains(index)
+}
+
+internal val EmptyStickyItems = StickyItems(emptyIntList())
 
 /** Defines how sticky items should be placed in a Lazy Layout */
 internal interface StickyItemsPlacement {
 
     /**
-     * Determines which indices in [stickyItems] should be sticking, that is, have their placement
+     * Determines which items in [stickyItems] should be sticking, that is, have their placement
      * altered.
      *
      * @param firstVisibleItemIndex The first visible item in the layout
      * @param lastVisibleItemIndex The last visible item in the layout
-     * @param stickyItems The indices of candidate items for sticking
+     * @param stickyItems The candidate items for sticking
      * @return A list of items that should be sticking.
      */
     fun getStickingIndices(
         firstVisibleItemIndex: Int,
         lastVisibleItemIndex: Int,
-        stickyItems: IntList,
+        stickyItems: StickyItems,
     ): IntList
 
     /**
      * This method is executed for each item returned from [getStickingIndices] to determine their
      * final placement.
      *
+     * @param stickyItems The candidate items for sticking
      * @param visibleStickyItems The currently visible sticky items.
+     * @param stickingItems The sticking items that have already been positioned.
      * @param itemIndex The current sticking item index.
      * @param itemSize The current sticking item main axis size.
      * @param itemOffset The initial offset for this sticking item. If this item doesn't have an
@@ -56,7 +74,9 @@ internal interface StickyItemsPlacement {
      * @param isVertical If the container's orientation is vertical
      */
     fun calculateStickingItemOffset(
+        stickyItems: StickyItems,
         visibleStickyItems: List<LazyLayoutMeasuredItem>,
+        stickingItems: List<LazyLayoutMeasuredItem>,
         itemIndex: Int,
         itemSize: Int,
         itemOffset: Int,
@@ -76,7 +96,9 @@ internal interface StickyItemsPlacement {
         val StickToTopPlacement =
             object : StickyItemsPlacement {
                 override fun calculateStickingItemOffset(
+                    stickyItems: StickyItems,
                     visibleStickyItems: List<LazyLayoutMeasuredItem>,
+                    stickingItems: List<LazyLayoutMeasuredItem>,
                     itemIndex: Int,
                     itemSize: Int,
                     itemOffset: Int,
@@ -88,23 +110,38 @@ internal interface StickyItemsPlacement {
                 ): Int {
 
                     // the next item offset
-                    val nextStickyItemOffset =
-                        visibleStickyItems
-                            .fastFirstOrNull { it.index != itemIndex }
-                            ?.mainAxisOffset(isVertical) ?: Int.MIN_VALUE
+                    var nextStickyItemIndex = Int.MAX_VALUE
+                    var nextStickyItemOffset = Int.MIN_VALUE
+                    visibleStickyItems.fastForEach {
+                        if (it.index > itemIndex && it.index < nextStickyItemIndex) {
+                            nextStickyItemIndex = it.index
+                            nextStickyItemOffset = it.mainAxisOffset(isVertical)
+                        }
+                    }
 
                     debugLog { "Next Item Offset=$nextStickyItemOffset" }
 
+                    var stackOffset = 0
+                    stickingItems.fastForEach {
+                        if (!stickyItems.isSlidable(it.index)) {
+                            stackOffset =
+                                it.mainAxisOffset(isVertical) +
+                                    it.mainAxisSizeWithSpacings(isVertical)
+                        }
+                    }
+
                     var updatedItemOffset =
                         if (itemOffset == Int.MIN_VALUE) {
-                            -beforeContentPadding
+                            stackOffset
                         } else {
-                            maxOf(-beforeContentPadding, itemOffset)
+                            maxOf(stackOffset, itemOffset)
                         }
 
                     // If there's a next item overlapping with the current item, the offset
                     // should represent that.
-                    if (nextStickyItemOffset != Int.MIN_VALUE) {
+                    if (
+                        stickyItems.isSlidable(itemIndex) && nextStickyItemOffset != Int.MIN_VALUE
+                    ) {
                         updatedItemOffset =
                             minOf(updatedItemOffset, nextStickyItemOffset - itemSize)
                     }
@@ -119,24 +156,27 @@ internal interface StickyItemsPlacement {
                 override fun getStickingIndices(
                     firstVisibleItemIndex: Int,
                     lastVisibleItemIndex: Int,
-                    stickyItems: IntList,
+                    stickyItems: StickyItems,
                 ): IntList {
                     // no items present
-                    if ((lastVisibleItemIndex - firstVisibleItemIndex) < 0 || stickyItems.isEmpty())
+                    if ((lastVisibleItemIndex - firstVisibleItemIndex) < 0 || stickyItems.isEmpty)
                         return emptyIntList()
 
                     // First non sticking visible item
                     val firstVisible = firstVisibleItemIndex
+                    val stickyItemIndexes = stickyItems.indexes
 
                     debugLog { "First Visible Item Index=${firstVisible}" }
 
                     var currentHeaderIndex = -1
+                    var currentHeaderPosition = -1
 
                     // The sticking header will be the first one after the first visible item
                     // or the first visible item itself.
-                    for (index in stickyItems.indices) {
-                        if (stickyItems[index] <= firstVisible) {
-                            currentHeaderIndex = stickyItems[index]
+                    for (index in stickyItemIndexes.indices) {
+                        if (stickyItemIndexes[index] <= firstVisible) {
+                            currentHeaderIndex = stickyItemIndexes[index]
+                            currentHeaderPosition = index
                         } else {
                             break
                         }
@@ -146,7 +186,39 @@ internal interface StickyItemsPlacement {
                         // we have no headers needing special handling
                         emptyIntList()
                     } else {
-                        intListOf(currentHeaderIndex)
+                        var stickingItems: MutableIntList? = null
+                        var hasNonSlidingHeader = false
+
+                        for (index in 0..currentHeaderPosition) {
+                            val stickyItemIndex = stickyItemIndexes[index]
+                            if (!stickyItems.isSlidable(stickyItemIndex)) {
+                                val stickingItemsForHeader =
+                                    stickingItems ?: mutableIntListOf().also { stickingItems = it }
+                                stickingItemsForHeader.add(stickyItemIndex)
+                                hasNonSlidingHeader = true
+                            }
+                        }
+
+                        if (stickingItems?.contains(currentHeaderIndex) != true) {
+                            val stickingItemsForHeader =
+                                stickingItems ?: mutableIntListOf().also { stickingItems = it }
+                            stickingItemsForHeader.add(currentHeaderIndex)
+                            if (!stickyItems.isSlidable(currentHeaderIndex)) {
+                                hasNonSlidingHeader = true
+                            }
+                        }
+
+                        if (hasNonSlidingHeader) {
+                            val stickingItemsForVisible =
+                                stickingItems ?: mutableIntListOf().also { stickingItems = it }
+                            for (index in currentHeaderPosition + 1 until stickyItemIndexes.size) {
+                                val stickyItemIndex = stickyItemIndexes[index]
+                                if (stickyItemIndex > lastVisibleItemIndex) break
+                                stickingItemsForVisible.add(stickyItemIndex)
+                            }
+                        }
+
+                        stickingItems ?: intListOf(currentHeaderIndex)
                     }
                 }
             }
@@ -174,7 +246,7 @@ internal fun <T : LazyLayoutMeasuredItem> StickyItemsPlacement?.applyStickyItems
     firstVisibleItemIndex: Int,
     lastVisibleItemIndex: Int,
     positionedItems: MutableList<T>,
-    stickyItems: IntList,
+    stickyItems: StickyItems,
     beforeContentPadding: Int,
     afterContentPadding: Int,
     layoutWidth: Int,
@@ -182,7 +254,7 @@ internal fun <T : LazyLayoutMeasuredItem> StickyItemsPlacement?.applyStickyItems
     isVertical: Boolean,
     getAndMeasure: (Int) -> T,
 ): List<T> {
-    return if (this != null && positionedItems.isNotEmpty() && stickyItems.isNotEmpty()) {
+    return if (this != null && positionedItems.isNotEmpty() && !stickyItems.isEmpty) {
         // gather sticking items
         val stickingItems =
             getStickingIndices(firstVisibleItemIndex, lastVisibleItemIndex, stickyItems)
@@ -202,7 +274,9 @@ internal fun <T : LazyLayoutMeasuredItem> StickyItemsPlacement?.applyStickyItems
                 }
             val offset =
                 calculateStickingItemOffset(
+                    stickyItems,
                     visibleStickyItems,
+                    positionedStickingItems,
                     stickingIndex,
                     item.mainAxisSizeWithSpacings(isVertical),
                     if (itemIndex == -1) Int.MIN_VALUE else item.mainAxisOffset(isVertical),
@@ -215,6 +289,15 @@ internal fun <T : LazyLayoutMeasuredItem> StickyItemsPlacement?.applyStickyItems
             item.makeNonScrollable()
             item.position(offset, 0, layoutWidth, layoutHeight)
             positionedStickingItems.add(item)
+        }
+        positionedStickingItems.sortWith { a, b ->
+            val aIsSlidable = stickyItems.isSlidable(a.index)
+            val bIsSlidable = stickyItems.isSlidable(b.index)
+            if (aIsSlidable != bIsSlidable) {
+                if (aIsSlidable) -1 else 1
+            } else {
+                a.index.compareTo(b.index)
+            }
         }
         positionedStickingItems
     } else {

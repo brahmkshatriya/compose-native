@@ -16,14 +16,39 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.KeyShortcut
+import androidx.compose.ui.platform.registerSkikoComposeImplementation
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WindowPlatformFeaturesTest {
     @Test
+    fun onlyFloatingPlacementPersistsWindowGeometry() {
+        assertTrue(WindowPlacement.Floating.persistsFloatingGeometry())
+        assertFalse(WindowPlacement.Maximized.persistsFloatingGeometry())
+        assertFalse(WindowPlacement.Fullscreen.persistsFloatingGeometry())
+    }
+
+    @Test
+    fun mapsPortalColorSchemeToDarkPreference() {
+        assertNull(portalColorSchemePrefersDark(0))
+        assertTrue(portalColorSchemePrefersDark(1) == true)
+        assertFalse(portalColorSchemePrefersDark(2) == true)
+        assertNull(portalColorSchemePrefersDark(99))
+    }
+
+    @Test
+    fun mapsPortalAccentColorToComposeColor() {
+        assertNull(portalAccentColor(0))
+        assertEquals(Color(0xFF000000), portalAccentColor(0x01000000))
+        assertEquals(Color(0xFF336699), portalAccentColor(0x01336699))
+    }
+
+    @Test
     fun rasterizesPainterForWindowIcon() {
+        registerSkikoComposeImplementation()
         val image = rasterizeWindowIcon(ColorPainter(Color.Red), size = 8)
         try {
             val pixels = image.toPixelMap()
@@ -123,9 +148,7 @@ class WindowPlatformFeaturesTest {
             )
         )
         assertTrue(
-            model.activateShortcut(
-                KeyEvent(Key.S, KeyEventType.KeyDown, isCtrlPressed = true)
-            )
+            model.activateShortcut(KeyEvent(Key.S, KeyEventType.KeyDown, isCtrlPressed = true))
         )
         assertEquals(1, activations)
     }
@@ -158,5 +181,4 @@ class WindowPlatformFeaturesTest {
                 model(checked = false) {}.presentationSignature
         )
     }
-
 }

@@ -14,6 +14,18 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.painter.Painter
+import kotlinx.cinterop.ByteVar
+import kotlinx.cinterop.COpaquePointer
+import kotlinx.cinterop.CPointerVar
+import kotlinx.cinterop.IntVar
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.toKString
+import kotlinx.cinterop.usePinned
+import kotlinx.cinterop.value
 import linuxdesktop.kld_free_string
 import linuxdesktop.kld_tray_create
 import linuxdesktop.kld_tray_destroy
@@ -23,16 +35,6 @@ import linuxdesktop.kld_tray_menu_commit
 import linuxdesktop.kld_tray_poll
 import linuxdesktop.kld_tray_supported
 import linuxdesktop.kld_tray_update
-import kotlinx.cinterop.ByteVar
-import kotlinx.cinterop.COpaquePointer
-import kotlinx.cinterop.CPointerVar
-import kotlinx.cinterop.IntVar
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
-import kotlinx.cinterop.reinterpret
-import kotlinx.cinterop.toKString
-import kotlinx.cinterop.value
 
 /** Whether the current desktop session exposes a StatusNotifier watcher. */
 val isTraySupported: Boolean
@@ -44,8 +46,7 @@ class TrayState {
     }
 }
 
-@Composable
-fun rememberTrayState(): TrayState = remember { TrayState() }
+@Composable fun rememberTrayState(): TrayState = remember { TrayState() }
 
 @Composable
 fun ApplicationScope.Tray(
@@ -55,8 +56,7 @@ fun ApplicationScope.Tray(
     onAction: () -> Unit = {},
     menu: @Composable @MenuComposable MenuScope.() -> Unit = {},
 ) {
-    @Suppress("UNUSED_VARIABLE")
-    val retainedState = state
+    @Suppress("UNUSED_VARIABLE") val retainedState = state
     val builder = LinuxMenuBuilder()
     MenuScope(builder).menu()
     val model = builder.build()
@@ -147,21 +147,25 @@ internal class LinuxTrayRegistration : AutoCloseable {
 
     private fun create(icon: Painter, title: String, tooltip: String): COpaquePointer =
         rasterizeWindowIcon(icon, TrayIconSize).use { image ->
-            memScoped {
-                val error = alloc<CPointerVar<ByteVar>>()
-                error.value = null
-                val created =
-                    kld_tray_create(
-                        title,
-                        tooltip,
-                        image.surface.data.reinterpret(),
-                        image.width,
-                        image.height,
-                        image.surface.stride,
-                        error.ptr,
-                    )
-                checkTrayError(error.value, "create tray icon")
-                checkNotNull(created) { "The desktop rejected the tray icon" }
+            val pixels = IntArray(image.width * image.height)
+            image.readPixels(pixels)
+            pixels.usePinned { pinned ->
+                memScoped {
+                    val error = alloc<CPointerVar<ByteVar>>()
+                    error.value = null
+                    val created =
+                        kld_tray_create(
+                            title,
+                            tooltip,
+                            pinned.addressOf(0).reinterpret(),
+                            image.width,
+                            image.height,
+                            image.width * 4,
+                            error.ptr,
+                        )
+                    checkTrayError(error.value, "create tray icon")
+                    checkNotNull(created) { "The desktop rejected the tray icon" }
+                }
             }
         }
 
@@ -172,25 +176,29 @@ internal class LinuxTrayRegistration : AutoCloseable {
         tooltip: String,
     ) {
         rasterizeWindowIcon(icon, TrayIconSize).use { image ->
-            memScoped {
-                val error = alloc<CPointerVar<ByteVar>>()
-                error.value = null
-                check(
-                    kld_tray_update(
-                        handle,
-                        title,
-                        tooltip,
-                        image.surface.data.reinterpret(),
-                        image.width,
-                        image.height,
-                        image.surface.stride,
-                        error.ptr,
-                    ) != 0
-                ) {
+            val pixels = IntArray(image.width * image.height)
+            image.readPixels(pixels)
+            pixels.usePinned { pinned ->
+                memScoped {
+                    val error = alloc<CPointerVar<ByteVar>>()
+                    error.value = null
+                    check(
+                        kld_tray_update(
+                            handle,
+                            title,
+                            tooltip,
+                            pinned.addressOf(0).reinterpret(),
+                            image.width,
+                            image.height,
+                            image.width * 4,
+                            error.ptr,
+                        ) != 0
+                    ) {
+                        checkTrayError(error.value, "update tray icon")
+                        "Could not update the tray icon"
+                    }
                     checkTrayError(error.value, "update tray icon")
-                    "Could not update the tray icon"
                 }
-                checkTrayError(error.value, "update tray icon")
             }
         }
     }
@@ -244,7 +252,8 @@ internal class LinuxTrayRegistration : AutoCloseable {
             val itemId = alloc<IntVar>()
             while (kld_tray_poll(current, eventType.ptr, itemId.ptr) != 0) {
                 when (eventType.value) {
-                    1, 2 -> onAction()
+                    1,
+                    2 -> onAction()
                     4 -> findMenuItem(model.entries, itemId.value)?.action?.invoke()
                 }
             }
@@ -267,7 +276,10 @@ private fun findMenuItem(entries: List<LinuxMenuEntry>, id: Int): LinuxMenuEntry
     entries.forEach { entry ->
         when (entry) {
             is LinuxMenuEntry.Item -> if (entry.id == id) return entry
-            is LinuxMenuEntry.Menu -> findMenuItem(entry.children, id)?.let { return it }
+            is LinuxMenuEntry.Menu ->
+                findMenuItem(entry.children, id)?.let {
+                    return it
+                }
             is LinuxMenuEntry.Separator -> Unit
         }
     }

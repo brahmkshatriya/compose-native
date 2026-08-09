@@ -20,8 +20,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.AnchoredDraggableDefaults
 import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.anchoredDraggable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitVerticalPointerSlopOrCancellation
+import androidx.compose.foundation.gestures.verticalDrag
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -40,12 +44,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.collapse
@@ -59,6 +71,7 @@ import androidx.compose.ui.util.fastMap
 import androidx.compose.ui.util.fastMaxOfOrNull
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
@@ -158,6 +171,56 @@ fun BottomSheetScaffold(
                     )
                 },
             )
+        }
+    }
+}
+
+private fun Modifier.touchAnchoredDraggable(
+    state: SheetState,
+    enabled: Boolean,
+    flingBehavior: FlingBehavior,
+    onTouchPointerInput: () -> Unit,
+    scope: CoroutineScope,
+): Modifier {
+    if (!enabled) return this
+
+    return pointerInput(state, flingBehavior) {
+        val velocityTracker = VelocityTracker()
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            if (down.type != PointerType.Touch) {
+                return@awaitEachGesture
+            }
+
+            onTouchPointerInput()
+            velocityTracker.resetTracking()
+            velocityTracker.addPointerInputChange(down)
+
+            var overSlop = 0f
+            val drag =
+                awaitVerticalPointerSlopOrCancellation(down.id, PointerType.Touch) { change, slop ->
+                    change.consume()
+                    overSlop = slop
+                }
+
+            if (drag != null) {
+                state.anchoredDraggableState.dispatchRawDelta(overSlop)
+                velocityTracker.addPointerInputChange(drag)
+
+                if (
+                    verticalDrag(drag.id) { change ->
+                        velocityTracker.addPointerInputChange(change)
+                        state.anchoredDraggableState.dispatchRawDelta(change.positionChange().y)
+                        change.consume()
+                    }
+                ) {
+                    scope.launch {
+                        state.anchoredDrag(flingBehavior, velocityTracker.calculateVelocity().y)
+                    }
+                } else {
+                    scope.launch { state.snapTo(state.targetValue) }
+                }
+            }
         }
     }
 }
@@ -267,6 +330,7 @@ private fun StandardBottomSheet(
     val scope = rememberCoroutineScope()
     val orientation = Orientation.Vertical
     val peekHeightPx = with(LocalDensity.current) { peekHeight.toPx() }
+    var isMouseWheelScroll by remember { mutableStateOf(false) }
     val anchoredDraggableFlingBehavior =
         AnchoredDraggableDefaults.flingBehavior(
             state = state.anchoredDraggableState,
@@ -282,6 +346,7 @@ private fun StandardBottomSheet(
                         sheetState = state,
                         orientation = orientation,
                         flingBehavior = anchoredDraggableFlingBehavior,
+                        isMouseWheelScroll = { isMouseWheelScroll },
                     )
                 }
             )
@@ -294,9 +359,12 @@ private fun StandardBottomSheet(
                 .fillMaxWidth()
                 .requiredHeightIn(min = peekHeight)
                 .then(nestedScroll)
-                .draggableAnchors(state.anchoredDraggableState, orientation) {
-                    sheetSize,
-                    constraints ->
+                .onPointerScrollY { isMouseWheelScroll = true }
+                .draggableAnchors(
+                    state.anchoredDraggableState,
+                    orientation,
+                    placeChildrenAtOffset = false,
+                ) { sheetSize, constraints ->
                     val layoutHeight = constraints.maxHeight.toFloat()
                     val sheetHeight = sheetSize.height.toFloat()
 
@@ -360,11 +428,12 @@ private fun StandardBottomSheet(
                         }
                     return@draggableAnchors newAnchors to newTarget
                 }
-                .anchoredDraggable(
-                    state = state.anchoredDraggableState,
-                    orientation = orientation,
+                .touchAnchoredDraggable(
+                    state = state,
                     enabled = sheetSwipeEnabled,
                     flingBehavior = anchoredDraggableFlingBehavior,
+                    onTouchPointerInput = { isMouseWheelScroll = false },
+                    scope = scope,
                 )
                 // Scale up the Surface vertically in case the sheet's offset overflows below the
                 // min anchor. This is done to avoid showing a gap when the sheet opens and bounces
@@ -480,13 +549,14 @@ private fun BottomSheetScaffoldLayout(
         layout(layoutWidth, layoutHeight) {
             val sheetWidth = sheetPlaceables.fastMaxOfOrNull { it.width } ?: 0
             val sheetOffsetX = max(0, (layoutWidth - sheetWidth) / 2)
+            val sheetOffsetY = sheetOffset().roundToInt()
 
             val snackbarWidth = snackbarPlaceables.fastMaxOfOrNull { it.width } ?: 0
             val snackbarHeight = snackbarPlaceables.fastMaxOfOrNull { it.height } ?: 0
             val snackbarOffsetX = (layoutWidth - snackbarWidth) / 2
             val snackbarOffsetY =
                 when (sheetState.currentValue) {
-                    PartiallyExpanded -> sheetOffset().roundToInt() - snackbarHeight
+                    PartiallyExpanded -> sheetOffsetY - snackbarHeight
                     Expanded,
                     Hidden -> layoutHeight - snackbarHeight
                 }
@@ -494,7 +564,7 @@ private fun BottomSheetScaffoldLayout(
             // Placement order is important for elevation
             bodyPlaceables.fastForEach { it.placeRelative(0, topBarHeight) }
             topBarPlaceables.fastForEach { it.placeRelative(0, 0) }
-            sheetPlaceables.fastForEach { it.placeRelative(sheetOffsetX, 0) }
+            sheetPlaceables.fastForEach { it.placeRelative(sheetOffsetX, sheetOffsetY) }
             snackbarPlaceables.fastForEach { it.placeRelative(snackbarOffsetX, snackbarOffsetY) }
         }
     }

@@ -1,38 +1,32 @@
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("AndroidXComposePlugin")
+    id("maven-publish")
 }
 
-val nativeSupportObject = layout.buildDirectory.file("native-support/native_support.o")
+group = "org.jetbrains.compose.ui"
+version = "9999.0.0-SNAPSHOT"
+
+val glInteropObject = layout.buildDirectory.file("native-support/gl_interop.o")
 val clipperEngineObject = layout.buildDirectory.file("native-support/clipper.engine.o")
 val desktopSupportObject = layout.buildDirectory.file("native-support/desktop_support.o")
 val atspiSupportObject = layout.buildDirectory.file("native-support/atspi_support.o")
 val traySupportObject = layout.buildDirectory.file("native-support/tray_support.o")
 val dragSupportObject = layout.buildDirectory.file("native-support/drag_support.o")
-val nativeSupportArchive = layout.buildDirectory.file("native-support/libcompose_sdl2.a")
+val nativeSupportArchive = layout.buildDirectory.file("native-support/libcompose_sdl3.a")
 
-val compileNativeSupport by tasks.registering(Exec::class) {
+val compileGlInterop by tasks.registering(Exec::class) {
     inputs.files(
-        "src/nativeInterop/cinterop/native_support.cpp",
-        "src/nativeInterop/cinterop/include/cairo_compose.h",
+        "src/nativeInterop/cinterop/gl_interop.cpp",
+        "src/nativeInterop/cinterop/include/linux_gl.h",
     )
-    outputs.file(nativeSupportObject)
-    doFirst { nativeSupportObject.get().asFile.parentFile.mkdirs() }
+    outputs.file(glInteropObject)
+    doFirst { glInteropObject.get().asFile.parentFile.mkdirs() }
     commandLine(
-        "c++", "-std=c++17", "-O3", "-fPIC", "-fpermissive", "-w",
-        "-Isrc/nativeInterop/cinterop/include",
+        "c++", "-std=c++17", "-O3", "-fPIC", "-w",
         "-Isrc/nativeInterop/cinterop",
-        "-I/usr/include/SDL2",
-        "-D_REENTRANT",
-        "-I/usr/include/cairo",
-        "-I/usr/include/pango-1.0",
-        "-I/usr/include/harfbuzz",
-        "-I/usr/include/glib-2.0",
-        "-I/usr/lib/glib-2.0/include",
-        "-I/usr/include/freetype2",
-        "-I/usr/include/pixman-1",
-        "-c", "src/nativeInterop/cinterop/native_support.cpp",
-        "-o", nativeSupportObject.get().asFile.absolutePath,
+        "-c", "src/nativeInterop/cinterop/gl_interop.cpp",
+        "-o", glInteropObject.get().asFile.absolutePath,
     )
 }
 
@@ -56,8 +50,10 @@ val compileDesktopSupport by tasks.registering(Exec::class) {
     outputs.file(desktopSupportObject)
     doFirst { desktopSupportObject.get().asFile.parentFile.mkdirs() }
     commandLine(
-        "c++", "-std=c++17", "-O3", "-fPIC", "-w",
+        "c++", "-std=c++17", "-O3", "-fPIC", "-pthread", "-w",
         "-Isrc/nativeInterop/cinterop/include",
+        "-I/usr/include/SDL3",
+        "-D_REENTRANT",
         "-I/usr/include/dbus-1.0",
         "-I/usr/lib/dbus-1.0/include",
         "-c", "src/nativeInterop/cinterop/desktop_support.cpp",
@@ -75,7 +71,7 @@ val compileDragSupport by tasks.registering(Exec::class) {
     commandLine(
         "c++", "-std=c++17", "-O3", "-fPIC", "-w",
         "-Isrc/nativeInterop/cinterop/include",
-        "-I/usr/include/SDL2",
+        "-I/usr/include/SDL3",
         "-D_REENTRANT",
         "-c", "src/nativeInterop/cinterop/drag_support.cpp",
         "-o", dragSupportObject.get().asFile.absolutePath,
@@ -117,14 +113,18 @@ val compileAtspiSupport by tasks.registering(Exec::class) {
 }
 
 val archiveNativeSupport by tasks.registering(Exec::class) {
-    dependsOn(compileNativeSupport, compileClipperEngine, compileDesktopSupport, compileAtspiSupport, compileTraySupport, compileDragSupport)
-    inputs.files(nativeSupportObject, clipperEngineObject, desktopSupportObject, atspiSupportObject, traySupportObject, dragSupportObject)
+    dependsOn(compileGlInterop, compileClipperEngine, compileDesktopSupport, compileAtspiSupport, compileTraySupport, compileDragSupport)
+    inputs.files(glInteropObject, clipperEngineObject, desktopSupportObject, atspiSupportObject, traySupportObject, dragSupportObject)
     outputs.file(nativeSupportArchive)
-    doFirst { nativeSupportArchive.get().asFile.parentFile.mkdirs() }
+    doFirst {
+        val archive = nativeSupportArchive.get().asFile
+        archive.parentFile.mkdirs()
+        archive.delete()
+    }
     commandLine(
         "ar", "rcs",
         nativeSupportArchive.get().asFile.absolutePath,
-        nativeSupportObject.get().asFile.absolutePath,
+        glInteropObject.get().asFile.absolutePath,
         clipperEngineObject.get().asFile.absolutePath,
         desktopSupportObject.get().asFile.absolutePath,
         atspiSupportObject.get().asFile.absolutePath,
@@ -149,10 +149,7 @@ kotlin {
             }
             cinterops {
                 val sdl2 by creating {
-                    defFile(project.file("src/nativeInterop/cinterop/sdl2.def"))
-                }
-                val cairo by creating {
-                    defFile(project.file("src/nativeInterop/cinterop/cairo.def"))
+                    defFile(project.file("src/nativeInterop/cinterop/sdl3.def"))
                 }
                 val desktop by creating {
                     defFile(project.file("src/nativeInterop/cinterop/desktop.def"))
@@ -165,6 +162,7 @@ kotlin {
         linuxMain.dependencies {
             api(project(":compose:ui:ui"))
             implementation(project(":compose:foundation:foundation"))
+            implementation(libs.skiko)
         }
         linuxTest.dependencies { implementation(kotlin("test")) }
     }

@@ -2,6 +2,7 @@
     androidx.compose.ui.ExperimentalComposeUiApi::class,
     androidx.compose.ui.InternalComposeUiApi::class,
     kotlinx.cinterop.ExperimentalForeignApi::class,
+    org.jetbrains.skiko.InternalSkikoApi::class,
 )
 
 package androidx.compose.ui.window
@@ -18,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCompositionContext
 import androidx.compose.runtime.rememberUpdatedState
@@ -27,24 +29,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ComposeUiFlags
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ProvideSystemTheme
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Canvas
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.cairo.CairoCanvas
-import androidx.compose.ui.graphics.cairo.CairoGraphics
-import androidx.compose.ui.graphics.cairo.CairoImage
-import androidx.compose.ui.graphics.cairo.CairoSurface
-import androidx.compose.ui.graphics.cairo.CairoText
-import androidx.compose.ui.graphics.cairo.runBackendSelfTests
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.SkiaGraphicsContext
+import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.graphics.asComposeImageBitmap
+import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.platform.PlatformGraphicsContext
-import androidx.compose.ui.graphics.platform.PlatformGraphicsRegistry
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -63,6 +64,7 @@ import androidx.compose.ui.platform.LinuxNotificationHint
 import androidx.compose.ui.platform.LinuxPlatformServices
 import androidx.compose.ui.platform.LinuxPlatformServicesRegistry
 import androidx.compose.ui.platform.LinuxProgressUpdate
+import androidx.compose.ui.platform.LocalPlatformAccentColor
 import androidx.compose.ui.platform.PlatformArchitectureComponentsOwner
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformDispatcherRegistry
@@ -70,16 +72,18 @@ import androidx.compose.ui.platform.PlatformDragAndDropManager
 import androidx.compose.ui.platform.PlatformRootForTest
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.WindowInfo
+import androidx.compose.ui.platform.clearSkikoComposeImplementation
+import androidx.compose.ui.platform.registerSkikoComposeImplementation
 import androidx.compose.ui.scene.CanvasLayersComposeScene
 import androidx.compose.ui.scene.ComposeScenePointer
 import androidx.compose.ui.scene.hasInvalidations
 import androidx.compose.ui.text.input.CommitTextCommand
 import androidx.compose.ui.text.input.FinishComposingTextCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
-import androidx.compose.ui.text.platform.PlatformTextRegistry
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -87,11 +91,7 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.viewinterop.GpuInteropRegistry
 import androidx.compose.ui.viewinterop.LocalGpuInteropRegistry
 import androidx.compose.ui.viewinterop.LocalNativeViewInvalidationDispatcher
-import cairo.kc_create
-import cairo.kc_destroy
 import cnames.structs.SDL_Cursor
-import cnames.structs.SDL_Renderer
-import cnames.structs.SDL_Texture
 import cnames.structs.SDL_Window
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -101,6 +101,9 @@ import kotlin.math.roundToInt
 import kotlin.native.concurrent.ObsoleteWorkersApi
 import kotlin.native.concurrent.Worker
 import kotlin.system.exitProcess
+import kotlinx.atomicfu.atomic
+import kotlinx.atomicfu.locks.SynchronizedObject
+import kotlinx.atomicfu.locks.synchronized
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
@@ -109,20 +112,19 @@ import kotlinx.cinterop.FloatVar
 import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.UIntVar
+import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.asStableRef
 import kotlinx.cinterop.get
 import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.plus
-import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.pointed
 import kotlinx.cinterop.ptr
+import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toKString
+import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
-import kotlinx.atomicfu.atomic
-import kotlinx.atomicfu.locks.SynchronizedObject
-import kotlinx.atomicfu.locks.synchronized
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -130,6 +132,11 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import linuxdesktop.*
+import org.jetbrains.skiko.GpuPriority
+import org.jetbrains.skiko.SkiaLayer
+import org.jetbrains.skiko.SkikoRenderDelegate
+import org.jetbrains.skiko.SystemTheme as SkikoSystemTheme
+import org.jetbrains.skiko.updateLinuxSystemTheme
 import platform.posix.getenv
 import platform.posix.setenv
 import platform.posix.usleep
@@ -139,49 +146,58 @@ import sdl2.SDL_BUTTON_MIDDLE
 import sdl2.SDL_BUTTON_RIGHT
 import sdl2.SDL_BUTTON_X1
 import sdl2.SDL_BUTTON_X2
-import sdl2.SDL_CreateRGBSurfaceFrom
-import sdl2.SDL_CreateRenderer
+import sdl2.SDL_CreateSurfaceFrom
 import sdl2.SDL_CreateSystemCursor
-import sdl2.SDL_CreateTexture
 import sdl2.SDL_CreateWindow
-import sdl2.SDL_DROPBEGIN
-import sdl2.SDL_DROPCOMPLETE
-import sdl2.SDL_DROPFILE
-import sdl2.SDL_DROPTEXT
-import sdl2.SDL_DestroyRenderer
-import sdl2.SDL_DestroyTexture
+import sdl2.SDL_DestroyCursor
+import sdl2.SDL_DestroySurface
 import sdl2.SDL_DestroyWindow
+import sdl2.SDL_EVENT_DROP_BEGIN
+import sdl2.SDL_EVENT_DROP_COMPLETE
+import sdl2.SDL_EVENT_DROP_FILE
+import sdl2.SDL_EVENT_DROP_TEXT
+import sdl2.SDL_EVENT_FINGER_DOWN
+import sdl2.SDL_EVENT_FINGER_MOTION
+import sdl2.SDL_EVENT_FINGER_UP
+import sdl2.SDL_EVENT_KEY_DOWN
+import sdl2.SDL_EVENT_KEY_UP
+import sdl2.SDL_EVENT_MOUSE_BUTTON_DOWN
+import sdl2.SDL_EVENT_MOUSE_BUTTON_UP
+import sdl2.SDL_EVENT_MOUSE_MOTION
+import sdl2.SDL_EVENT_MOUSE_WHEEL
+import sdl2.SDL_EVENT_QUIT
+import sdl2.SDL_EVENT_TEXT_EDITING
+import sdl2.SDL_EVENT_TEXT_INPUT
+import sdl2.SDL_EVENT_WINDOW_CLOSE_REQUESTED
+import sdl2.SDL_EVENT_WINDOW_EXPOSED
+import sdl2.SDL_EVENT_WINDOW_FOCUS_GAINED
+import sdl2.SDL_EVENT_WINDOW_FOCUS_LOST
+import sdl2.SDL_EVENT_WINDOW_HIDDEN
+import sdl2.SDL_EVENT_WINDOW_MAXIMIZED
+import sdl2.SDL_EVENT_WINDOW_MINIMIZED
+import sdl2.SDL_EVENT_WINDOW_MOUSE_ENTER
+import sdl2.SDL_EVENT_WINDOW_MOUSE_LEAVE
+import sdl2.SDL_EVENT_WINDOW_MOVED
+import sdl2.SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED
+import sdl2.SDL_EVENT_WINDOW_RESIZED
+import sdl2.SDL_EVENT_WINDOW_RESTORED
+import sdl2.SDL_EVENT_WINDOW_SHOWN
 import sdl2.SDL_Event
-import sdl2.SDL_EventState
-import sdl2.SDL_ENABLE
-import sdl2.SDL_FALSE
-import sdl2.SDL_FINGERDOWN
-import sdl2.SDL_FINGERMOTION
-import sdl2.SDL_FINGERUP
-import sdl2.SDL_FreeCursor
-import sdl2.SDL_FreeSurface
-import sdl2.SDL_GL_GetDrawableSize
+import sdl2.SDL_GLAttr
 import sdl2.SDL_GL_SetAttribute
-import sdl2.SDL_GLattr
 import sdl2.SDL_GetClipboardText
-import sdl2.SDL_GetDisplayDPI
 import sdl2.SDL_GetError
+import sdl2.SDL_GetMouseState
 import sdl2.SDL_GetPerformanceCounter
 import sdl2.SDL_GetPerformanceFrequency
-import sdl2.SDL_GetRendererOutputSize
-import sdl2.SDL_GetWindowDisplayIndex
+import sdl2.SDL_GetWindowDisplayScale
 import sdl2.SDL_GetWindowFlags
 import sdl2.SDL_GetWindowID
 import sdl2.SDL_GetWindowPosition
+import sdl2.SDL_GetWindowSizeInPixels
 import sdl2.SDL_HideWindow
 import sdl2.SDL_HitTestResult
 import sdl2.SDL_Init
-import sdl2.SDL_KEYDOWN
-import sdl2.SDL_KEYUP
-import sdl2.SDL_MOUSEBUTTONDOWN
-import sdl2.SDL_MOUSEBUTTONUP
-import sdl2.SDL_MOUSEMOTION
-import sdl2.SDL_MOUSEWHEEL
 import sdl2.SDL_MaximizeWindow
 import sdl2.SDL_MinimizeWindow
 import sdl2.SDL_OpenURL
@@ -189,60 +205,40 @@ import sdl2.SDL_PIXELFORMAT_ARGB8888
 import sdl2.SDL_Point
 import sdl2.SDL_PollEvent
 import sdl2.SDL_PushEvent
-import sdl2.SDL_QUIT
-import sdl2.SDL_RegisterEvents
 import sdl2.SDL_Quit
-import sdl2.SDL_RENDERER_ACCELERATED
-import sdl2.SDL_RENDERER_PRESENTVSYNC
-import sdl2.SDL_RENDERER_SOFTWARE
 import sdl2.SDL_RaiseWindow
 import sdl2.SDL_Rect
-import sdl2.SDL_RenderClear
-import sdl2.SDL_RenderCopy
-import sdl2.SDL_RenderPresent
+import sdl2.SDL_RegisterEvents
 import sdl2.SDL_RestoreWindow
 import sdl2.SDL_SetClipboardText
 import sdl2.SDL_SetCursor
-import sdl2.SDL_SetHint
-import sdl2.SDL_SetTextInputRect
+import sdl2.SDL_SetTextInputArea
 import sdl2.SDL_SetWindowAlwaysOnTop
 import sdl2.SDL_SetWindowBordered
 import sdl2.SDL_SetWindowFullscreen
 import sdl2.SDL_SetWindowHitTest
 import sdl2.SDL_SetWindowIcon
 import sdl2.SDL_SetWindowMaximumSize
-import sdl2.SDL_SetWindowModalFor
 import sdl2.SDL_SetWindowMinimumSize
+import sdl2.SDL_SetWindowModal
+import sdl2.SDL_SetWindowParent
 import sdl2.SDL_SetWindowPosition
 import sdl2.SDL_SetWindowResizable
 import sdl2.SDL_SetWindowSize
 import sdl2.SDL_SetWindowTitle
 import sdl2.SDL_ShowWindow
 import sdl2.SDL_StartTextInput
-import sdl2.SDL_SYSWMEVENT
 import sdl2.SDL_SystemCursor
-import sdl2.SDL_TEXTEDITING
-import sdl2.SDL_TEXTINPUT
-import sdl2.SDL_TRUE
-import sdl2.SDL_TextureAccess
-import sdl2.SDL_UpdateTexture
-import sdl2.SDL_WaitEventTimeout
-import sdl2.SDL_WINDOWEVENT
 import sdl2.SDL_WINDOWPOS_CENTERED
-import sdl2.SDL_WINDOW_ALLOW_HIGHDPI
 import sdl2.SDL_WINDOW_BORDERLESS
-import sdl2.SDL_WINDOW_FULLSCREEN_DESKTOP
 import sdl2.SDL_WINDOW_HIDDEN
+import sdl2.SDL_WINDOW_HIGH_PIXEL_DENSITY
 import sdl2.SDL_WINDOW_MAXIMIZED
 import sdl2.SDL_WINDOW_OPENGL
 import sdl2.SDL_WINDOW_RESIZABLE
-import sdl2.SDL_WINDOW_SHOWN
-import sdl2.SDL_WindowEventID
+import sdl2.SDL_WINDOW_TRANSPARENT
+import sdl2.SDL_WaitEventTimeout
 import sdl2.SDL_free
-
-// sdl2-compat maps this otherwise-unpublished SDL2 flag to SDL3_WINDOW_TRANSPARENT.
-// Native SDL2 ignores the unknown bit and uses SDL_VIDEO_EGL_ALLOW_TRANSPARENCY instead.
-private const val SDL_WINDOW_TRANSPARENT_COMPAT = 0x40000000u
 
 @Stable
 interface ApplicationScope {
@@ -254,6 +250,8 @@ enum class WindowPlacement {
     Maximized,
     Fullscreen,
 }
+
+internal fun WindowPlacement.persistsFloatingGeometry(): Boolean = this == WindowPlacement.Floating
 
 /** Defines which application windows are blocked while a dialog is visible. */
 class DialogModalityType private constructor(val name: String) {
@@ -411,14 +409,11 @@ open class ComposeWindow internal constructor(internal val host: NativeWindowHos
 
     /** Captures the window that owns [root], cropped to [boundsInWindow]. */
     @InternalComposeUiApi
-    fun captureToImage(
-        root: PlatformRootForTest,
-        boundsInWindow: Rect? = null,
-    ): ImageBitmap = host.captureRootForTest(root, boundsInWindow)
+    fun captureToImage(root: PlatformRootForTest, boundsInWindow: Rect? = null): ImageBitmap =
+        host.captureRootForTest(root, boundsInWindow)
 
     /** Runs [action] synchronously on the SDL application thread. */
-    @InternalComposeUiApi
-    fun <T> runOnUiThread(action: () -> T): T = host.runOnUiThread(action)
+    @InternalComposeUiApi fun <T> runOnUiThread(action: () -> T): T = host.runOnUiThread(action)
 
     /** Returns whether the caller is the SDL application thread. */
     @InternalComposeUiApi
@@ -572,24 +567,25 @@ fun Window(
     onPreviewKeyEvent: (KeyEvent) -> Boolean = { false },
     onKeyEvent: (KeyEvent) -> Boolean = { false },
     content: @Composable FrameWindowScope.() -> Unit,
-) = WindowImpl(
-    onCloseRequest = onCloseRequest,
-    state = state,
-    visible = visible,
-    title = title,
-    icon = icon,
-    undecorated = undecorated,
-    transparent = transparent,
-    resizable = resizable,
-    enabled = enabled,
-    focusable = focusable,
-    alwaysOnTop = alwaysOnTop,
-    owner = null,
-    modalityType = DialogModalityType.Modeless,
-    onPreviewKeyEvent = onPreviewKeyEvent,
-    onKeyEvent = onKeyEvent,
-    content = content,
-)
+) =
+    WindowImpl(
+        onCloseRequest = onCloseRequest,
+        state = state,
+        visible = visible,
+        title = title,
+        icon = icon,
+        undecorated = undecorated,
+        transparent = transparent,
+        resizable = resizable,
+        enabled = enabled,
+        focusable = focusable,
+        alwaysOnTop = alwaysOnTop,
+        owner = null,
+        modalityType = DialogModalityType.Modeless,
+        onPreviewKeyEvent = onPreviewKeyEvent,
+        onKeyEvent = onKeyEvent,
+        content = content,
+    )
 
 @Composable
 @ComposableOpenTarget(-1)
@@ -611,16 +607,15 @@ private fun WindowImpl(
     onKeyEvent: (KeyEvent) -> Boolean,
     content: @Composable FrameWindowScope.() -> Unit,
 ) {
-    require(!transparent || undecorated) {
-        "Transparent top-level windows must be undecorated"
-    }
+    require(!transparent || undecorated) { "Transparent top-level windows must be undecorated" }
     val application = LocalNativeApplication.current
     val parentComposition = rememberCompositionContext()
     val currentContent = rememberUpdatedState(content)
     val currentCloseRequest = rememberUpdatedState(onCloseRequest)
-    val host = remember(application, state, owner, modalityType, transparent) {
-        NativeWindowHost(application, state, owner, modalityType)
-    }
+    val host =
+        remember(application, state, owner, modalityType, transparent) {
+            NativeWindowHost(application, state, owner, modalityType)
+        }
     val requestedSize = state.size
 
     DisposableEffect(host) {
@@ -661,25 +656,25 @@ private fun WindowImpl(
     }
 }
 
-internal fun rasterizeWindowIcon(painter: Painter, size: Int = 64): CairoImage {
-    require(size > 0) { "Window icon size must be positive" }
-    PlatformGraphicsRegistry.register(CairoGraphics)
-    val image = CairoImage(size, size)
-    val context = checkNotNull(kc_create(image.surface.handle))
-    try {
-        CanvasDrawScope().draw(
-            density = Density(1f),
-            layoutDirection = LayoutDirection.Ltr,
-            canvas = CairoCanvas(context),
-            size = Size(size.toFloat(), size.toFloat()),
-        ) {
-            with(painter) { draw(Size(size.toFloat(), size.toFloat())) }
-        }
-    } finally {
-        kc_destroy(context)
+internal class RasterizedWindowIcon(private val delegate: ImageBitmap) :
+    ImageBitmap by delegate, AutoCloseable {
+    override fun close() {
+        delegate.asSkiaBitmap().close()
     }
-    image.surface.flush()
-    return image
+}
+
+internal fun rasterizeWindowIcon(painter: Painter, size: Int = 64): RasterizedWindowIcon {
+    require(size > 0) { "Window icon size must be positive" }
+    val image = ImageBitmap(size, size)
+    CanvasDrawScope().draw(
+        density = Density(1f),
+        layoutDirection = LayoutDirection.Ltr,
+        canvas = Canvas(image),
+        size = Size(size.toFloat(), size.toFloat()),
+    ) {
+        with(painter) { draw(Size(size.toFloat(), size.toFloat())) }
+    }
+    return RasterizedWindowIcon(image)
 }
 
 private fun applyWindowIcon(window: CPointer<SDL_Window>, painter: Painter?) {
@@ -688,22 +683,22 @@ private fun applyWindowIcon(window: CPointer<SDL_Window>, painter: Painter?) {
         return
     }
     rasterizeWindowIcon(painter).use { image ->
-        val surface =
-            SDL_CreateRGBSurfaceFrom(
-                image.surface.data,
-                image.width,
-                image.height,
-                32,
-                image.surface.stride,
-                0x00ff0000u,
-                0x0000ff00u,
-                0x000000ffu,
-                0xff000000u,
-            ) ?: error("Could not create SDL window icon: ${SDL_GetError()?.toKString()}")
-        try {
-            SDL_SetWindowIcon(window, surface)
-        } finally {
-            SDL_FreeSurface(surface)
+        val pixels = IntArray(image.width * image.height)
+        image.readPixels(pixels)
+        pixels.usePinned { pinned ->
+            val surface =
+                SDL_CreateSurfaceFrom(
+                    image.width,
+                    image.height,
+                    SDL_PIXELFORMAT_ARGB8888,
+                    pinned.addressOf(0),
+                    image.width * 4,
+                ) ?: error("Could not create SDL window icon: ${SDL_GetError()?.toKString()}")
+            try {
+                SDL_SetWindowIcon(window, surface)
+            } finally {
+                SDL_DestroySurface(surface)
+            }
         }
     }
 }
@@ -724,29 +719,26 @@ internal fun modalityBlocksInput(
 
 private fun SDL_Event.isUserInputEvent(): Boolean =
     when (type) {
-        SDL_KEYDOWN.toUInt(),
-        SDL_KEYUP.toUInt(),
-        SDL_TEXTINPUT.toUInt(),
-        SDL_TEXTEDITING.toUInt(),
-        SDL_MOUSEMOTION.toUInt(),
-        SDL_MOUSEWHEEL.toUInt(),
-        SDL_MOUSEBUTTONDOWN.toUInt(),
-        SDL_MOUSEBUTTONUP.toUInt(),
-        SDL_FINGERDOWN.toUInt(),
-        SDL_FINGERMOTION.toUInt(),
-        SDL_FINGERUP.toUInt(),
-        SDL_DROPBEGIN.toUInt(),
-        SDL_DROPCOMPLETE.toUInt(),
-        SDL_DROPFILE.toUInt(),
-        SDL_DROPTEXT.toUInt() -> true
+        SDL_EVENT_KEY_DOWN.toUInt(),
+        SDL_EVENT_KEY_UP.toUInt(),
+        SDL_EVENT_TEXT_INPUT.toUInt(),
+        SDL_EVENT_TEXT_EDITING.toUInt(),
+        SDL_EVENT_MOUSE_MOTION.toUInt(),
+        SDL_EVENT_MOUSE_WHEEL.toUInt(),
+        SDL_EVENT_MOUSE_BUTTON_DOWN.toUInt(),
+        SDL_EVENT_MOUSE_BUTTON_UP.toUInt(),
+        SDL_EVENT_FINGER_DOWN.toUInt(),
+        SDL_EVENT_FINGER_MOTION.toUInt(),
+        SDL_EVENT_FINGER_UP.toUInt(),
+        SDL_EVENT_DROP_BEGIN.toUInt(),
+        SDL_EVENT_DROP_COMPLETE.toUInt(),
+        SDL_EVENT_DROP_FILE.toUInt(),
+        SDL_EVENT_DROP_TEXT.toUInt() -> true
         else -> false
     }
 
 internal fun configureNativeComposeUiFlags() {
-    // Cairo layers replay their draw block instead of retaining a display list. A dialog's exit
-    // animation outlives its LayoutNode, so replaying that block after detach crashes. Keep dialog
-    // teardown immediate until this backend has retained display-list support.
-    ComposeUiFlags.isDialogAnimationEnabled = false
+    ComposeUiFlags.isDialogAnimationEnabled = true
 }
 
 fun application(
@@ -758,40 +750,32 @@ fun application(
         runNativeInputSelfTests()
         return
     }
-    PlatformGraphicsRegistry.register(CairoGraphics)
-    PlatformTextRegistry.register(CairoText)
+    registerSkikoComposeImplementation()
     configureNativeComposeUiFlags()
-    if (getenv("KTNATIVE_BACKEND_SELF_TEST") != null) {
-        runBackendSelfTests()
-        return
-    }
     if (getenv("WAYLAND_DISPLAY") != null) setenv("SDL_VIDEODRIVER", "wayland", 0)
-    // SDL passes EGL_PRESENT_OPAQUE_EXT at EGL surface creation. Allow alpha-capable surfaces for
-    // every window; opaque windows retain SDL's full wl_surface opaque region and alpha-one clear.
-    SDL_SetHint("SDL_VIDEO_EGL_ALLOW_TRANSPARENCY", "1")
-    check(SDL_Init(sdl2.SDL_INIT_VIDEO) == 0) {
+    check(SDL_Init(sdl2.SDL_INIT_VIDEO)) {
         "SDL initialization failed: ${SDL_GetError()?.toKString()}"
     }
     LinuxPlatformServicesRegistry.install(SdlPlatformServices)
-    SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE)
-    SDL_StartTextInput()
     val isWindowSelfTest = getenv("KTNATIVE_WINDOW_SELF_TEST") != null
     if (isWindowSelfTest) NativeWindowSelfTestRootListener.reset()
+    val nativeApplication = NativeApplication()
     try {
-        NativeApplication()
-            .run(
-                when {
-                    getenv("KTNATIVE_DESKTOP_SELF_TEST") != null -> NativeDesktopSelfTestContent
-                    isWindowSelfTest -> NativeWindowSelfTestContent
-                    else -> content
-                }
-            )
+        nativeApplication.run(
+            when {
+                getenv("KTNATIVE_DESKTOP_SELF_TEST") != null -> NativeDesktopSelfTestContent
+                isWindowSelfTest -> NativeWindowSelfTestContent
+                else -> content
+            }
+        )
         if (isWindowSelfTest) NativeWindowSelfTestRootListener.checkDisposed()
     } finally {
+        nativeApplication.close()
         LinuxPlatformServicesRegistry.install(null)
         kld_atspi_shutdown()
         kld_shutdown()
         SDL_Quit()
+        clearSkikoComposeImplementation()
     }
     if (exitProcessOnExit) exitProcess(0)
 }
@@ -816,13 +800,13 @@ private object SdlPlatformServices : LinuxPlatformServices {
     }
 
     override fun setClipboardText(text: String) {
-        check(SDL_SetClipboardText(text) == 0) {
+        check(SDL_SetClipboardText(text)) {
             "Could not set clipboard text: ${SDL_GetError()?.toKString()}"
         }
     }
 
     override fun openUri(uri: String) {
-        check(SDL_OpenURL(uri) == 0) { "Could not open URI '$uri': ${SDL_GetError()?.toKString()}" }
+        check(SDL_OpenURL(uri)) { "Could not open URI '$uri': ${SDL_GetError()?.toKString()}" }
     }
 
     override fun areNotificationsSupported(): Boolean = kld_notifications_supported() != 0
@@ -1052,6 +1036,8 @@ private val NativeWindowSelfTestContent: @Composable ApplicationScope.() -> Unit
         state = rememberWindowState(size = DpSize(320.dp, 200.dp)),
         visible = false,
         title = "Native window test A",
+        undecorated = true,
+        transparent = true,
     ) {}
     Window(
         onCloseRequest = ::exitApplication,
@@ -1198,14 +1184,43 @@ fun singleWindowApplication(
         )
     }
 
+internal fun portalColorSchemePrefersDark(value: Int): Boolean? =
+    when (value) {
+        1 -> true
+        2 -> false
+        else -> null
+    }
+
+internal fun portalAccentColor(value: Int): Color? {
+    if (value and 0x01000000 == 0) return null
+    return Color(0xFF000000.toInt() or (value and 0x00FFFFFF))
+}
+
+private class LinuxSystemThemeObserver(colorSchemeEventType: UInt, accentColorEventType: UInt) :
+    AutoCloseable {
+    private var handle =
+        kld_system_theme_observer_create(colorSchemeEventType, accentColorEventType)
+
+    val current: Boolean?
+        get() = portalColorSchemePrefersDark(kld_system_theme_observer_current(handle))
+
+    val accent: Color?
+        get() = portalAccentColor(kld_system_theme_observer_accent(handle).toInt())
+
+    override fun close() {
+        val observer = handle ?: return
+        handle = null
+        kld_system_theme_observer_destroy(observer)
+    }
+}
+
 internal class NativeApplication : ApplicationScope {
     private companion object {
         const val IdleWaitTimeoutMillis = 50
         const val MaximumConfiguredFramesPerSecond = 240
     }
 
-    @OptIn(ObsoleteWorkersApi::class)
-    private val hostWorkerId = Worker.current.id
+    @OptIn(ObsoleteWorkersApi::class) private val hostWorkerId = Worker.current.id
     private val windows = mutableListOf<NativeWindowHost>()
     private var testRootListener: PlatformContext.RootForTestListener? = null
     private val running = atomic(true)
@@ -1213,22 +1228,55 @@ internal class NativeApplication : ApplicationScope {
     private val applicationLayoutDirty = atomic(true)
     private val hostTaskLock = SynchronizedObject()
     private val hostTasks = ArrayDeque<() -> Unit>()
+    private val eventWatchReference = StableRef.create(this)
+    private var eventWatchHandle: COpaquePointer? = null
     private val wakeEventType =
         SDL_RegisterEvents(1).also { eventType ->
-            check(eventType != UInt.MAX_VALUE) {
+            check(eventType != 0u) {
                 "Could not register the Compose SDL wake event: ${SDL_GetError()?.toKString()}"
             }
         }
+    private val systemThemeEventType =
+        SDL_RegisterEvents(1).also { eventType ->
+            check(eventType != 0u) {
+                "Could not register the Compose system-theme event: ${SDL_GetError()?.toKString()}"
+            }
+        }
+    private val systemAccentEventType =
+        SDL_RegisterEvents(1).also { eventType ->
+            check(eventType != 0u) {
+                "Could not register the Compose system-accent event: ${SDL_GetError()?.toKString()}"
+            }
+        }
+    private val systemThemeObserver =
+        LinuxSystemThemeObserver(systemThemeEventType, systemAccentEventType)
+    internal val systemDarkThemeState = mutableStateOf(systemThemeObserver.current)
+    internal val systemAccentColorState = mutableStateOf(systemThemeObserver.accent)
 
     val frameRecomposer =
-        FrameRecomposer(
-            coroutineContext = Dispatchers.Unconfined,
-            invalidate = ::requestFrame,
-        )
+        FrameRecomposer(coroutineContext = Dispatchers.Unconfined, invalidate = ::requestFrame)
+
+    init {
+        updateLinuxSystemTheme(systemDarkThemeState.value.asSkikoSystemTheme())
+        eventWatchHandle =
+            checkNotNull(
+                kgl_event_watch_add(NativeApplicationEventWatch, eventWatchReference.asCPointer())
+            ) {
+                "Could not register the SDL live-resize event watch"
+            }
+    }
 
     override fun exitApplication() {
         running.value = false
         requestFrame()
+    }
+
+    fun close() {
+        eventWatchHandle?.let(::kgl_event_watch_remove)
+        eventWatchHandle = null
+        eventWatchReference.dispose()
+        systemThemeObserver.close()
+        updateLinuxSystemTheme(SkikoSystemTheme.UNKNOWN)
     }
 
     fun add(window: NativeWindowHost) {
@@ -1313,7 +1361,7 @@ internal class NativeApplication : ApplicationScope {
     }
 
     private fun hasImmediateWork(
-        applicationScene: androidx.compose.ui.scene.ComposeScene,
+        applicationScene: androidx.compose.ui.scene.ComposeScene
     ): Boolean =
         frameRequested.value ||
             hasHostTasks() ||
@@ -1322,14 +1370,30 @@ internal class NativeApplication : ApplicationScope {
             applicationScene.hasPendingMeasureOrLayout ||
             windows.any { it.hasPendingRender }
 
+    internal fun handleWatchedEvent(event: CPointer<SDL_Event>) {
+        if (!isHostThread()) return
+        val value = event.pointed
+        if (value.type != SDL_EVENT_WINDOW_EXPOSED.toUInt()) return
+        windows.firstOrNull { it.owns(value) }?.renderExposedFrame(0, 0)
+    }
+
     private fun dispatchSdlEvent(event: SDL_Event) {
         if (event.type == wakeEventType) return
-        if (event.type == SDL_QUIT.toUInt()) {
-            windows.toList().forEach { it.requestClose() }
+        if (event.type == systemThemeEventType) {
+            val next = portalColorSchemePrefersDark(event.user.code)
+            if (systemDarkThemeState.value != next) systemDarkThemeState.value = next
+            updateLinuxSystemTheme(next.asSkikoSystemTheme())
+            requestFrame()
             return
         }
-        if (event.type == SDL_SYSWMEVENT.toUInt()) {
-            windows.toList().forEach { it.handle(event) }
+        if (event.type == systemAccentEventType) {
+            val next = portalAccentColor(event.user.code)
+            if (systemAccentColorState.value != next) systemAccentColorState.value = next
+            requestFrame()
+            return
+        }
+        if (event.type == SDL_EVENT_QUIT.toUInt()) {
+            windows.toList().forEach { it.requestClose() }
             return
         }
         val target = windows.firstOrNull { it.owns(event) } ?: return
@@ -1354,10 +1418,13 @@ internal class NativeApplication : ApplicationScope {
                 invalidateDraw = ::requestFrame,
             )
         applicationScene.setContent {
-            androidx.compose.runtime.CompositionLocalProvider(
-                LocalNativeApplication provides this
-            ) {
-                content(this@NativeApplication)
+            ProvideSystemTheme(systemDarkThemeState.value) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalPlatformAccentColor provides systemAccentColorState.value,
+                    LocalNativeApplication provides this,
+                ) {
+                    content(this@NativeApplication)
+                }
             }
         }
 
@@ -1388,10 +1455,10 @@ internal class NativeApplication : ApplicationScope {
                         frameDelay > 0 -> frameDelay
                         else -> 0
                     }
-                if (SDL_WaitEventTimeout(event.ptr, timeout) != 0) {
+                if (SDL_WaitEventTimeout(event.ptr, timeout)) {
                     dispatchSdlEvent(event)
                 }
-                while (SDL_PollEvent(event.ptr) != 0) {
+                while (SDL_PollEvent(event.ptr)) {
                     dispatchSdlEvent(event)
                 }
 
@@ -1446,6 +1513,14 @@ internal class NativeApplication : ApplicationScope {
     }
 }
 
+private val NativeApplicationEventWatch =
+    staticCFunction { data: COpaquePointer?, event: COpaquePointer? ->
+        if (data != null && event != null) {
+            data.asStableRef<NativeApplication>().get().handleWatchedEvent(event.reinterpret())
+        }
+        1
+    }
+
 private class BlockingHostTaskResult<T> {
     val completed = atomic(false)
     var value: T? = null
@@ -1499,13 +1574,16 @@ private class SdlPlatformContext(
     private val damageTracker: FrameDamageTracker,
     private val graphicsContextFactory: () -> PlatformGraphicsContext,
 ) : PlatformContext by PlatformContext.Empty() {
+    var window: CPointer<SDL_Window>? = null
     private val testRootListener = SdlRootForTestListener()
     internal val nativeDragAndDropManager = SdlDragAndDropManager()
 
     override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener
         get() = accessibility
+
     override val rootForTestListener: PlatformContext.RootForTestListener
         get() = testRootListener
+
     override val windowInfo = SdlWindowInfo()
     override val dragAndDropManager: PlatformDragAndDropManager
         get() = nativeDragAndDropManager
@@ -1527,6 +1605,7 @@ private class SdlPlatformContext(
         set(value) {
             testRootListener.externalListener = value
         }
+
     private val windowLifecycle = LinuxWindowLifecycle()
     override val architectureComponentsOwner: PlatformArchitectureComponentsOwner
         get() = windowLifecycle.owner
@@ -1538,9 +1617,9 @@ private class SdlPlatformContext(
         val systemCursor =
             when (pointerIcon) {
                 PointerIcon.Crosshair -> SDL_SystemCursor.SDL_SYSTEM_CURSOR_CROSSHAIR
-                PointerIcon.Text -> SDL_SystemCursor.SDL_SYSTEM_CURSOR_IBEAM
-                PointerIcon.Hand -> SDL_SystemCursor.SDL_SYSTEM_CURSOR_HAND
-                else -> SDL_SystemCursor.SDL_SYSTEM_CURSOR_ARROW
+                PointerIcon.Text -> SDL_SystemCursor.SDL_SYSTEM_CURSOR_TEXT
+                PointerIcon.Hand -> SDL_SystemCursor.SDL_SYSTEM_CURSOR_POINTER
+                else -> SDL_SystemCursor.SDL_SYSTEM_CURSOR_DEFAULT
             }
         val cursor =
             cursors.getOrPut(systemCursor) {
@@ -1587,7 +1666,7 @@ private class SdlPlatformContext(
             rect.y = (focused.top / metrics.inputScaleY).roundToInt()
             rect.w = (focused.width / metrics.inputScaleX).roundToInt().coerceAtLeast(1)
             rect.h = (focused.height / metrics.inputScaleY).roundToInt().coerceAtLeast(1)
-            SDL_SetTextInputRect(rect.ptr)
+            window?.let { SDL_SetTextInputArea(it, rect.ptr, 0) }
         }
     }
 
@@ -1601,7 +1680,7 @@ private class SdlPlatformContext(
 
     fun close() {
         windowLifecycle.destroy()
-        cursors.values.forEach(::SDL_FreeCursor)
+        cursors.values.forEach(::SDL_DestroyCursor)
         cursors.clear()
     }
 }
@@ -1665,76 +1744,12 @@ internal class FrameDamageTracker {
     }
 }
 
-internal data class FrameDamage(
-    val x: Int,
-    val y: Int,
-    val width: Int,
-    val height: Int,
-) {
+internal data class FrameDamage(val x: Int, val y: Int, val width: Int, val height: Int) {
     val pixelCount: Int
         get() = width * height
 
     val rect: Rect
         get() = Rect(x.toFloat(), y.toFloat(), (x + width).toFloat(), (y + height).toFloat())
-}
-
-private class Framebuffer(renderer: CPointer<SDL_Renderer>?, width: Int, height: Int) {
-    var needsFullComposeFrame = true
-        private set
-
-    val surface = CairoSurface(width, height)
-    private val context = checkNotNull(kc_create(surface.handle))
-    val canvas = CairoCanvas(context)
-    val texture: CPointer<SDL_Texture>? =
-        renderer?.let {
-            SDL_CreateTexture(
-                it,
-                SDL_PIXELFORMAT_ARGB8888,
-                SDL_TextureAccess.SDL_TEXTUREACCESS_STREAMING.value.toInt(),
-                width,
-                height,
-            ) ?: error("Could not create frame texture: ${SDL_GetError()?.toKString()}")
-        }
-
-    fun markComposeFramePresented() {
-        needsFullComposeFrame = false
-    }
-
-    fun updateSdlTexture(damage: FrameDamage?) {
-        val target = texture ?: return
-        if (damage == null) return
-        memScoped {
-            val rect = alloc<SDL_Rect>()
-            rect.x = damage.x
-            rect.y = damage.y
-            rect.w = damage.width
-            rect.h = damage.height
-            val pixels =
-                surface.data.reinterpret<ByteVar>() +
-                    damage.y * surface.stride +
-                    damage.x * 4
-            check(SDL_UpdateTexture(target, rect.ptr, pixels, surface.stride) == 0)
-        }
-    }
-
-    fun snapshot(): CairoImage {
-        surface.flush()
-        val image = CairoImage(surface.width, surface.height)
-        val context = checkNotNull(kc_create(image.surface.handle))
-        try {
-            CairoCanvas(context).drawSurface(surface, 0f, 0f, 1f, BlendMode.Src)
-        } finally {
-            kc_destroy(context)
-        }
-        image.surface.flush()
-        return image
-    }
-
-    fun close() {
-        texture?.let(::SDL_DestroyTexture)
-        kc_destroy(context)
-        surface.close()
-    }
 }
 
 internal class NativeWindowHost(
@@ -1744,10 +1759,9 @@ internal class NativeWindowHost(
     private val modalityType: DialogModalityType = DialogModalityType.Modeless,
 ) {
     private var sdlWindow: CPointer<SDL_Window>? = null
-    private var renderer: CPointer<SDL_Renderer>? = null
-    private var compositor: SdlComposeCompositor? = null
+    private var skiaLayer: SkiaLayer? = null
+    private var gpuInteropRegistry: GpuInteropRegistry? = null
     private var scene: androidx.compose.ui.scene.ComposeScene? = null
-    private var framebuffer: Framebuffer? = null
     private var metrics: RenderMetrics? = null
     private var windowWidth = 1
     private var windowHeight = 1
@@ -1768,11 +1782,8 @@ internal class NativeWindowHost(
     private var dropAccepted = false
     private val accessibility = LinuxAtSpiAccessibility(application::dispatchToHost)
     private val damageTracker = FrameDamageTracker()
-    private val gpuInteropRegistry = GpuInteropRegistry(damageTracker::add)
     private val platformContext =
-        SdlPlatformContext(accessibility, damageTracker) {
-            CairoGraphics.createGraphicsContext(compositor)
-        }
+        SdlPlatformContext(accessibility, damageTracker) { SkiaGraphicsContext() }
 
     var rootForTestListener: PlatformContext.RootForTestListener?
         get() = platformContext.externalRootForTestListener
@@ -1786,13 +1797,10 @@ internal class NativeWindowHost(
             application.rootForTestListener = value
         }
 
-    fun ownsRootForTest(root: PlatformRootForTest): Boolean =
-        platformContext.ownsRootForTest(root)
+    fun ownsRootForTest(root: PlatformRootForTest): Boolean = platformContext.ownsRootForTest(root)
 
     fun captureRootForTest(root: PlatformRootForTest, boundsInWindow: Rect?): ImageBitmap =
-        application.dispatchToHostBlocking {
-            application.captureRootForTest(root, boundsInWindow)
-        }
+        application.dispatchToHostBlocking { application.captureRootForTest(root, boundsInWindow) }
 
     fun <T> runOnUiThread(action: () -> T): T = application.dispatchToHostBlocking(action)
 
@@ -1810,43 +1818,30 @@ internal class NativeWindowHost(
 
     fun captureCurrentFrame(boundsInWindow: Rect?): ImageBitmap {
         val currentMetrics = checkNotNull(metrics) { "The SDL window has no render metrics" }
-        val target = checkNotNull(framebuffer) { "The SDL window has no framebuffer" }
+        val nativeLayer = checkNotNull(skiaLayer) { "The SDL window has no Skia layer" }
         val fullImage =
-            compositor?.let { nativeCompositor ->
-                nativeCompositor.makeCurrent()
-                nativeCompositor.beginFrame(currentMetrics.pixelWidth, currentMetrics.pixelHeight)
-                if (!nativeCompositor.drawOrderedContent()) {
-                    nativeCompositor.drawExternalContent(gpuInteropRegistry::draw)
-                    nativeCompositor.uploadAndDrawRoot(
-                        surface = target.surface,
-                        width = currentMetrics.pixelWidth,
-                        height = currentMetrics.pixelHeight,
-                        damage = null,
-                    )
-                }
-                nativeCompositor.capture(currentMetrics.pixelWidth, currentMetrics.pixelHeight)
-            } ?: target.snapshot()
+            nativeLayer
+                .snapshot(currentMetrics.pixelWidth, currentMetrics.pixelHeight)
+                .asComposeImageBitmap()
         val bounds = boundsInWindow ?: return fullImage
         val left = floor(bounds.left).toInt().coerceIn(0, fullImage.width)
         val top = floor(bounds.top).toInt().coerceIn(0, fullImage.height)
         val right = ceil(bounds.right).toInt().coerceIn(left, fullImage.width)
         val bottom = ceil(bounds.bottom).toInt().coerceIn(top, fullImage.height)
         check(right > left && bottom > top) { "Screenshot bounds are empty: $bounds" }
-        val cropped = CairoImage(right - left, bottom - top)
-        val context = checkNotNull(kc_create(cropped.surface.handle))
-        try {
-            CairoCanvas(context).drawSurface(
-                fullImage.surface,
-                -left.toFloat(),
-                -top.toFloat(),
-                1f,
-                BlendMode.Src,
+        val width = right - left
+        val height = bottom - top
+        val cropped = ImageBitmap(width, height)
+        Canvas(cropped)
+            .drawImageRect(
+                image = fullImage,
+                srcOffset = IntOffset(left, top),
+                srcSize = IntSize(width, height),
+                dstOffset = IntOffset.Zero,
+                dstSize = IntSize(width, height),
+                paint = Paint(),
             )
-        } finally {
-            kc_destroy(context)
-            fullImage.close()
-        }
-        cropped.surface.flush()
+        fullImage.asSkiaBitmap().close()
         return cropped
     }
 
@@ -1870,6 +1865,9 @@ internal class NativeWindowHost(
     private var onKeyEvent: (KeyEvent) -> Boolean = { false }
     private var closed = false
     private val renderScheduled = atomic(true)
+    private val forcedRenderScheduled = atomic(false)
+    private val exposedFrameRendering = atomic(false)
+    private val rendering = atomic(false)
     private val renderStats = getenv("KTNATIVE_RENDER_STATS") != null
     private var hitTestReference: StableRef<NativeWindowHost>? = null
     private val draggableAreas = mutableMapOf<Any, Rect>()
@@ -1881,10 +1879,46 @@ internal class NativeWindowHost(
         get() = currentVisible && windowShown && !currentMinimized
 
     val hasPendingRender: Boolean
-        get() = isRenderable && (renderScheduled.value || scene?.hasInvalidations() == true)
+        get() =
+            isRenderable &&
+                (renderScheduled.value ||
+                    forcedRenderScheduled.value ||
+                    scene?.hasInvalidations() == true)
+
+    fun renderExposedFrame(widthHint: Int, heightHint: Int) {
+        if (!exposedFrameRendering.compareAndSet(expect = false, update = true)) return
+        try {
+            val window = sdlWindow ?: return
+            if (widthHint > 1 && heightHint > 1) {
+                windowWidth = widthHint
+                windowHeight = heightHint
+            } else {
+                memScoped {
+                    val width = alloc<IntVar>()
+                    val height = alloc<IntVar>()
+                    kgl_get_window_size(window, width.ptr, height.ptr)
+                    windowWidth = width.value.coerceAtLeast(1)
+                    windowHeight = height.value.coerceAtLeast(1)
+                }
+            }
+            renderScheduled.value = true
+            // Wayland uses expose callbacks to request a buffer commit while an interactive
+            // resize is in progress. The published dimensions may still match the previous
+            // frame here, but presenting is required for the compositor to advance the resize.
+            render(forceDraw = true)
+            // SDL's Wayland backend applies pending configure acknowledgements from a frame
+            // callback. Present once more from the normal event-loop turn after that callback.
+            forcedRenderScheduled.value = true
+            renderScheduled.value = true
+            application.requestFrame()
+        } finally {
+            exposedFrameRendering.value = false
+        }
+    }
 
     fun requestRender() {
         renderScheduled.value = true
+        skiaLayer?.needRender()
         application.requestFrame()
     }
 
@@ -1943,36 +1977,58 @@ internal class NativeWindowHost(
             if (initialSize.height.isSpecified)
                 initialSize.height.value.roundToInt().coerceAtLeast(1)
             else 600
-        val useGpu = getenv("SDL_VIDEODRIVER")?.toKString() != "dummy"
-        require(!transparent || useGpu) {
-            "Transparent top-level windows require the OpenGL SDL backend"
+        val nativeLayer = SkiaLayer()
+        if (getenv("DRI_PRIME") == null) {
+            when (nativeLayer.properties.adapterPriority) {
+                GpuPriority.Integrated -> setenv("DRI_PRIME", "0", 0)
+                GpuPriority.Discrete -> setenv("DRI_PRIME", "1", 0)
+                GpuPriority.Auto -> Unit
+            }
         }
-        if (useGpu) {
-            SDL_GL_SetAttribute(SDL_GLattr.SDL_GL_CONTEXT_MAJOR_VERSION, 2)
-            SDL_GL_SetAttribute(SDL_GLattr.SDL_GL_CONTEXT_MINOR_VERSION, 1)
-            SDL_GL_SetAttribute(SDL_GLattr.SDL_GL_CONTEXT_PROFILE_MASK, 0)
-            SDL_GL_SetAttribute(SDL_GLattr.SDL_GL_DOUBLEBUFFER, 1)
-            SDL_GL_SetAttribute(SDL_GLattr.SDL_GL_ALPHA_SIZE, 8)
-            SDL_GL_SetAttribute(SDL_GLattr.SDL_GL_DEPTH_SIZE, 0)
-        }
-        val flags =
-            SDL_WINDOW_ALLOW_HIGHDPI or
-                (if (useGpu) SDL_WINDOW_OPENGL else 0u) or
-                (if (visible) SDL_WINDOW_SHOWN else SDL_WINDOW_HIDDEN) or
-                (if (undecorated) SDL_WINDOW_BORDERLESS else 0u) or
-                (if (resizable) SDL_WINDOW_RESIZABLE else 0u) or
-                (if (transparent) SDL_WINDOW_TRANSPARENT_COMPAT else 0u)
+        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_CONTEXT_MAJOR_VERSION, 3)
+        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_CONTEXT_MINOR_VERSION, 3)
+        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_CONTEXT_PROFILE_MASK, 0x0001)
+        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_DOUBLEBUFFER, 1)
+        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_ALPHA_SIZE, 8)
+        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_DEPTH_SIZE, 0)
+        SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_STENCIL_SIZE, 8)
+        val baseFlags =
+            SDL_WINDOW_HIGH_PIXEL_DENSITY or
+                (if (visible) 0uL else SDL_WINDOW_HIDDEN) or
+                (if (undecorated) SDL_WINDOW_BORDERLESS else 0uL) or
+                (if (resizable) SDL_WINDOW_RESIZABLE else 0uL) or
+                (if (transparent) SDL_WINDOW_TRANSPARENT else 0uL)
         val initialX =
             (state.position as? WindowPosition.Absolute)?.x?.value?.roundToInt()
                 ?: SDL_WINDOWPOS_CENTERED.toInt()
         val initialY =
             (state.position as? WindowPosition.Absolute)?.y?.value?.roundToInt()
                 ?: SDL_WINDOWPOS_CENTERED.toInt()
+        var candidateWindow =
+            SDL_CreateWindow(
+                title,
+                windowWidth,
+                windowHeight,
+                baseFlags or
+                    (if (nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
+                        SDL_WINDOW_OPENGL
+                    } else {
+                        0uL
+                    }),
+            )
+        if (
+            candidateWindow == null &&
+                nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL
+        ) {
+            nativeLayer.renderApi = org.jetbrains.skiko.GraphicsApi.SOFTWARE_FAST
+            candidateWindow = SDL_CreateWindow(title, windowWidth, windowHeight, baseFlags)
+        }
         val window =
-            SDL_CreateWindow(title, initialX, initialY, windowWidth, windowHeight, flags)
-                ?: error("Could not create window: ${SDL_GetError()?.toKString()}")
+            candidateWindow ?: error("Could not create window: ${SDL_GetError()?.toKString()}")
         sdlWindow = window
+        platformContext.window = window
         windowId = SDL_GetWindowID(window)
+        SDL_SetWindowPosition(window, initialX, initialY)
         if (transparent) {
             check(kplatform_window_set_transparent(window, 1) != 0) {
                 "Per-pixel transparency is not supported by the active SDL backend"
@@ -1984,40 +2040,39 @@ internal class NativeWindowHost(
             owner?.sdlWindow?.let { parent ->
                 // Some SDL backends (notably the headless test driver) do not implement this hint.
                 // Application-level input routing below remains authoritative.
-                SDL_SetWindowModalFor(window, parent)
+                SDL_SetWindowParent(window, parent)
+                SDL_SetWindowModal(window, true)
             }
         }
-        val nativeRenderer =
-            if (useGpu) {
-                null
+        SDL_StartTextInput(window)
+        nativeLayer.attachTo(
+            SdlSkiaLayerComponent(
+                window = window,
+                transparency = transparent,
+                queryContentScale = { queryMetrics(window).density },
+                queryFullscreen = { currentPlacement == WindowPlacement.Fullscreen },
+                updateFullscreen = { fullscreen ->
+                    val placement =
+                        if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
+                    currentPlacement = placement
+                    state.placement = placement
+                    applyPlacement()
+                },
+                onRenderRequested = application::requestFrame,
+            )
+        )
+        skiaLayer = nativeLayer
+        gpuInteropRegistry =
+            if (nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
+                GpuInteropRegistry(nativeLayer)
             } else {
-                SDL_CreateRenderer(
-                    window,
-                    -1,
-                    SDL_RENDERER_ACCELERATED or SDL_RENDERER_PRESENTVSYNC,
-                )
-                    ?: SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE)
-                    ?: error("Could not create renderer: ${SDL_GetError()?.toKString()}")
+                null
             }
-        renderer = nativeRenderer
-        if (useGpu) {
-            compositor =
-                checkNotNull(SdlComposeCompositor.create(window)) {
-                    "Could not create OpenGL compositor: ${SDL_GetError()?.toKString()}"
-                }
-            compositor?.setTransparent(transparent)
-            if (transparent) {
-                check(kplatform_window_set_transparent(window, 1) != 0) {
-                    "Per-pixel transparency is not supported by the active SDL backend"
-                }
-            }
-            gpuInteropRegistry.context = compositor?.context
-        }
         currentTitle = title
         currentIcon = icon
         currentVisible = visible
         currentTransparent = transparent
-        windowShown = SDL_GetWindowFlags(window) and SDL_WINDOW_HIDDEN == 0u
+        windowShown = SDL_GetWindowFlags(window) and SDL_WINDOW_HIDDEN == 0uL
         currentUndecorated = undecorated
         currentResizable = resizable
         currentEnabled = enabled
@@ -2028,16 +2083,16 @@ internal class NativeWindowHost(
         currentPosition = state.position
         this.onPreviewKeyEvent = onPreviewKeyEvent
         this.onKeyEvent = onKeyEvent
-        SDL_SetWindowAlwaysOnTop(window, if (alwaysOnTop) SDL_TRUE else SDL_FALSE)
+        SDL_SetWindowAlwaysOnTop(window, alwaysOnTop)
         applyPlacement()
         if (state.isMinimized) SDL_MinimizeWindow(window)
-        isMaximized = SDL_GetWindowFlags(window) and SDL_WINDOW_MAXIMIZED != 0u
+        isMaximized = SDL_GetWindowFlags(window) and SDL_WINDOW_MAXIMIZED != 0uL
         hitTestReference = StableRef.create(this)
         configureHitTest()
         applyMinimumSize()
         applyMaximumSize()
 
-        val initialMetrics = queryMetrics(window, nativeRenderer)
+        val initialMetrics = queryMetrics(window)
         metrics = initialMetrics
         val nativeScene =
             CanvasLayersComposeScene(
@@ -2049,7 +2104,7 @@ internal class NativeWindowHost(
                 invalidateDraw = ::requestRender,
             )
         platformContext.windowInfo.isWindowFocused =
-            focusable && SDL_GetWindowFlags(window) and sdl2.SDL_WINDOW_INPUT_FOCUS != 0u
+            focusable && SDL_GetWindowFlags(window) and sdl2.SDL_WINDOW_INPUT_FOCUS != 0uL
         platformContext.updateLifecycle(
             isVisible = currentVisible && windowShown,
             isMinimized = currentMinimized,
@@ -2058,31 +2113,40 @@ internal class NativeWindowHost(
         accessibility.open(title)
         updateAccessibility(initialMetrics)
         scene = nativeScene
+        nativeLayer.renderDelegate = SkikoRenderDelegate { canvas, _, _, _ ->
+            nativeScene.draw(canvas.asComposeCanvas())
+        }
         nativeScene.setContent(parentComposition) {
-            androidx.compose.runtime.CompositionLocalProvider(
-                LocalNativeWindowHost provides this@NativeWindowHost,
-                LocalGpuInteropRegistry provides gpuInteropRegistry,
-                LocalNativeViewInvalidationDispatcher provides { block ->
-                    application.dispatchToHost {
-                        block()
-                        requestRender()
+            ProvideSystemTheme(application.systemDarkThemeState.value) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    LocalPlatformAccentColor provides application.systemAccentColorState.value,
+                    LocalNativeWindowHost provides this@NativeWindowHost,
+                    LocalGpuInteropRegistry provides gpuInteropRegistry,
+                    LocalNativeViewInvalidationDispatcher provides
+                        { block ->
+                            application.dispatchToHost {
+                                block()
+                                requestRender()
+                            }
+                        },
+                ) {
+                    @Suppress("UNUSED_VARIABLE") val revision = menuBarRevision
+                    Column(Modifier.fillMaxSize()) {
+                        LinuxWindowMenuBar(menuBarModel)
+                        Box(Modifier.fillMaxWidth().weight(1f)) { content() }
                     }
-                },
-            ) {
-                @Suppress("UNUSED_VARIABLE")
-                val revision = menuBarRevision
-                Column(Modifier.fillMaxSize()) {
-                    LinuxWindowMenuBar(menuBarModel)
-                    Box(Modifier.fillMaxWidth().weight(1f)) { content() }
                 }
             }
         }
-        framebuffer =
-            Framebuffer(nativeRenderer, initialMetrics.pixelWidth, initialMetrics.pixelHeight)
         println("$title: ${initialMetrics.description()}")
-        compositor?.let {
-            println("$title: OpenGL ${it.renderer}")
-        }
+        println("$title: ${nativeLayer.rendererDescription}")
+        val diagnostics = nativeLayer.diagnostics
+        println(
+            "$title: transparentBuffer=${diagnostics.hasTransparentWindowBuffer} " +
+                "(requested=${diagnostics.transparencyRequested}), " +
+                "frameBuffers=${diagnostics.effectiveFrameBufferCount ?: "unknown"} " +
+                "(requested=${diagnostics.frameBuffering})"
+        )
     }
 
     fun update(
@@ -2118,13 +2182,13 @@ internal class NativeWindowHost(
             if (visible) requestRender()
         }
         if (undecorated != currentUndecorated) {
-            SDL_SetWindowBordered(window, if (undecorated) SDL_FALSE else SDL_TRUE)
+            SDL_SetWindowBordered(window, !undecorated)
             currentUndecorated = undecorated
             configureHitTest()
             requestRender()
         }
         if (resizable != currentResizable) {
-            SDL_SetWindowResizable(window, if (resizable) SDL_TRUE else SDL_FALSE)
+            SDL_SetWindowResizable(window, resizable)
             currentResizable = resizable
             configureHitTest()
             requestRender()
@@ -2138,11 +2202,11 @@ internal class NativeWindowHost(
             requestRender()
         }
         platformContext.windowInfo.isWindowFocused =
-            focusable && SDL_GetWindowFlags(window) and sdl2.SDL_WINDOW_INPUT_FOCUS != 0u
+            focusable && SDL_GetWindowFlags(window) and sdl2.SDL_WINDOW_INPUT_FOCUS != 0uL
         this.onPreviewKeyEvent = onPreviewKeyEvent
         this.onKeyEvent = onKeyEvent
         if (alwaysOnTop != currentAlwaysOnTop) {
-            SDL_SetWindowAlwaysOnTop(window, if (alwaysOnTop) SDL_TRUE else SDL_FALSE)
+            SDL_SetWindowAlwaysOnTop(window, alwaysOnTop)
             currentAlwaysOnTop = alwaysOnTop
         }
         if (state.placement != currentPlacement) {
@@ -2159,7 +2223,11 @@ internal class NativeWindowHost(
             isVisible = currentVisible && windowShown,
             isMinimized = currentMinimized,
         )
-        if (state.position != currentPosition && state.position is WindowPosition.Absolute) {
+        if (
+            currentPlacement.persistsFloatingGeometry() &&
+                state.position != currentPosition &&
+                state.position is WindowPosition.Absolute
+        ) {
             val position = state.position as WindowPosition.Absolute
             SDL_SetWindowPosition(
                 window,
@@ -2177,7 +2245,10 @@ internal class NativeWindowHost(
             if (requestedSize.height.isSpecified)
                 requestedSize.height.value.roundToInt().coerceAtLeast(1)
             else windowHeight
-        if (requestedWidth != windowWidth || requestedHeight != windowHeight) {
+        if (
+            currentPlacement.persistsFloatingGeometry() &&
+                (requestedWidth != windowWidth || requestedHeight != windowHeight)
+        ) {
             windowWidth = requestedWidth
             windowHeight = requestedHeight
             SDL_SetWindowSize(window, requestedWidth, requestedHeight)
@@ -2211,130 +2282,149 @@ internal class NativeWindowHost(
 
     fun owns(event: SDL_Event): Boolean =
         when (event.type) {
-            SDL_WINDOWEVENT.toUInt() -> event.window.windowID == windowId
-            SDL_KEYDOWN.toUInt(),
-            SDL_KEYUP.toUInt() -> event.key.windowID == windowId
-            SDL_TEXTINPUT.toUInt() -> event.text.windowID == windowId
-            SDL_TEXTEDITING.toUInt() -> event.edit.windowID == windowId
-            SDL_MOUSEMOTION.toUInt() -> event.motion.windowID == windowId
-            SDL_MOUSEWHEEL.toUInt() -> event.wheel.windowID == windowId
-            SDL_MOUSEBUTTONDOWN.toUInt(),
-            SDL_MOUSEBUTTONUP.toUInt() -> event.button.windowID == windowId
-            SDL_FINGERDOWN.toUInt(),
-            SDL_FINGERMOTION.toUInt(),
-            SDL_FINGERUP.toUInt() -> event.tfinger.windowID == windowId
-            SDL_DROPBEGIN.toUInt(),
-            SDL_DROPCOMPLETE.toUInt(),
-            SDL_DROPFILE.toUInt(),
-            SDL_DROPTEXT.toUInt() -> event.drop.windowID == windowId
+            SDL_EVENT_WINDOW_CLOSE_REQUESTED.toUInt(),
+            SDL_EVENT_WINDOW_SHOWN.toUInt(),
+            SDL_EVENT_WINDOW_EXPOSED.toUInt(),
+            SDL_EVENT_WINDOW_HIDDEN.toUInt(),
+            SDL_EVENT_WINDOW_MAXIMIZED.toUInt(),
+            SDL_EVENT_WINDOW_MINIMIZED.toUInt(),
+            SDL_EVENT_WINDOW_RESTORED.toUInt(),
+            SDL_EVENT_WINDOW_MOVED.toUInt(),
+            SDL_EVENT_WINDOW_FOCUS_GAINED.toUInt(),
+            SDL_EVENT_WINDOW_FOCUS_LOST.toUInt(),
+            SDL_EVENT_WINDOW_MOUSE_ENTER.toUInt(),
+            SDL_EVENT_WINDOW_MOUSE_LEAVE.toUInt(),
+            SDL_EVENT_WINDOW_RESIZED.toUInt(),
+            SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED.toUInt() -> event.window.windowID == windowId
+            SDL_EVENT_KEY_DOWN.toUInt(),
+            SDL_EVENT_KEY_UP.toUInt() -> event.key.windowID == windowId
+            SDL_EVENT_TEXT_INPUT.toUInt() -> event.text.windowID == windowId
+            SDL_EVENT_TEXT_EDITING.toUInt() -> event.edit.windowID == windowId
+            SDL_EVENT_MOUSE_MOTION.toUInt() -> event.motion.windowID == windowId
+            SDL_EVENT_MOUSE_WHEEL.toUInt() -> event.wheel.windowID == windowId
+            SDL_EVENT_MOUSE_BUTTON_DOWN.toUInt(),
+            SDL_EVENT_MOUSE_BUTTON_UP.toUInt() -> event.button.windowID == windowId
+            SDL_EVENT_FINGER_DOWN.toUInt(),
+            SDL_EVENT_FINGER_MOTION.toUInt(),
+            SDL_EVENT_FINGER_UP.toUInt() -> event.tfinger.windowID == windowId
+            SDL_EVENT_DROP_BEGIN.toUInt(),
+            SDL_EVENT_DROP_COMPLETE.toUInt(),
+            SDL_EVENT_DROP_FILE.toUInt(),
+            SDL_EVENT_DROP_TEXT.toUInt() -> event.drop.windowID == windowId
             else -> false
         }
 
     fun handle(event: SDL_Event) {
         when (event.type) {
-            SDL_WINDOWEVENT.toUInt() ->
-                when (event.window.event) {
-                    SDL_WindowEventID.SDL_WINDOWEVENT_CLOSE.value.toUByte() -> requestClose()
-                    SDL_WindowEventID.SDL_WINDOWEVENT_SHOWN.value.toUByte() -> {
-                        windowShown = true
-                        updateLifecycle()
-                        requestRender()
-                    }
-                    SDL_WindowEventID.SDL_WINDOWEVENT_EXPOSED.value.toUByte() -> requestRender()
-                    SDL_WindowEventID.SDL_WINDOWEVENT_HIDDEN.value.toUByte() -> {
-                        windowShown = false
-                        updateLifecycle()
-                    }
-                    SDL_WindowEventID.SDL_WINDOWEVENT_MAXIMIZED.value.toUByte() -> {
-                        isMaximized = true
-                        currentPlacement = WindowPlacement.Maximized
-                        state.placement = WindowPlacement.Maximized
-                        requestRender()
-                    }
-                    SDL_WindowEventID.SDL_WINDOWEVENT_MINIMIZED.value.toUByte() -> {
-                        currentMinimized = true
-                        state.isMinimized = true
-                        updateLifecycle()
-                    }
-                    SDL_WindowEventID.SDL_WINDOWEVENT_RESTORED.value.toUByte() -> {
-                        isMaximized = false
-                        currentMinimized = false
-                        if (state.placement != WindowPlacement.Fullscreen) {
-                            currentPlacement = WindowPlacement.Floating
-                            state.placement = WindowPlacement.Floating
-                        }
-                        state.isMinimized = false
-                        updateLifecycle()
-                        requestRender()
-                    }
-                    SDL_WindowEventID.SDL_WINDOWEVENT_MOVED.value.toUByte() -> {
-                        currentPosition =
-                            WindowPosition(event.window.data1.dp, event.window.data2.dp)
-                        state.position = currentPosition
-                        requestRender()
-                    }
-                    SDL_WindowEventID.SDL_WINDOWEVENT_FOCUS_GAINED.value.toUByte() -> {
-                        platformContext.windowInfo.isWindowFocused = currentFocusable
-                        updateLifecycle()
-                        requestRender()
-                    }
-                    SDL_WindowEventID.SDL_WINDOWEVENT_FOCUS_LOST.value.toUByte() -> {
-                        platformContext.windowInfo.isWindowFocused = false
-                        updateLifecycle()
-                        clearPointerButtons()
-                        touchPoints.clear()
-                        scene?.cancelPointerInput()
-                        requestRender()
-                    }
-                    SDL_WindowEventID.SDL_WINDOWEVENT_ENTER.value.toUByte() ->
-                        pointer(PointerEventType.Enter, pointerX, pointerY)
-                    SDL_WindowEventID.SDL_WINDOWEVENT_LEAVE.value.toUByte() ->
-                        pointer(PointerEventType.Exit, pointerX, pointerY)
-                    SDL_WindowEventID.SDL_WINDOWEVENT_SIZE_CHANGED.value.toUByte() -> {
-                        windowWidth = event.window.data1.coerceAtLeast(1)
-                        windowHeight = event.window.data2.coerceAtLeast(1)
-                        state.size = DpSize(windowWidth.dp, windowHeight.dp)
-                        requestRender()
-                    }
+            SDL_EVENT_WINDOW_CLOSE_REQUESTED.toUInt() -> requestClose()
+            SDL_EVENT_WINDOW_SHOWN.toUInt() -> {
+                windowShown = true
+                updateLifecycle()
+                requestRender()
+            }
+            SDL_EVENT_WINDOW_EXPOSED.toUInt() -> requestRender()
+            SDL_EVENT_WINDOW_HIDDEN.toUInt() -> {
+                windowShown = false
+                updateLifecycle()
+            }
+            SDL_EVENT_WINDOW_MAXIMIZED.toUInt() -> {
+                isMaximized = true
+                currentPlacement = WindowPlacement.Maximized
+                state.placement = WindowPlacement.Maximized
+                requestRender()
+            }
+            SDL_EVENT_WINDOW_MINIMIZED.toUInt() -> {
+                currentMinimized = true
+                state.isMinimized = true
+                updateLifecycle()
+            }
+            SDL_EVENT_WINDOW_RESTORED.toUInt() -> {
+                isMaximized = false
+                currentMinimized = false
+                if (state.placement != WindowPlacement.Fullscreen) {
+                    currentPlacement = WindowPlacement.Floating
+                    state.placement = WindowPlacement.Floating
                 }
-            SDL_KEYDOWN.toUInt(),
-            SDL_KEYUP.toUInt() -> {
+                state.isMinimized = false
+                updateLifecycle()
+                requestRender()
+            }
+            SDL_EVENT_WINDOW_MOVED.toUInt() -> {
+                val nextPosition = WindowPosition(event.window.data1.dp, event.window.data2.dp)
+                currentPosition = nextPosition
+                if (currentPlacement.persistsFloatingGeometry()) state.position = nextPosition
+                requestRender()
+            }
+            SDL_EVENT_WINDOW_FOCUS_GAINED.toUInt() -> {
+                platformContext.windowInfo.isWindowFocused = currentFocusable
+                updateLifecycle()
+                requestRender()
+            }
+            SDL_EVENT_WINDOW_FOCUS_LOST.toUInt() -> {
+                platformContext.windowInfo.isWindowFocused = false
+                updateLifecycle()
+                clearPointerButtons()
+                touchPoints.clear()
+                scene?.cancelPointerInput()
+                requestRender()
+            }
+            SDL_EVENT_WINDOW_MOUSE_ENTER.toUInt() ->
+                pointer(PointerEventType.Enter, pointerX, pointerY)
+            SDL_EVENT_WINDOW_MOUSE_LEAVE.toUInt() ->
+                pointer(PointerEventType.Exit, pointerX, pointerY)
+            SDL_EVENT_WINDOW_RESIZED.toUInt() -> {
+                windowWidth = event.window.data1.coerceAtLeast(1)
+                windowHeight = event.window.data2.coerceAtLeast(1)
+                if (currentPlacement.persistsFloatingGeometry()) {
+                    state.size = DpSize(windowWidth.dp, windowHeight.dp)
+                }
+                requestRender()
+            }
+            SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED.toUInt() -> requestRender()
+            SDL_EVENT_KEY_DOWN.toUInt(),
+            SDL_EVENT_KEY_UP.toUInt() -> {
                 if (!currentEnabled || !currentFocusable) return
                 key(
-                    key = composeKeyForSdlScancode(event.key.keysym.scancode.toInt()),
+                    key = composeKeyForSdlScancode(event.key.scancode.toInt()),
                     type =
-                        if (event.type == SDL_KEYDOWN.toUInt()) {
+                        if (event.type == SDL_EVENT_KEY_DOWN.toUInt()) {
                             KeyEventType.KeyDown
                         } else {
                             KeyEventType.KeyUp
                         },
-                    modifiers = event.key.keysym.mod.toInt(),
+                    modifiers = event.key.mod.toInt(),
                 )
-                if (
-                    event.type == SDL_KEYDOWN.toUInt() &&
-                        event.key.keysym.sym == SDLK_ESCAPE.toInt()
-                ) {
+                if (event.type == SDL_EVENT_KEY_DOWN.toUInt() && event.key.key == SDLK_ESCAPE) {
                     requestClose()
                 }
             }
-            SDL_TEXTINPUT.toUInt() ->
-                if (currentEnabled && currentFocusable) textInput(event.text.text.toKString())
-            SDL_TEXTEDITING.toUInt() ->
+            SDL_EVENT_TEXT_INPUT.toUInt() ->
                 if (currentEnabled && currentFocusable) {
-                    platformContext.updateComposingText(event.edit.text.toKString())
+                    textInput(event.text.text?.toKString().orEmpty())
                 }
-            SDL_MOUSEMOTION.toUInt() -> {
+            SDL_EVENT_TEXT_EDITING.toUInt() ->
+                if (currentEnabled && currentFocusable) {
+                    platformContext.updateComposingText(event.edit.text?.toKString().orEmpty())
+                }
+            SDL_EVENT_MOUSE_MOTION.toUInt() -> {
                 platformContext.nativeDragAndDropManager.pointerMotion()
                 if (!currentEnabled) return
                 if (event.motion.which == UInt.MAX_VALUE) return
-                pointerX = event.motion.x
-                pointerY = event.motion.y
+                pointerX = event.motion.x.roundToInt()
+                pointerY = event.motion.y.roundToInt()
                 pointer(PointerEventType.Move, pointerX, pointerY)
                 if (dropAccepted) scene?.rootDragAndDropNode?.onMoved(currentDropEvent())
             }
-            SDL_MOUSEWHEEL.toUInt() -> {
+            SDL_EVENT_MOUSE_WHEEL.toUInt() -> {
                 if (!currentEnabled) return
-                val direction = if (event.wheel.direction == 1u) 1f else -1f
+                val direction =
+                    if (
+                        event.wheel.direction == sdl2.SDL_MouseWheelDirection.SDL_MOUSEWHEEL_FLIPPED
+                    ) {
+                        1f
+                    } else {
+                        -1f
+                    }
                 val step = 40f * (metrics?.density ?: 1f)
                 pointer(
                     PointerEventType.Scroll,
@@ -2344,16 +2434,16 @@ internal class NativeWindowHost(
                         Offset(event.wheel.x * step * direction, event.wheel.y * step * direction),
                 )
             }
-            SDL_MOUSEBUTTONDOWN.toUInt(),
-            SDL_MOUSEBUTTONUP.toUInt() -> {
+            SDL_EVENT_MOUSE_BUTTON_DOWN.toUInt(),
+            SDL_EVENT_MOUSE_BUTTON_UP.toUInt() -> {
                 if (!currentEnabled) return
                 if (event.button.which == UInt.MAX_VALUE) return
-                pointerX = event.button.x
-                pointerY = event.button.y
+                pointerX = event.button.x.roundToInt()
+                pointerY = event.button.y.roundToInt()
                 val button = pointerButton(event.button.button) ?: return
-                setButtonPressed(button, event.type == SDL_MOUSEBUTTONDOWN.toUInt())
+                setButtonPressed(button, event.type == SDL_EVENT_MOUSE_BUTTON_DOWN.toUInt())
                 pointer(
-                    if (event.type == SDL_MOUSEBUTTONDOWN.toUInt()) {
+                    if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN.toUInt()) {
                         PointerEventType.Press
                     } else {
                         PointerEventType.Release
@@ -2363,26 +2453,22 @@ internal class NativeWindowHost(
                     button = button,
                 )
                 if (
-                    event.type == SDL_MOUSEBUTTONUP.toUInt() &&
+                    event.type == SDL_EVENT_MOUSE_BUTTON_UP.toUInt() &&
                         button == PointerButton.Primary
                 ) {
                     platformContext.nativeDragAndDropManager.pointerRelease()
                 }
             }
-            SDL_SYSWMEVENT.toUInt() ->
-                platformContext.nativeDragAndDropManager.handleSysWm(
-                    event.syswm.msg?.reinterpret()
-                )
-            SDL_FINGERDOWN.toUInt(),
-            SDL_FINGERMOTION.toUInt(),
-            SDL_FINGERUP.toUInt() -> {
+            SDL_EVENT_FINGER_DOWN.toUInt(),
+            SDL_EVENT_FINGER_MOTION.toUInt(),
+            SDL_EVENT_FINGER_UP.toUInt() -> {
                 if (!currentEnabled) return
                 touch(event)
             }
-            SDL_DROPBEGIN.toUInt() -> beginDrop()
-            SDL_DROPFILE.toUInt() -> receiveDropItem(event, isFile = true)
-            SDL_DROPTEXT.toUInt() -> receiveDropItem(event, isFile = false)
-            SDL_DROPCOMPLETE.toUInt() -> completeDrop()
+            SDL_EVENT_DROP_BEGIN.toUInt() -> beginDrop()
+            SDL_EVENT_DROP_FILE.toUInt() -> receiveDropItem(event, isFile = true)
+            SDL_EVENT_DROP_TEXT.toUInt() -> receiveDropItem(event, isFile = false)
+            SDL_EVENT_DROP_COMPLETE.toUInt() -> completeDrop()
         }
     }
 
@@ -2393,7 +2479,16 @@ internal class NativeWindowHost(
     }
 
     fun toggleMaximized() {
-        sdlWindow?.let { if (isMaximized) SDL_RestoreWindow(it) else SDL_MaximizeWindow(it) }
+        val nextPlacement =
+            if (currentPlacement == WindowPlacement.Maximized || isMaximized) {
+                WindowPlacement.Floating
+            } else {
+                WindowPlacement.Maximized
+            }
+        currentPlacement = nextPlacement
+        state.placement = nextPlacement
+        applyPlacement()
+        requestRender()
     }
 
     fun requestFocus() {
@@ -2490,8 +2585,8 @@ internal class NativeWindowHost(
 
     private fun touch(event: SDL_Event) {
         val currentMetrics = metrics ?: return
-        val id = event.tfinger.fingerId
-        val released = event.type == SDL_FINGERUP.toUInt()
+        val id = event.tfinger.fingerID.toLong()
+        val released = event.type == SDL_EVENT_FINGER_UP.toUInt()
         touchPoints[id] =
             TouchPoint(
                 position =
@@ -2504,8 +2599,8 @@ internal class NativeWindowHost(
             )
         val type =
             when (event.type) {
-                SDL_FINGERDOWN.toUInt() -> PointerEventType.Press
-                SDL_FINGERUP.toUInt() -> PointerEventType.Release
+                SDL_EVENT_FINGER_DOWN.toUInt() -> PointerEventType.Press
+                SDL_EVENT_FINGER_UP.toUInt() -> PointerEventType.Release
                 else -> PointerEventType.Move
             }
         scene?.sendPointerEvent(
@@ -2521,27 +2616,28 @@ internal class NativeWindowHost(
                     )
                 },
             keyboardModifiers = platformContext.windowInfo.keyboardModifiers,
-            timeMillis = event.tfinger.timestamp.toLong(),
+            timeMillis = (event.tfinger.timestamp / 1_000_000uL).toLong(),
         )
         if (released) touchPoints.remove(id)
     }
 
     private fun beginDrop() {
-        droppedFiles.clear()
-        droppedText = null
-        dropAccepted = false
+        if (dropAccepted) {
+            val dragEvent = currentDropEvent()
+            scene?.rootDragAndDropNode?.onExited(dragEvent)
+            scene?.rootDragAndDropNode?.onEnded(dragEvent)
+        }
+        clearDrop()
+        updateDropPointerPosition()
+        startDropIfAccepted()
     }
 
     private fun receiveDropItem(event: SDL_Event, isFile: Boolean) {
-        val nativeData = event.drop.file ?: return
+        val nativeData = event.drop.data ?: return
         val value = nativeData.toKString()
-        SDL_free(nativeData)
         if (isFile) droppedFiles += value else droppedText = value
-        if (!dropAccepted) {
-            val dragEvent = currentDropEvent()
-            dropAccepted = scene?.rootDragAndDropNode?.acceptDragAndDropTransfer(dragEvent) == true
-            if (dropAccepted) scene?.rootDragAndDropNode?.onEntered(dragEvent)
-        }
+        updateDropPointerPosition()
+        startDropIfAccepted()
     }
 
     private fun completeDrop() {
@@ -2550,7 +2646,35 @@ internal class NativeWindowHost(
             scene?.rootDragAndDropNode?.onDrop(dragEvent)
             scene?.rootDragAndDropNode?.onEnded(dragEvent)
         }
-        beginDrop()
+        clearDrop()
+    }
+
+    private fun startDropIfAccepted() {
+        if (dropAccepted) return
+        val root = scene?.rootDragAndDropNode ?: return
+        val dragEvent = currentDropEvent()
+        dropAccepted = root.acceptDragAndDropTransfer(dragEvent)
+        if (dropAccepted) {
+            root.onStarted(dragEvent)
+            root.onEntered(dragEvent)
+            root.onMoved(dragEvent)
+        }
+    }
+
+    private fun updateDropPointerPosition() {
+        memScoped {
+            val x = alloc<FloatVar>()
+            val y = alloc<FloatVar>()
+            SDL_GetMouseState(x.ptr, y.ptr)
+            pointerX = x.value.roundToInt()
+            pointerY = y.value.roundToInt()
+        }
+    }
+
+    private fun clearDrop() {
+        droppedFiles.clear()
+        droppedText = null
+        dropAccepted = false
     }
 
     private fun currentDropEvent(): DragAndDropEvent {
@@ -2594,171 +2718,62 @@ internal class NativeWindowHost(
         }
     }
 
-    fun render() {
+    fun render(forceDraw: Boolean = false) {
         if (!isRenderable) return
         val window = sdlWindow ?: return
-        val nativeRenderer = renderer
-        val nativeCompositor = compositor
-        if (nativeRenderer == null && nativeCompositor == null) return
+        val nativeLayer = skiaLayer ?: return
         val nativeScene = scene ?: return
-        renderScheduled.value = false
-        nativeCompositor?.makeCurrent()
-        val nextMetrics = queryMetrics(window, nativeRenderer)
-        val metricsChanged = nextMetrics != metrics
-        if (metricsChanged) {
-            val densityChanged = nextMetrics.density != metrics?.density
-            metrics = nextMetrics
-            nativeScene.density = Density(nextMetrics.density)
-            nativeScene.size = IntSize(nextMetrics.pixelWidth, nextMetrics.pixelHeight)
-            framebuffer?.close()
-            framebuffer =
-                Framebuffer(nativeRenderer, nextMetrics.pixelWidth, nextMetrics.pixelHeight)
-            clearPointerButtons()
-            updateWindowInfo(nextMetrics)
-            if (densityChanged) println("$currentTitle: ${nextMetrics.description()}")
+        if (!rendering.compareAndSet(expect = false, update = true)) {
+            if (forceDraw) forcedRenderScheduled.value = true
+            renderScheduled.value = true
+            application.requestFrame()
+            return
         }
-        platformContext.updateTextInputRect(nextMetrics)
-        val target = framebuffer ?: return
-        if (currentTransparent && metricsChanged) {
-            kplatform_window_set_transparent(window, 1)
-        }
-        nativeCompositor?.beginFrame(nextMetrics.pixelWidth, nextMetrics.pixelHeight)
-        val hadPendingLayout = nativeScene.hasPendingMeasureOrLayout
-        val composeNeedsDraw = metricsChanged || hadPendingLayout || nativeScene.hasInvalidations()
-        var damageReason = "none"
-        var orderedFullRedrawRequired = false
-        val damage =
+        try {
+            renderScheduled.value = false
+            val scheduledForceDraw = forcedRenderScheduled.getAndSet(false)
+            val nextMetrics = queryMetrics(window)
+            val metricsChanged = nextMetrics != metrics
+            if (metricsChanged) {
+                val densityChanged = nextMetrics.density != metrics?.density
+                metrics = nextMetrics
+                nativeScene.density = Density(nextMetrics.density)
+                nativeScene.size = IntSize(nextMetrics.pixelWidth, nextMetrics.pixelHeight)
+                clearPointerButtons()
+                updateWindowInfo(nextMetrics)
+                if (densityChanged) println("$currentTitle: ${nextMetrics.description()}")
+            }
+            platformContext.updateTextInputRect(nextMetrics)
+            if (currentTransparent && metricsChanged) {
+                kplatform_window_set_transparent(window, 1)
+            }
+            val hadPendingLayout = nativeScene.hasPendingMeasureOrLayout
+            val composeNeedsDraw =
+                forceDraw ||
+                    scheduledForceDraw ||
+                    metricsChanged ||
+                    hadPendingLayout ||
+                    nativeScene.hasInvalidations()
             if (composeNeedsDraw) {
                 if (hadPendingLayout) nativeScene.measureAndLayout()
-                val fullDamageReason =
-                    when {
-                        metricsChanged -> "resize"
-                        hadPendingLayout -> "layout"
-                        target.needsFullComposeFrame -> "first-frame"
-                        else -> null
-                    }
-                val resolvedDamage =
-                    if (fullDamageReason != null) {
-                        damageReason = fullDamageReason
-                        damageTracker.clear()
-                        FrameDamage(0, 0, nextMetrics.pixelWidth, nextMetrics.pixelHeight)
-                    } else {
-                        // Draw invalidations normally provide exact root-space bounds. Anything
-                        // that reaches the scene without bounds is deliberately treated as complex
-                        // or unsupported and falls back to a full frame.
-                        if (damageTracker.takeFullFrameRequest()) {
-                            damageReason = "complex"
-                            FrameDamage(0, 0, nextMetrics.pixelWidth, nextMetrics.pixelHeight)
-                        } else {
-                            val bounded =
-                                damageTracker.take(nextMetrics.pixelWidth, nextMetrics.pixelHeight)
-                            if (bounded != null) {
-                                damageReason = "bounded"
-                                bounded
-                            } else {
-                                damageReason = "unbounded"
-                                FrameDamage(0, 0, nextMetrics.pixelWidth, nextMetrics.pixelHeight)
-                            }
-                        }
-                    }
-                target.surface.clear(resolvedDamage.rect)
-                target.canvas.save()
-                target.canvas.clipRect(
-                    resolvedDamage.rect.left,
-                    resolvedDamage.rect.top,
-                    resolvedDamage.rect.right,
-                    resolvedDamage.rect.bottom,
-                )
-                val orderedRecorder =
-                    nativeCompositor?.beginOrderedRecording(
-                        rootCanvas = target.canvas,
-                        rootSurface = target.surface,
-                        width = nextMetrics.pixelWidth,
-                        height = nextMetrics.pixelHeight,
-                        damage = resolvedDamage,
+                nativeLayer.render(force = true)
+                damageTracker.clear()
+                if (renderStats) {
+                    val total = nextMetrics.pixelWidth * nextMetrics.pixelHeight
+                    println(
+                        "Render [Skia GPU]: $total pixels, CPU upload=0B, " +
+                            "layout=$hadPendingLayout resize=$metricsChanged"
                     )
-                var orderedCapture: SdlOrderedFrameCapture? = null
-                gpuInteropRegistry.rootCanvas =
-                    if (nativeCompositor != null) target.canvas else null
-                gpuInteropRegistry.compositionRecorder = orderedRecorder
-                try {
-                    nativeScene.draw(target.canvas)
-                    // Unsupported retained-layer boundaries use the conservative external-first
-                    // path. Apply their root cutouts only after the complete scene has drawn so
-                    // isolated ancestors cannot repaint over the native surface.
-                    gpuInteropRegistry.applyFallbackMasks()
-                } finally {
-                    gpuInteropRegistry.compositionRecorder = null
-                    gpuInteropRegistry.rootCanvas = null
-                    try {
-                        orderedCapture = orderedRecorder?.finish()
-                    } finally {
-                        target.canvas.restore()
-                    }
                 }
-                target.surface.flush()
-                orderedCapture?.let { capture ->
-                    orderedFullRedrawRequired =
-                        nativeCompositor?.commitOrderedRecording(capture) == true
-                }
-                target.markComposeFramePresented()
-                resolvedDamage
-            } else {
-                null
             }
-        if (orderedFullRedrawRequired) {
-            damageTracker.requireFullFrame()
-            requestRender()
+            // Accessibility updates are coalesced and performed after the visual frame is
+            // presented.
+            updateAccessibility(nextMetrics)
+            accessibility.refreshAfterLayout()
+            if (nativeScene.hasInvalidations()) requestRender()
+        } finally {
+            rendering.value = false
         }
-        if (nativeCompositor != null) {
-            if (!nativeCompositor.drawOrderedContent()) {
-                nativeCompositor.drawExternalContent(gpuInteropRegistry::draw)
-                nativeCompositor.uploadAndDrawRoot(
-                    surface = target.surface,
-                    width = nextMetrics.pixelWidth,
-                    height = nextMetrics.pixelHeight,
-                    damage = damage,
-                )
-            }
-            nativeCompositor.present()
-        } else {
-            checkNotNull(nativeRenderer)
-            val texture = checkNotNull(target.texture)
-            target.updateSdlTexture(damage)
-            SDL_RenderClear(nativeRenderer)
-            SDL_RenderCopy(nativeRenderer, texture, null, null)
-            SDL_RenderPresent(nativeRenderer)
-        }
-        if (renderStats) {
-            val pixels = damage?.pixelCount ?: 0
-            val total = nextMetrics.pixelWidth * nextMetrics.pixelHeight
-            val uploadBytes = nativeCompositor?.lastRootUploadBytes ?: (pixels * 4)
-            val compositorStats = nativeCompositor?.statsSnapshot()
-            println(
-                "Render damage [$damageReason]: $pixels/$total pixels" +
-                    (damage?.let { " (${it.x},${it.y} ${it.width}x${it.height})" } ?: "") +
-                    ", upload=${uploadBytes}B" +
-                    (compositorStats?.let {
-                        ", commands=${nativeCompositor.lastFrameCommands}" +
-                            ", layers=${it.activeLayers}" +
-                            ", layerChanges=${it.layerContentChanges}/${it.layerPropertyChanges}" +
-                            ", nativeReadbacks=${gpuInteropRegistry.rasterReadbacks}" +
-                            "/${gpuInteropRegistry.rasterReadbackBytes}B" +
-                            (
-                                nativeCompositor.lastOrderedFallbackReason
-                                    .takeIf { reason ->
-                                        reason != SdlOrderedFallbackReason.None
-                                    }
-                                    ?.let { reason -> ", orderedFallback=$reason" }
-                                    ?: ""
-                            )
-                    } ?: "")
-            )
-        }
-        // Accessibility updates are coalesced and performed after the visual frame is presented.
-        updateAccessibility(nextMetrics)
-        accessibility.refreshAfterLayout()
-        if (nativeScene.hasInvalidations()) requestRender()
     }
 
     private fun updateAccessibility(currentMetrics: RenderMetrics? = metrics) {
@@ -2791,30 +2806,11 @@ internal class NativeWindowHost(
             )
     }
 
-    private fun queryMetrics(
-        window: CPointer<SDL_Window>,
-        renderer: CPointer<SDL_Renderer>?,
-    ): RenderMetrics = memScoped {
+    private fun queryMetrics(window: CPointer<SDL_Window>): RenderMetrics = memScoped {
         val pixelWidth = alloc<IntVar>()
         val pixelHeight = alloc<IntVar>()
-        if (renderer != null) {
-            check(SDL_GetRendererOutputSize(renderer, pixelWidth.ptr, pixelHeight.ptr) == 0) {
-                "Could not query renderer size: ${SDL_GetError()?.toKString()}"
-            }
-        } else {
-            SDL_GL_GetDrawableSize(window, pixelWidth.ptr, pixelHeight.ptr)
-        }
-        val displayDpi = alloc<FloatVar>()
-        val displayIndex = SDL_GetWindowDisplayIndex(window)
-        val density =
-            if (
-                displayIndex >= 0 &&
-                    SDL_GetDisplayDPI(displayIndex, displayDpi.ptr, null, null) == 0
-            ) {
-                (displayDpi.value / 96f).coerceIn(0.75f, 4f)
-            } else {
-                1f
-            }
+        SDL_GetWindowSizeInPixels(window, pixelWidth.ptr, pixelHeight.ptr)
+        val density = SDL_GetWindowDisplayScale(window).takeIf { it > 0f } ?: 1f
         RenderMetrics(
             windowWidth = windowWidth.coerceAtLeast(1),
             windowHeight = windowHeight.coerceAtLeast(1),
@@ -2852,15 +2848,15 @@ internal class NativeWindowHost(
         val window = sdlWindow ?: return
         when (currentPlacement) {
             WindowPlacement.Fullscreen ->
-                check(SDL_SetWindowFullscreen(window, SDL_WINDOW_FULLSCREEN_DESKTOP) == 0) {
+                check(SDL_SetWindowFullscreen(window, true)) {
                     "Could not enter fullscreen: ${SDL_GetError()?.toKString()}"
                 }
             WindowPlacement.Maximized -> {
-                SDL_SetWindowFullscreen(window, 0u)
+                SDL_SetWindowFullscreen(window, false)
                 SDL_MaximizeWindow(window)
             }
             WindowPlacement.Floating -> {
-                SDL_SetWindowFullscreen(window, 0u)
+                SDL_SetWindowFullscreen(window, false)
                 SDL_RestoreWindow(window)
             }
         }
@@ -2870,7 +2866,7 @@ internal class NativeWindowHost(
         val window = sdlWindow ?: return
         if (currentUndecorated) {
             val reference = checkNotNull(hitTestReference)
-            check(SDL_SetWindowHitTest(window, NativeWindowHitTest, reference.asCPointer()) == 0) {
+            check(SDL_SetWindowHitTest(window, NativeWindowHitTest, reference.asCPointer())) {
                 "Window hit testing is unavailable: ${SDL_GetError()?.toKString()}"
             }
         } else {
@@ -2881,10 +2877,12 @@ internal class NativeWindowHost(
     fun close() {
         if (closed) return
         closed = true
-        compositor?.makeCurrent()
-        framebuffer?.close()
-        framebuffer = null
-        scene?.close()
+        val nativeLayer = skiaLayer
+        if (nativeLayer?.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
+            nativeLayer.withOpenGlContext { scene?.close() }
+        } else {
+            scene?.close()
+        }
         scene = null
         accessibility.close()
         platformContext.nativeDragAndDropManager.close()
@@ -2892,13 +2890,12 @@ internal class NativeWindowHost(
         sdlWindow?.let { SDL_SetWindowHitTest(it, null, null) }
         hitTestReference?.dispose()
         hitTestReference = null
-        renderer?.let { SDL_DestroyRenderer(it) }
-        renderer = null
-        gpuInteropRegistry.context = null
-        compositor?.close()
-        compositor = null
+        gpuInteropRegistry = null
+        skiaLayer?.detach()
+        skiaLayer = null
         sdlWindow?.let { SDL_DestroyWindow(it) }
         sdlWindow = null
+        platformContext.window = null
     }
 
     private fun updateLifecycle() {
@@ -2909,6 +2906,13 @@ internal class NativeWindowHost(
         updateAccessibility()
     }
 }
+
+private fun Boolean?.asSkikoSystemTheme(): SkikoSystemTheme =
+    when (this) {
+        true -> SkikoSystemTheme.DARK
+        false -> SkikoSystemTheme.LIGHT
+        null -> SkikoSystemTheme.UNKNOWN
+    }
 
 private val NativeWindowHitTest =
     staticCFunction { _: CPointer<SDL_Window>?, point: CPointer<SDL_Point>?, data: COpaquePointer?

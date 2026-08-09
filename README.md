@@ -1,8 +1,6 @@
 # Native Compose on Wayland
 
-This is a Kotlin/Native Linux x64 proof that renders real Compose Material 3 UI in a native Wayland window. The demo embeds WPE WebKit through the Linux `NativeView` API and opens YouTube in a responsive, interactive native web view. It also includes a native libmpv HLS player. Compose draws through a Cairo graphics and Pango text backend, while an SDL OpenGL compositor presents external EGL/OpenGL content and the transparent Cairo UI layer.
-
-There is no JVM in the application at runtime. A JDK is required only to run Gradle and the Kotlin compiler.
+This repository is a Kotlin/Native Linux x64 Compose fork and demonstration application. The single `:demo` module contains the component catalogue, platform-accent hello page, Compose resources page, WPE WebKit browser, native libmpv player, GPU interop examples, and desktop-window demonstrations. The application is a native ELF executable; a JVM is used only by Gradle and the Kotlin compiler.
 
 ## What works
 
@@ -13,7 +11,7 @@ There is no JVM in the application at runtime. A JDK is required only to run Gra
   `DialogWindow`, state objects, and single-window/coroutine entry points
 - Undecorated windows with native draggable regions and native resize-edge hit testing
 - Native ELF executable with no JVM, Skia, or Skiko runtime dependency
-- Anti-aliased vector graphics through Cairo and real system-font shaping through Pango/HarfBuzz
+- Anti-aliased vector graphics through Skia and rich text shaping through SkParagraph
 - Material button pointer input and animated state changes
 - Native keyboard input with key-up/down, shortcuts, navigation keys, and committed Unicode text
 - SDL clipboard and URI services, IME composition, native pointer cursors, wheel and five-button
@@ -24,22 +22,23 @@ There is no JVM in the application at runtime. A JDK is required only to run Gra
   - Compose receives the compositor-derived `Density`
   - pointer coordinates are converted to physical scene coordinates
   - moving the window to a display with another scale recreates the framebuffer at that scale
-- Compose PNG, JPEG, and WebP decoding into Cairo image surfaces
+- Compose PNG, JPEG, and WebP decoding into Skia images
 - Compose `BlurEffect` and `OffsetEffect`, including chained effects and blur tile modes
 - Native linear, radial, and sweep gradients; composited shaders; tint, lighting, and 4x5 matrix
   color filters; and indexed triangle, strip, and fan `drawVertices` rendering
 - All Compose boolean path operations: difference, intersection, union, xor, and reverse difference
 - Perspective graphics layers with X/Y/Z rotation, scale, pivot, camera distance, alpha, and blending
-- Rich Pango text spans: color/gradient brush, alpha, size, weight, style, generic family, OpenType
+- Rich SkParagraph text spans: color/gradient brush, alpha, size, weight, style, generic family, OpenType
   features, locale, letter spacing, baseline shift, horizontal scaling, background, decoration, and
   per-span shadows, plus inline placeholders and bidi-aware layout queries
-- System fonts and byte-backed `LoadedFont` families registered privately with Fontconfig/Pango
+- System fonts and byte-backed `LoadedFont` families resolved through Fontconfig and Skia
 - Lifecycle-managed CPU-framebuffer and OpenGL-FBO interop through `InteropView`,
   `InteropRenderTarget`, `OpenGlInteropRenderTarget`, and `NativeView`, with normal Compose sizing,
   clipping, overlays, and input
-- Zero-readback WPE WebKit EGL-image rendering with pointer, wheel, keyboard, focus, fractional-DPI,
-  and responsive resize integration
-- Interactive WPE WebKit browser with JavaScript, Media Source Extensions, WebGL, and media controls
+- Interactive WPE WebKit browser with JavaScript, Media Source Extensions, WebGL, media controls,
+  pointer, wheel, keyboard, focus, fractional-DPI, and responsive resize integration
+- Core-profile-safe WebView presentation: WPE DMA-BUF/shared-memory frames are imported as
+  opaque `GL_RGB8` textures and copied into Compose-owned FBOs with `glBlitFramebuffer`
 - Native libmpv HLS playback rendered directly into an OpenGL framebuffer
 
 ## Requirements
@@ -47,7 +46,7 @@ There is no JVM in the application at runtime. A JDK is required only to run Gra
 - Linux x64 in a Wayland or X11 session
 - Git, a C++17 compiler, and pkg-config
 - JDK 21 for build tooling
-- SDL2, Cairo, Pango, Fontconfig, libjpeg, libwebp, D-Bus, WPE WebKit, EGL/OpenGL, and libmpv development files
+- SDL 3.2 or newer, Fontconfig, D-Bus, WPE WebKit, EGL/OpenGL, and libmpv development files
 
 The release link uses `--as-needed` to discard Kotlin/Native's unused default `-lcrypt`, so
 `libcrypt.so.1`/`libcrypt-legacy` is not a runtime requirement.
@@ -55,68 +54,118 @@ The release link uses `--as-needed` to discard Kotlin/Native's unused default `-
 Arch Linux:
 
 ```bash
-sudo pacman -S git jdk21-openjdk gcc pkgconf sdl2-compat cairo pango fontconfig libjpeg-turbo libwebp dbus wpewebkit mesa mpv
+sudo pacman -S git jdk21-openjdk gcc pkgconf sdl3 fontconfig dbus wpewebkit mesa mpv
 ```
 
 Debian/Ubuntu:
 
 ```bash
-sudo apt install git openjdk-21-jdk g++ pkg-config libsdl2-dev libcairo2-dev libpango1.0-dev libfontconfig1-dev libjpeg-dev libwebp-dev libdbus-1-dev libwpewebkit-2.0-dev libwpe-1.0-dev libegl-dev libgl-dev libmpv-dev
+sudo apt install git openjdk-21-jdk g++ pkg-config libsdl3-dev libfontconfig1-dev libdbus-1-dev libwpewebkit-2.0-dev libwpe-1.0-dev libegl-dev libgl-dev libmpv-dev
 ```
+
+## Demo module
+
+All standalone examples are consolidated in `:demo`. The catalogue provides pages for:
+
+- Material controls, text input, lists, navigation, overlays, graphics, and animations
+- The platform-accent hello example
+- Compose strings, vector drawable, and byte-backed font resources
+- WPE WebKit browsing and native libmpv HLS playback
+- CPU/OpenGL native views, windows, dialogs, trays, notifications, and accessibility
+
+The former `native-demo`, `hello-demo`, and `resource-demo` modules no longer exist.
 
 ## Build and run
 
-Run these commands from `.compose-core/native-demo`:
+From the `.compose-core` root:
 
 ```bash
-./gradlew build
-./gradlew run
+./demo/gradlew build
+./demo/gradlew run
 ```
 
-The app module and the prepared Compose Linux source checkout both live under `.compose-core`.
-The build downloads Kotlin/Native tooling and Compose dependencies as needed. Later builds are
+The same commands can be run as `./gradlew build` and `./gradlew run` from the `demo/`
+directory. The wrapper selects the Linux target, keeps Gradle intermediates inside `demo/build`,
+and installs the executable and resources together.
+
+The build downloads Kotlin/Native tooling and external dependencies as needed. Later builds are
 incremental, Gradle modules build in parallel, and Kotlin/Native uses all available backend threads.
 
-The final executable is written to:
+The final executable and consolidated resource bundle are written to:
 
 ```text
-build/bin/compose-wayland
+demo/build/bin/compose-wayland
+demo/build/bin/compose-resources/
 ```
 
-AndroidX/Gradle intermediate outputs are kept under `build/androidx-out` and
-`build/gradle-project-cache`, so app-generated files remain inside this module.
+AndroidX/Gradle intermediate outputs are kept under `demo/build/androidx-out` and
+`demo/build/gradle-project-cache`, so app-generated files remain inside the demo module.
 
-You can also call `./scripts/bootstrap.sh`, `./scripts/build.sh`, or `./scripts/run.sh` directly. Press Escape or close the window to quit.
+You can also call `./demo/scripts/bootstrap.sh`, `./demo/scripts/build.sh`, or
+`./demo/scripts/run.sh` directly. Press Escape or close the window to quit.
 
 Run the non-interactive backend regression checks with:
 
 ```bash
-KTNATIVE_BACKEND_SELF_TEST=1 ./build/bin/compose-wayland
-KTNATIVE_INPUT_SELF_TEST=1 ./build/bin/compose-wayland
-KTNATIVE_WINDOW_SELF_TEST=1 ./build/bin/compose-wayland
-KTNATIVE_DESKTOP_SELF_TEST=1 ./build/bin/compose-wayland
+KTNATIVE_INPUT_SELF_TEST=1 ./demo/build/bin/compose-wayland
+KTNATIVE_WINDOW_SELF_TEST=1 ./demo/build/bin/compose-wayland
+KTNATIVE_DESKTOP_SELF_TEST=1 ./demo/build/bin/compose-wayland
 ```
 
 Run the live AT-SPI integration check from an active desktop session with an accessibility bus:
 
 ```bash
-./scripts/test-atspi.py
+./demo/scripts/test-atspi.py
 ```
 
 The test uses `gdbus`, `dbus-monitor`, and Python 3 without Python GI bindings. It discovers the
 application and semantics nodes dynamically, exercises actions and values, verifies incremental
-events and registry cleanup, and writes diagnostics under the ignored `build/atspi-test` directory.
+events and registry cleanup, and writes diagnostics under the ignored `demo/build/atspi-test` directory.
 
 The Linux Compose UI test host registers roots from every application window and dialog, supports
 custom idling resources, and captures semantics-node screenshots from the owning composed SDL
 framebuffer, including GPU native views.
 
-Set `KTNATIVE_WEBVIEW_URL` to open another initial page. Set `KTNATIVE_WEBVIEW_DEBUG=1` to print
-load transitions, browser console messages, frame dimensions, and input diagnostics.
+Set `KTNATIVE_WEBVIEW_URL` to choose the initial browser page. Set
+`KTNATIVE_WEBVIEW_DEBUG=1` to print load transitions, browser console messages, imported frame
+dimensions, permission decisions, and input diagnostics. The adapter requires the SDL host's
+EGL-backed OpenGL 3.3 core-profile context; it does not use legacy `glBegin`/`glEnd` rendering.
 
 Compose animations are uncapped by the host and normally follow the display/VSync cadence. Set
 `KTNATIVE_MAX_FPS` to an explicit value from 1 through 240 only when an application needs an
-additional software frame-rate limit; for example, `KTNATIVE_MAX_FPS=30 ./build/bin/compose-wayland`.
+additional software frame-rate limit; for example,
+`KTNATIVE_MAX_FPS=30 ./demo/build/bin/compose-wayland`.
+
+## Linux Compose resources and packaging
+
+The fork includes a Linux x64 implementation of Compose Multiplatform resources at
+`:compose:components:components-resources`. The standard `org.jetbrains.compose` Gradle plugin still
+generates the `Res` class and accessors. The Linux runtime loads strings/plurals, Android vector XML,
+encoded bitmaps, and byte-backed fonts from `COMPOSE_RESOURCE_ROOT`, `KTNATIVE_RESOURCE_ROOT`, or a
+packaged executable-relative resource directory. SVG resources are not yet implemented by the
+Linux resource loader.
+
+Apply `org.jetbrains.compose.linux.application` to a Linux native application to add:
+
+- `prepareLinuxReleaseAppDir`
+- `packageLinuxReleaseTarGz`
+- `packageLinuxReleaseAppImage`
+- `runLinuxReleaseDistributable`
+
+The AppDir contains the executable, Compose resources, desktop entry, icon, and an `AppRun` launcher
+that supplies the resource root. AppImage creation requires `appimagetool` on `PATH` or through the
+`APPIMAGETOOL` environment variable.
+
+Publish the Linux x64 Skiko and Compose KLIBs to Maven local for use from another checkout with:
+
+```bash
+./scripts/publish-linux-native-to-maven-local.sh
+```
+
+The script publishes the Linux target artifacts as `9999.0.0-SNAPSHOT` and writes Linux-only Gradle
+module roots into `~/.m2/repository`. Consumer builds should put `mavenLocal()` before remote
+repositories and depend on the `-linuxx64` modules from their Linux source set, including
+`org.jetbrains.compose.ui:ui-sdl2-linuxx64:9999.0.0-SNAPSHOT`.
 
 ## Native window API
 
@@ -139,8 +188,8 @@ fun main() = application {
 }
 ```
 
-Multiple `Window` calls are supported. Each window owns an SDL/Wayland surface and Cairo
-framebuffer while sharing the application recomposer. Titles, visibility, resizability,
+Multiple `Window` calls are supported. Each window owns an SDL3 window and SkiaLayer renderer while
+sharing the application recomposer. Titles, visibility, resizability,
 always-on-top, enabled input, size, position, minimization, maximization, and fullscreen placement
 update declaratively. `DialogWindow`, key preview/bubble callbacks, `awaitApplication`, and
 `launchApplication` are also available. Removing a window from composition disposes its native
@@ -220,47 +269,49 @@ every edge and corner.
 
 ## Compose Linux source fork
 
-Compose Runtime publishes Linux x64 KLIBs, but Compose UI, Foundation, and Material 3 do not currently publish a complete Linux target. The prepared source fork enables `linuxX64` through the required module graph, supplies the missing Linux platform actuals, and separates Compose's non-Android graphics/text entry points from Skia. It is based on commit `c1f04f0b9b7acda3849d76fe0d271f7255ad827c`.
+Compose Runtime publishes Linux x64 KLIBs, but Compose UI, Foundation, and Material 3 do not currently publish a complete Linux target. The prepared source fork enables `linuxX64` through the required module graph, supplies the missing Linux platform actuals, and connects Compose's non-Android graphics/text entry points to Skia. It is based on commit `c1f04f0b9b7acda3849d76fe0d271f7255ad827c`.
 
-The Cairo/Pango backend now covers the advanced APIs exercised by this milestone: encoded images,
+The Skia/SkParagraph backend covers the advanced APIs exercised by this milestone: encoded images,
 boolean paths, sweep and composite shaders, color filters, vertex meshes, blur/offset render effects,
 perspective graphics-layer transforms, byte-backed fonts, rich spans, bidi queries, and inline
-placeholders. Clipper2 performs path clipping after adaptively flattening cubic curves; Cairo
-performs compositing and raster effects; Fontconfig/Pango/HarfBuzz performs font registration,
-selection, shaping, line layout, span attributes, and glyph masks for brushes and shadows.
+placeholders. Skia performs compositing, raster effects, and path rendering; Fontconfig resolves
+system fonts, while SkParagraph handles shaping, line layout, span attributes, and glyph masks for
+brushes and shadows.
 
 The platform host is packaged as the Compose-owned `:compose:ui:ui-sdl2` module. Its KLIB embeds
 the small C++ graphics support archive and exposes the native application, window/dialog state,
 input, clipboard, URI, `WindowDraggableArea`, and native CPU/GPU interop APIs. GPU native views
-render directly into host-owned OpenGL FBOs. Root-level views stay GPU-resident while the window
-compositor projects their textures through the current Compose transform and interleaves them with
-persistent Cairo segments. The module deliberately provides only generic native-view interop; the
-WPE WebKit adapter remains app-owned and can be replaced without changing Compose.
+render into host-owned OpenGL FBOs. The module deliberately provides only generic native-view
+interop; the app-owned WPE adapter imports each available WPE frame into an opaque RGB texture and
+uses a core-profile framebuffer blit to populate the Compose interop surface.
 
 GPU interop views accept an antialiased Compose `Path` mask and follow the current Compose
 transform, including `rotationX`/`rotationY` perspective, through a subdivided texture mesh. The
-mask clears the Cairo frame at the `NativeView`'s draw position, so later Compose siblings remain
+mask clears the Skia frame at the `NativeView`'s draw position, so later Compose siblings remain
 above GPU-resident native content without host readback.
 
-Root-level GPU native views participate in an ordered compositor stream that interleaves persistent
-Cairo segment textures and external OpenGL commands. Native views inside isolated Compose layers,
-`saveLayer`, alpha/effect/shadow groups, or perspective transforms use a retained CPU snapshot in
-the active Cairo layer. That snapshot is refreshed only after the native renderer produces a new
-frame and is reused for scrolling, geometry changes, and ancestor-layer property updates. This
-preserves arbitrary Compose z-order and layer semantics while avoiding repeated `glReadPixels` calls
-and keeping the common root-level video path zero-readback.
+Root-level GPU native views participate in the compositor's ordered rendering stream. Native views
+inside isolated Compose layers, `saveLayer`, alpha/effect/shadow groups, or perspective transforms
+use a retained snapshot in the active Compose layer. The snapshot is refreshed only after the native
+renderer produces a new frame and is reused for scrolling, geometry changes, and ancestor-layer
+property updates, preserving Compose z-order and layer semantics.
 
-The executable stays a small native launcher; SDL2, Cairo/Pango, Fontconfig, D-Bus, WPE WebKit,
-libmpv, OpenGL/EGL, JPEG, WebP, and their required system libraries remain dynamically linked.
+The executable stays a small native launcher; SDL3, Fontconfig, D-Bus, WPE WebKit, libmpv,
+OpenGL/EGL, and their required system libraries remain dynamically linked. Cairo and Pango may
+still be loaded transitively by the system mpv/FFmpeg stack, but Compose does not link or use them.
 
 ## Layout
 
-- `src/linuxMain/kotlin/Main.kt` — WPE WebKit adapter and native application windows
-- `src/linuxMain/kotlin/Catalogue.kt` — Navigation 3 component catalogue and interactive demos
-- `src/nativeInterop/cinterop/` — app-owned WPE headless/EGL bridge
-- `build.gradle.kts` — app module configuration
-- `scripts/` — checkout verification, build, and run commands
-- `build/bin/compose-wayland` — final executable produced by the wrapper
-- `../compose/ui/ui-sdl2/` — prepared source checkout containing the Compose-owned Wayland window
-  host, Cairo/Pango backend, cinterops, and embedded native support archive
-- `../navigation3/navigation3-ui/` — Navigation 3 UI port with a Linux native target
+- `demo/src/linuxMain/kotlin/Main.kt` — WPE WebKit adapter and native application windows
+- `demo/src/linuxMain/kotlin/Catalogue.kt` — component catalogue and interactive demos
+- `demo/src/linuxMain/kotlin/DemoPages.kt` — consolidated hello and resource pages
+- `demo/src/commonMain/composeResources/` — strings, vector drawable, and byte-backed font
+- `demo/src/nativeInterop/cinterop/app_webview.cpp` — WPE frame import, input forwarding, and
+  core-profile FBO blit
+- `demo/src/nativeInterop/cinterop/app_mpv.cpp` — native libmpv OpenGL renderer
+- `demo/build.gradle.kts` — app module configuration
+- `demo/scripts/` — checkout verification, build, and run commands
+- `demo/build/bin/compose-wayland` — final executable produced by the wrapper
+- `demo/build/bin/compose-resources/` — executable-relative Compose resource bundle
+- `compose/ui/ui-sdl2/` — Compose-owned Linux window host, backend, cinterops, and native support
+- `navigation3/navigation3-ui/` — Navigation 3 UI port with a Linux native target

@@ -1,5 +1,0 @@
-headers = cairo_compose.h
-headerFilter = cairo_compose.h
-package = cairo
-compilerOpts = -Isrc/nativeInterop/cinterop/include -I/usr/include/cairo -I/usr/include/pango-1.0 -I/usr/include/harfbuzz -I/usr/include/glib-2.0 -I/usr/lib/glib-2.0/include -I/usr/include/freetype2 -I/usr/include/pixman-1 -I/usr/include/libpng16
-linkerOpts = -lcairo -lpangocairo-1.0 -lpango-1.0 -lfontconfig -lharfbuzz -ljpeg -lwebp -lgobject-2.0 -lglib-2.0 -lstdc++

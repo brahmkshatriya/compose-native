@@ -17,15 +17,32 @@
 package androidx.compose.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 
 @Deprecated("This class was made public by mistake and will be removed in a future release")
 enum class SystemTheme {
-    Dark, Light, Unknown
+    Dark,
+    Light,
+    Unknown,
 }
 
 internal val LocalSystemTheme = staticCompositionLocalOf { SystemTheme.Unknown }
+
+/** Host hook for supplying the system appearance to [isUiSystemInDarkTheme]. */
+@InternalComposeUiApi
+@Composable
+fun ProvideSystemTheme(isDark: Boolean?, content: @Composable () -> Unit) {
+    @Suppress("DEPRECATION")
+    val theme =
+        when (isDark) {
+            true -> SystemTheme.Dark
+            false -> SystemTheme.Light
+            null -> SystemTheme.Unknown
+        }
+    CompositionLocalProvider(LocalSystemTheme provides theme, content = content)
+}
 
 @InternalComposeUiApi
 @Composable

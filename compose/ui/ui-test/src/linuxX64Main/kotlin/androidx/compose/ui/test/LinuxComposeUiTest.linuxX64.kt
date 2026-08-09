@@ -58,7 +58,7 @@ import kotlinx.coroutines.test.runTest
 private const val LinuxTestFrameMillis = 16L
 private const val LinuxIdlePollMillis = 1L
 
-/** Runs a Compose UI test against the real SDL/Cairo Linux window host. */
+/** Runs a Compose UI test against the real SDL3/Skia Linux window host. */
 @ExperimentalTestApi
 @Suppress("UNUSED_PARAMETER")
 fun runLinuxComposeUiTest(
@@ -72,15 +72,12 @@ fun runLinuxComposeUiTest(
     val applicationFuture =
         worker.execute(TransferMode.UNSAFE, { environment }) { it.runApplication() }
 
-    val testResult =
-        runCatching {
-            environment.awaitHost()
-            // The production SDL recomposer is not yet driven by effectContext. The parameter is
-            // retained for API parity until deterministic frame-clock integration is added.
-            runTest(context = runTestContext, timeout = testTimeout) {
-                block(environment.test)
-            }
-        }
+    val testResult = runCatching {
+        environment.awaitHost()
+        // The production SDL recomposer is not yet driven by effectContext. The parameter is
+        // retained for API parity until deterministic frame-clock integration is added.
+        runTest(context = runTestContext, timeout = testTimeout) { block(environment.test) }
+    }
 
     environment.close()
     val applicationResult = runCatching { applicationFuture.result }
@@ -92,9 +89,7 @@ fun runLinuxComposeUiTest(
     return testResult.getOrThrow()
 }
 
-private class LinuxComposeUiTestEnvironment(
-    private val timeout: Duration,
-) {
+private class LinuxComposeUiTestEnvironment(private val timeout: Duration) {
     private val stateLock = makeSynchronizedObject()
     private val hostReady = atomic(false)
     private val closed = atomic(false)
@@ -122,9 +117,7 @@ private class LinuxComposeUiTestEnvironment(
                     visible = true,
                     title = "Compose Linux UI test",
                 ) {
-                    var content by remember {
-                        mutableStateOf<(@Composable () -> Unit)?>(null)
-                    }
+                    var content by remember { mutableStateOf<(@Composable () -> Unit)?>(null) }
                     val windowForTest = window
                     SideEffect {
                         attach(
@@ -187,16 +180,18 @@ private class LinuxComposeUiTestEnvironment(
             .runOnUiThread(action)
     }
 
-    fun hasPendingWork(): Boolean =
-        runOnUiThread {
-            Snapshot.sendApplyNotifications()
-            rootRegistry.getComposeRoots().any { it.hasPendingMeasureOrLayout } ||
-                checkNotNull(composeWindow).hasPendingTestWork ||
-                Snapshot.current.hasPendingChanges() ||
-                Snapshot.isApplyObserverNotificationPending
-        }
+    fun hasPendingWork(): Boolean = runOnUiThread {
+        Snapshot.sendApplyNotifications()
+        rootRegistry.getComposeRoots().any { it.hasPendingMeasureOrLayout } ||
+            checkNotNull(composeWindow).hasPendingTestWork ||
+            Snapshot.current.hasPendingChanges() ||
+            Snapshot.isApplyObserverNotificationPending
+    }
 
-    fun captureToImage(root: PlatformRootForTest, boundsInWindow: androidx.compose.ui.geometry.Rect): ImageBitmap =
+    fun captureToImage(
+        root: PlatformRootForTest,
+        boundsInWindow: androidx.compose.ui.geometry.Rect,
+    ): ImageBitmap =
         checkNotNull(composeWindow) { "The SDL test window is not attached" }
             .captureToImage(root, boundsInWindow)
 
@@ -331,8 +326,9 @@ private class LinuxComposeUiTest(
 
         override fun captureToImage(semanticsNode: SemanticsNode): ImageBitmap {
             if (!isImplicitWaitSuppressed) waitForIdle()
-            val root = semanticsNode.root as? PlatformRootForTest
-                ?: error("The semantics node is not attached to a Linux Compose test root")
+            val root =
+                semanticsNode.root as? PlatformRootForTest
+                    ?: error("The semantics node is not attached to a Linux Compose test root")
             return environment.captureToImage(root, semanticsNode.boundsInWindow)
         }
     }
@@ -345,17 +341,15 @@ private interface LinuxScreenshotTestOwner {
 /** Captures the composed SDL window region occupied by this semantics node. */
 fun SemanticsNodeInteraction.captureToImage(): ImageBitmap {
     val semanticsNode = fetchSemanticsNode("Failed to capture a node to bitmap.")
-    return (testContext.testOwner as? LinuxScreenshotTestOwner)
-        ?.captureToImage(semanticsNode)
+    return (testContext.testOwner as? LinuxScreenshotTestOwner)?.captureToImage(semanticsNode)
         ?: error("captureToImage is only available inside runLinuxComposeUiTest")
 }
 
-private class LinuxMainTestClock(
-    private val waitForIdle: () -> Unit,
-) : MainTestClock {
+private class LinuxMainTestClock(private val waitForIdle: () -> Unit) : MainTestClock {
     override val scheduler = TestCoroutineScheduler()
     override val currentTime: Long
         get() = scheduler.currentTime
+
     override var autoAdvance: Boolean = true
 
     override fun advanceTimeByFrame() {

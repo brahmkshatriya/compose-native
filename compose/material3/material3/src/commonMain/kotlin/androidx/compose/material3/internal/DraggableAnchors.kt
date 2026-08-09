@@ -53,19 +53,21 @@ import kotlin.math.roundToInt
 internal fun <T> Modifier.draggableAnchors(
     state: AnchoredDraggableState<T>,
     orientation: Orientation,
+    placeChildrenAtOffset: Boolean = true,
     anchors: (size: IntSize, constraints: Constraints) -> Pair<DraggableAnchors<T>, T>,
-) = this then DraggableAnchorsElement(state, anchors, orientation)
+) = this then DraggableAnchorsElement(state, anchors, orientation, placeChildrenAtOffset)
 
 private class DraggableAnchorsElement<T>(
     private val state: AnchoredDraggableState<T>,
     private val anchors: (size: IntSize, constraints: Constraints) -> Pair<DraggableAnchors<T>, T>,
     private val orientation: Orientation,
+    private val placeChildrenAtOffset: Boolean,
 ) : ModifierNodeElement<DraggableAnchorsNode<T>>() {
 
-    override fun create() = DraggableAnchorsNode(state, anchors, orientation)
+    override fun create() = DraggableAnchorsNode(state, anchors, orientation, placeChildrenAtOffset)
 
     override fun update(node: DraggableAnchorsNode<T>) {
-        node.update(state, anchors, orientation)
+        node.update(state, anchors, orientation, placeChildrenAtOffset)
     }
 
     override fun equals(other: Any?): Boolean {
@@ -76,6 +78,7 @@ private class DraggableAnchorsElement<T>(
         if (state != other.state) return false
         if (anchors !== other.anchors) return false
         if (orientation != other.orientation) return false
+        if (placeChildrenAtOffset != other.placeChildrenAtOffset) return false
 
         return true
     }
@@ -84,6 +87,7 @@ private class DraggableAnchorsElement<T>(
         var result = state.hashCode()
         result = 31 * result + anchors.hashCode()
         result = 31 * result + orientation.hashCode()
+        result = 31 * result + placeChildrenAtOffset.hashCode()
         return result
     }
 
@@ -92,6 +96,7 @@ private class DraggableAnchorsElement<T>(
             properties["state"] = state
             properties["anchors"] = anchors
             properties["orientation"] = orientation
+            properties["placeChildrenAtOffset"] = placeChildrenAtOffset
         }
     }
 }
@@ -100,6 +105,7 @@ private class DraggableAnchorsNode<T>(
     var state: AnchoredDraggableState<T>,
     var anchors: (size: IntSize, constraints: Constraints) -> Pair<DraggableAnchors<T>, T>,
     var orientation: Orientation,
+    var placeChildrenAtOffset: Boolean,
 ) : Modifier.Node(), LayoutModifierNode {
     private var didInitializeAnchors = false
 
@@ -116,12 +122,14 @@ private class DraggableAnchorsNode<T>(
         state: AnchoredDraggableState<T>,
         anchors: (size: IntSize, constraints: Constraints) -> Pair<DraggableAnchors<T>, T>,
         orientation: Orientation,
+        placeChildrenAtOffset: Boolean,
     ) {
         val shouldInvalidateMeasure =
             isAnchoredDraggableComponentsInvalidationFixEnabled && this.state != state
         this.state = state
         this.anchors = anchors
         this.orientation = orientation
+        this.placeChildrenAtOffset = placeChildrenAtOffset
         if (shouldInvalidateMeasure) {
             didInitializeAnchors = false
             invalidateMeasurement()
@@ -175,7 +183,11 @@ private class DraggableAnchorsNode<T>(
             // speaking, this signals a preference to directly apply changes rather than
             // animating, to avoid a chasing effect to scrolling.
             withMotionFrameOfReferencePlacement {
-                placeable.place(xOffset.roundToInt(), yOffset.roundToInt())
+                if (placeChildrenAtOffset) {
+                    placeable.place(xOffset.roundToInt(), yOffset.roundToInt())
+                } else {
+                    placeable.place(0, 0)
+                }
             }
         }
     }

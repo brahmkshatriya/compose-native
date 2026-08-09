@@ -477,6 +477,13 @@ sealed interface LazyGridScope {
         itemContent: @Composable LazyGridItemScope.(index: Int) -> Unit,
     )
 
+    @Deprecated("Maintained for binary compatibility", level = DeprecationLevel.HIDDEN)
+    fun stickyHeader(
+        key: Any? = null,
+        contentType: Any? = null,
+        content: @Composable LazyGridItemScope.(Int) -> Unit,
+    )
+
     /**
      * Adds a sticky header item, which will remain pinned even when scrolling after it. The header
      * will remain pinned until the next header will take its place. Sticky Headers are full span
@@ -493,12 +500,15 @@ sealed interface LazyGridScope {
      * @param contentType the type of the content of this item. The item compositions of the same
      *   type could be reused more efficiently. Note that null is a valid type and items of such
      *   type will be considered compatible.
+     * @param isSlidable whether this header can be slid away by the next sticky header. If false,
+     *   the next sticky header will stack after this one instead.
      * @param content the content of the header. The header index is provided, this is the item
      *   position within the total set of items in this lazy list (the global index).
      */
     fun stickyHeader(
         key: Any? = null,
         contentType: Any? = null,
+        isSlidable: Boolean = true,
         content: @Composable LazyGridItemScope.(Int) -> Unit,
     )
 }

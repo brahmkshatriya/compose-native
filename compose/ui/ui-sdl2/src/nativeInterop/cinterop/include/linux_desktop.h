@@ -7,6 +7,18 @@
 extern "C" {
 #endif
 
+/* Appearance values are delivered through SDL user events without polling.
+ * Color scheme values follow org.freedesktop.appearance color-scheme:
+ * 0 no preference, 1 dark, 2 light.
+ * Accent values use bit 24 as a presence flag and bits 23..0 as sRGB. */
+void *kld_system_theme_observer_create(
+    uint32_t color_scheme_event_type,
+    uint32_t accent_color_event_type
+);
+int kld_system_theme_observer_current(void *observer);
+uint32_t kld_system_theme_observer_accent(void *observer);
+void kld_system_theme_observer_destroy(void *observer);
+
 int kld_notifications_supported(void);
 char *kld_notification_capabilities(char **error_message);
 

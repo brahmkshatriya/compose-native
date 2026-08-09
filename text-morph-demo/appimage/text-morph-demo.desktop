@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Text Morph Demo
+Comment=Morph Hi into Hello Compose
+Exec=text-morph-demo
+Icon=text-morph-demo
+Terminal=false
+Categories=Development;
