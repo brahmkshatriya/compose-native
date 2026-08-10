@@ -38,6 +38,7 @@ import sdl2.SDL_PROP_WINDOW_WIN32_HWND_POINTER
 import sdl2.SDL_SetClipboardText
 import sdl2.SDL_free
 import sdl2.SDL_getenv
+import sdl2.SDL_WINDOW_OPENGL
 
 fun TrayState.sendNotification(notification: Notification) {
     androidx.compose.ui.window.sendNotification(notification)
@@ -68,7 +69,8 @@ internal fun configureNativeSdlEnvironment() = Unit
 
 internal fun configureNativeGraphics(layer: SkiaLayer) = Unit
 
-internal fun nativeGraphicsWindowFlags(layer: SkiaLayer): ULong = 0uL
+internal fun nativeGraphicsWindowFlags(layer: SkiaLayer): ULong =
+    if (layer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) SDL_WINDOW_OPENGL else 0uL
 
 internal fun attachNativeSkiaLayer(
     layer: SkiaLayer,

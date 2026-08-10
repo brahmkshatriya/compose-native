@@ -17,6 +17,7 @@ namespace {
 struct ThemeObserver {
     uint32_t color_scheme_event_type = 0;
     uint32_t accent_color_event_type = 0;
+    HWND window = nullptr;
 };
 
 struct NotificationBuilder {
@@ -138,12 +139,80 @@ int current_theme() {
 }
 
 uint32_t current_accent() {
+    DWORD accent_color = 0;
+    DWORD size = sizeof(accent_color);
+    // DwmGetColorizationColor is the darkened glass tint. Windows stores the actual accent
+    // chosen by Settings (including the wallpaper-derived Automatic color) as a COLORREF here.
+    if (RegGetValueW(
+            HKEY_CURRENT_USER,
+            L"Software\\Microsoft\\Windows\\DWM",
+            L"AccentColor",
+            RRF_RT_REG_DWORD,
+            nullptr,
+            &accent_color,
+            &size
+        ) == ERROR_SUCCESS) {
+        const uint32_t red = accent_color & 0xffu;
+        const uint32_t green = (accent_color >> 8) & 0xffu;
+        const uint32_t blue = (accent_color >> 16) & 0xffu;
+        return 0x01000000u | (red << 16) | (green << 8) | blue;
+    }
+
     DWORD color = 0;
     BOOL opaque = FALSE;
     if (FAILED(DwmGetColorizationColor(&color, &opaque))) return 0;
     // DwmGetColorizationColor returns AARRGGBB. Bit 24 is reserved by the Kotlin ABI as the
     // presence flag, so only carry RGB across the boundary.
     return 0x01000000u | (static_cast<uint32_t>(color) & 0x00ffffffu);
+}
+
+void push_accent_event(ThemeObserver *observer, uint32_t accent) {
+    if (!observer || observer->accent_color_event_type == 0) return;
+    SDL_Event accent_event{};
+    accent_event.type = observer->accent_color_event_type;
+    accent_event.user.code = static_cast<Sint32>(accent);
+    SDL_PushEvent(&accent_event);
+}
+
+LRESULT CALLBACK theme_observer_window_proc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
+    auto *observer = reinterpret_cast<ThemeObserver *>(GetWindowLongPtrW(window, GWLP_USERDATA));
+    switch (message) {
+        case WM_DWMCOLORIZATIONCOLORCHANGED:
+            push_accent_event(observer, current_accent());
+            return 0;
+        case WM_SETTINGCHANGE:
+            // Covers settings pages which update the colorization value without the DWM message.
+            push_accent_event(observer, current_accent());
+            return 0;
+        default:
+            return DefWindowProcW(window, message, w_param, l_param);
+    }
+}
+
+HWND create_theme_observer_window(ThemeObserver *observer) {
+    constexpr const wchar_t *class_name = L"Compose Native theme observer";
+    WNDCLASSW window_class{};
+    window_class.lpfnWndProc = theme_observer_window_proc;
+    window_class.hInstance = GetModuleHandleW(nullptr);
+    window_class.lpszClassName = class_name;
+    if (RegisterClassW(&window_class) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) return nullptr;
+
+    HWND window = CreateWindowExW(
+        WS_EX_TOOLWINDOW,
+        class_name,
+        L"Compose Native theme observer",
+        WS_POPUP,
+        0,
+        0,
+        0,
+        0,
+        nullptr,
+        nullptr,
+        window_class.hInstance,
+        nullptr
+    );
+    if (window) SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(observer));
+    return window;
 }
 
 bool SDLCALL watch_system_theme(void *userdata, SDL_Event *event) {
@@ -155,10 +224,7 @@ bool SDLCALL watch_system_theme(void *userdata, SDL_Event *event) {
     color_event.user.code = current_theme();
     SDL_PushEvent(&color_event);
 
-    SDL_Event accent_event{};
-    accent_event.type = observer->accent_color_event_type;
-    accent_event.user.code = static_cast<Sint32>(current_accent());
-    SDL_PushEvent(&accent_event);
+    push_accent_event(observer, current_accent());
     return true;
 }
 
@@ -173,6 +239,7 @@ void *kld_system_theme_observer_create(
     ThemeObserver *observer = new ThemeObserver();
     observer->color_scheme_event_type = color_scheme_event_type;
     observer->accent_color_event_type = accent_color_event_type;
+    observer->window = create_theme_observer_window(observer);
     SDL_AddEventWatch(watch_system_theme, observer);
     return observer;
 }
@@ -185,6 +252,7 @@ void kld_system_theme_observer_destroy(void *raw) {
     ThemeObserver *observer = static_cast<ThemeObserver *>(raw);
     if (!observer) return;
     SDL_RemoveEventWatch(watch_system_theme, observer);
+    if (observer->window) DestroyWindow(observer->window);
     delete observer;
 }
 
