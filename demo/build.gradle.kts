@@ -1,3 +1,5 @@
+@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
+
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
@@ -54,6 +56,14 @@ val compileAppMpv by tasks.registering(Exec::class) {
 }
 
 kotlin {
+    applyHierarchyTemplate {
+        common {
+            group("desktopNative") {
+                group("linux") { withLinux() }
+            }
+        }
+    }
+
     linuxX64 {
         compilerOptions {
             // Let Kotlin/Native LLVM code generation use all available processors.
@@ -105,10 +115,12 @@ kotlin {
         commonMain.dependencies {
             implementation(project(":compose:components:components-resources"))
         }
-        linuxMain.dependencies {
-            implementation(project(":compose:material3:material3"))
-            implementation(project(":compose:ui:ui-sdl2"))
-            implementation(project(":compose:ui:ui-backhandler"))
+        val desktopNativeMain by getting {
+            dependencies {
+                implementation(project(":compose:material3:material3"))
+                implementation(project(":compose:ui:ui-sdl3"))
+                implementation(project(":compose:ui:ui-backhandler"))
+            }
         }
     }
 }

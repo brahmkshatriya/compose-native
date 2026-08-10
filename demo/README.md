@@ -1,6 +1,6 @@
-# Native Compose on Wayland
+# Native Compose on Linux
 
-This repository is a Kotlin/Native Linux x64 Compose fork and demonstration application. The single `:demo` module contains the component catalogue, platform-accent hello page, Compose resources page, WPE WebKit browser, native libmpv player, GPU interop examples, and desktop-window demonstrations. The application is a native ELF executable; a JVM is used only by Gradle and the Kotlin compiler.
+The `:demo` module is the Linux launcher for the shared native desktop component catalogue. It contains the platform-accent hello page, Compose resources, WPE WebKit browser, native libmpv player, GPU interop examples, and desktop-window demonstrations. The application is a native ELF executable; a JVM is used only by Gradle and the Kotlin compiler.
 
 ## What works
 
@@ -240,7 +240,7 @@ placeholders. Skia performs compositing, raster effects, and path rendering; Fon
 system fonts, while SkParagraph handles shaping, line layout, span attributes, and glyph masks for
 brushes and shadows.
 
-The platform host is packaged as the Compose-owned `:compose:ui:ui-sdl2` module. Its KLIB embeds
+The platform host is packaged as the Compose-owned `:compose:ui:ui-sdl3` module. Its KLIB embeds
 the small C++ graphics support archive and exposes the native application, window/dialog state,
 input, clipboard, URI, `WindowDraggableArea`, and native CPU/GPU interop APIs. GPU native views
 render into host-owned OpenGL FBOs. The module deliberately provides only generic native-view
@@ -264,9 +264,9 @@ still be loaded transitively by the system mpv/FFmpeg stack, but Compose does no
 
 ## Layout
 
-- `src/linuxMain/kotlin/Main.kt` — WPE WebKit adapter and native application windows
-- `src/linuxMain/kotlin/Catalogue.kt` — component catalogue and interactive demos
-- `src/linuxMain/kotlin/DemoPages.kt` — consolidated hello and resource pages
+- `src/desktopNativeMain/kotlin/Main.kt` — native browser adapter and application windows
+- `src/desktopNativeMain/kotlin/Catalogue.kt` — component catalogue and interactive demos
+- `src/desktopNativeMain/kotlin/DemoPages.kt` — consolidated hello and resource pages
 - `src/commonMain/composeResources/` — strings, vector drawable, and byte-backed font
 - `src/nativeInterop/cinterop/app_webview.cpp` — WPE frame import, input forwarding, and core-profile FBO blit
 - `src/nativeInterop/cinterop/app_mpv.cpp` — native libmpv OpenGL renderer
@@ -274,6 +274,6 @@ still be loaded transitively by the system mpv/FFmpeg stack, but Compose does no
 - `scripts/` — checkout verification, build, and run commands
 - `build/bin/compose-wayland` — final executable produced by the wrapper
 - `build/bin/compose-resources/` — executable-relative Compose resource bundle
-- `../compose/ui/ui-sdl2/` — prepared source checkout containing the Compose-owned Linux window
+- `../compose/ui/ui-sdl3/` — shared SDL3 native desktop
   host, Skia backend, cinterops, and embedded native support archive
 - `../navigation3/navigation3-ui/` — optional Navigation 3 UI port with a Linux native target

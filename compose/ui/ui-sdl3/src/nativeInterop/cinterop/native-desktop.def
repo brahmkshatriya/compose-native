@@ -1,0 +1,5 @@
+headers = native_desktop.h linux_atspi.h native_tray.h native_drag.h native_gl.h
+headerFilter = native_desktop.h linux_atspi.h native_tray.h native_drag.h native_gl.h
+package = nativedesktop
+compilerOpts = -Isrc/nativeInterop/cinterop/include
+linkerOpts = -L/usr/lib -ldbus-1 -lstdc++ -lpthread -lwayland-client -lX11 -lGL

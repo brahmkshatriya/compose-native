@@ -29,15 +29,15 @@ import kotlin.jvm.JvmName
 
 /**
  * A holder that keeps references to user interop view and its group (container).
- * It's the actual implementation of `expect class [InteropViewFactoryHolder]`
+ * It's the actual implementation of `expect class [InteropViewLifecycleHolder]`
  *
- * @see InteropViewFactoryHolder
+ * @see InteropViewLifecycleHolder
  */
 internal abstract class InteropViewHolder(
     val container: InteropContainer,
     open val group: InteropViewGroup,
     private val compositeKeyHashCode: CompositeKeyHashCode,
-) : InteropViewFactoryHolder() {
+) : InteropViewLifecycleHolder() {
     private var onModifierChanged: (() -> Unit)? = null
 
     /**
@@ -129,7 +129,7 @@ internal abstract class InteropViewHolder(
     val layoutNode: LayoutNode by lazy {
         val layoutNode = LayoutNode()
 
-        layoutNode.interopViewFactoryHolder = this
+        layoutNode.interopViewLifecycleHolder = this
 
         val coreModifier = Modifier
             .trackInteropPlacement(this)
@@ -203,7 +203,7 @@ internal abstract class InteropViewHolder(
     @get:JvmName("interopView")
     abstract val interopView: InteropView
 
-    // ===== InteropViewFactoryHolder implementation =====
+    // ===== InteropViewLifecycleHolder implementation =====
 
     override fun onReuse() = container.scheduleUpdate {
         reset()
@@ -219,7 +219,7 @@ internal abstract class InteropViewHolder(
         release()
     }
 
-    // Keep nullable to match the `expect` declaration of InteropViewFactoryHolder
+    // Keep nullable to match the `expect` declaration of InteropViewLifecycleHolder
     override fun getInteropView(): InteropView? = interopView
 
     companion object {

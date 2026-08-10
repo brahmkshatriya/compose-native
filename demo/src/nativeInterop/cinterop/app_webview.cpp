@@ -646,6 +646,10 @@ int app_webview_render(
     return 1;
 }
 
+int app_webview_render_pixels(AppWebView *, void *, int, int, int, float) {
+    return 0;
+}
+
 void app_webview_load_uri(AppWebView *view, const char *uri) {
     if (!view || !view->web_view || !uri || !uri[0]) return;
     if (view->width <= 1 || view->height <= 1) {

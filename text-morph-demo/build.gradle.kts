@@ -21,7 +21,7 @@ kotlin {
     sourceSets {
         linuxMain.dependencies {
             implementation(project(":compose:material3:material3"))
-            implementation(project(":compose:ui:ui-sdl2"))
+            implementation(project(":compose:ui:ui-sdl3"))
         }
     }
 }

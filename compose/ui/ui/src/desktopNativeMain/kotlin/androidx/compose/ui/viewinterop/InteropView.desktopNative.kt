@@ -10,9 +10,9 @@ package androidx.compose.ui.viewinterop
 import kotlinx.atomicfu.atomic
 import kotlinx.cinterop.COpaquePointer
 
-/** Pixel formats accepted by a [LinuxInteropView]. */
+/** Pixel formats accepted by a [NativeInteropView]. */
 enum class InteropPixelFormat {
-    /** Native-endian premultiplied ARGB32; BGRA bytes on little-endian Linux. */
+    /** Native-endian premultiplied ARGB32; BGRA bytes on little-endian desktop targets. */
     Argb8888Premultiplied
 }
 
@@ -24,7 +24,7 @@ enum class InteropRenderBackend {
 /**
  * A framebuffer owned by Compose and temporarily lent to native code.
  *
- * The pointer is valid only for the duration of [LinuxInteropView.render]. Native integrations must
+ * The pointer is valid only for the duration of [NativeInteropView.render]. Native integrations must
  * not retain it. [stride] is measured in bytes.
  */
 class InteropRenderTarget(
@@ -71,13 +71,13 @@ data class InteropKeyEvent(
 )
 
 /**
- * A lifecycle-managed native renderer that can be placed in the Compose hierarchy by ui-sdl2's
+ * A lifecycle-managed native renderer that can be placed in the Compose hierarchy by ui-sdl3's
  * `NativeView` composable.
  *
- * Rendering into a Compose-owned framebuffer works consistently on Wayland and X11, unlike foreign
- * child-window embedding, which is not a portable Wayland facility.
+ * Rendering into a Compose-owned framebuffer preserves Compose transforms, clipping, and sibling
+ * composition without relying on platform child-window embedding.
  */
-class LinuxInteropView
+class NativeInteropView
 private constructor(
     val backend: InteropRenderBackend,
     val continuousRendering: Boolean,
@@ -131,7 +131,7 @@ private constructor(
 
     /**
      * Installs the callback used by the platform host to invalidate the Compose draw node. A
-     * [LinuxInteropView] is owned by one [NativeView] at a time.
+     * [NativeInteropView] is owned by one [NativeView] at a time.
      */
     fun setRenderInvalidationCallback(callback: (() -> Unit)?) {
         renderInvalidationCallback.value = callback
@@ -148,8 +148,8 @@ private constructor(
             pointerHandler: ((InteropPointerEvent) -> Boolean)? = null,
             keyHandler: ((InteropKeyEvent) -> Boolean)? = null,
             focusHandler: ((Boolean) -> Unit)? = null,
-        ): LinuxInteropView =
-            LinuxInteropView(
+        ): NativeInteropView =
+            NativeInteropView(
                 InteropRenderBackend.OpenGl,
                 continuousRendering,
                 null,
@@ -162,6 +162,6 @@ private constructor(
     }
 }
 
-actual typealias InteropView = LinuxInteropView
+actual typealias InteropView = NativeInteropView
 
 internal actual typealias InteropViewGroup = Any

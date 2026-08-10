@@ -1,5 +1,0 @@
-headers = SDL3/SDL.h
-headerFilter = SDL3/SDL*.h
-package = sdl2
-compilerOpts = -D_WIN32_WINNT=0x0A00 -DUNICODE -D_UNICODE
-linkerOpts = -Lbuild/windows-sdl/SDL3-3.4.10/x86_64-w64-mingw32/lib -lSDL3

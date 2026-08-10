@@ -88,7 +88,7 @@ private class UIKitInteropRemeasureRequesterNode(
     }
 
     private fun DelegatableNode.isAttachedToUIKitInteropLayoutNode(): Boolean =
-        requireLayoutNode().interopViewFactoryHolder is UIKitInteropLayoutNodeHolder
+        requireLayoutNode().interopViewLifecycleHolder is UIKitInteropLayoutNodeHolder
 }
 
 /**
