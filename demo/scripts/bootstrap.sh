@@ -9,7 +9,7 @@ if [[ ! -d "$task_compose_root/.git" ]]; then
     exit 1
 fi
 
-if [[ ! -f "$task_compose_root/compose/animation/animation-core/src/linuxMain/kotlin/androidx/compose/animation/core/Expect.linux.kt" ]]; then
+if [[ ! -f "$task_compose_root/compose/animation/animation-core/src/desktopNativeMain/kotlin/androidx/compose/animation/core/Expect.desktopNative.kt" ]]; then
     echo "The Compose checkout does not contain the Linux port." >&2
     echo "Use the prepared .compose-core source checkout; patch bootstrapping has been removed." >&2
     exit 1

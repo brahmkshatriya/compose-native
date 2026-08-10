@@ -73,7 +73,7 @@ import androidx.navigationevent.compose.NavigationBackHandler
 import androidx.navigationevent.compose.rememberNavigationEventState
 import app.webview.app_demo_render_gl
 import kotlin.math.roundToInt
-import kotlinx.cinterop.UByteVar
+import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.set
 import kotlinx.cinterop.toKString
@@ -892,9 +892,8 @@ private fun UnavailableNativePage(title: String, message: String) {
 @Composable
 private fun NativeViewsPage() {
     var size by remember { mutableFloatStateOf(190f) }
-    var phase by remember { mutableFloatStateOf(0f) }
     val cpuView = remember { NativeInteropView(renderer = ::renderCpuDemo) }
-    val phaseHolder = remember { FloatArray(1) { phase } }
+    val phaseHolder = remember { FloatArray(1) { size / 30f } }
     val glView = remember {
         NativeInteropView.openGl(
             renderer = { target: OpenGlInteropRenderTarget ->
@@ -902,10 +901,6 @@ private fun NativeViewsPage() {
                 true
             }
         )
-    }
-    LaunchedEffect(phase, glView) {
-        phaseHolder[0] = phase
-        glView.requestRender()
     }
     DemoSection("Two native surfaces in Compose") {
         val cornerRadius = with(LocalDensity.current) { 24.dp.toPx() }
@@ -948,7 +943,8 @@ private fun NativeViewsPage() {
             size,
             {
                 size = it
-                phase = it / 30f
+                phaseHolder[0] = it / 30f
+                glView.requestRender()
             },
             valueRange = 120f..300f,
         )
@@ -956,13 +952,20 @@ private fun NativeViewsPage() {
 }
 
 private fun renderCpuDemo(target: InteropRenderTarget): Boolean {
-    val pixels = target.pixels.reinterpret<UByteVar>()
-    for (y in 0 until target.height) for (x in 0 until target.width) {
-        val offset = y * target.stride + x * 4
-        pixels[offset] = (80 + x * 150 / target.width).toUByte()
-        pixels[offset + 1] = (40 + y * 180 / target.height).toUByte()
-        pixels[offset + 2] = 210u
-        pixels[offset + 3] = 255u
+    val pixels = target.pixels.reinterpret<UIntVar>()
+    val rowStride = target.stride / UInt.SIZE_BYTES
+    val blueStep = (150 shl 16) / target.width
+    val greenStep = (180 shl 16) / target.height
+    var green = 40 shl 16
+    for (y in 0 until target.height) {
+        val row = y * rowStride
+        val alphaRedGreen = 0xffd20000u or ((green ushr 16).toUInt() shl 8)
+        var blue = 80 shl 16
+        for (x in 0 until target.width) {
+            pixels[row + x] = alphaRedGreen or (blue ushr 16).toUInt()
+            blue += blueStep
+        }
+        green += greenStep
     }
     return true
 }
@@ -1236,8 +1239,7 @@ private fun createDragDemoFile(): String {
         getenv(if (isWindowsCatalogue) "TEMP" else "TMPDIR")
             ?.toKString()
             ?.trimEnd('\\', '/')
-            ?.takeIf(String::isNotEmpty)
-            ?: if (isWindowsCatalogue) "." else "/tmp"
+            ?.takeIf(String::isNotEmpty) ?: if (isWindowsCatalogue) "." else "/tmp"
     val separator = if (isWindowsCatalogue) "\\" else "/"
     val path = "$temporaryDirectory${separator}compose-native-catalogue.txt"
     fopen(path, "w")?.let { file ->
