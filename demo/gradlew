@@ -4,10 +4,10 @@ set -euo pipefail
 task_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-build}" in
-    build|assemble|linkReleaseExecutableLinuxX64)
+    build|assemble|linkReleaseExecutableLinuxX64|linkReleaseExecutableLinuxArm64)
         exec "$task_root/scripts/build.sh"
         ;;
-    run|runReleaseExecutableLinuxX64)
+    run|runReleaseExecutableLinuxX64|runReleaseExecutableLinuxArm64)
         exec "$task_root/scripts/run.sh"
         ;;
     bootstrap)

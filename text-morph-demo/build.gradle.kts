@@ -5,7 +5,15 @@ plugins {
 }
 
 kotlin {
-    linuxX64 {
+    val linuxTarget =
+        if (System.getProperty("os.arch").equals("aarch64", ignoreCase = true) ||
+            System.getProperty("os.arch").equals("arm64", ignoreCase = true)
+        ) {
+            linuxArm64()
+        } else {
+            linuxX64()
+        }
+    linuxTarget.apply {
         compilerOptions {
             freeCompilerArgs.add("-Xbackend-threads=0")
         }

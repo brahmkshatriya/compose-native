@@ -8,8 +8,8 @@ This repository currently provides development snapshots for:
 | Target | Status | Output |
 | --- | --- | --- |
 | Linux x64 | Available | Native ELF executable, AppDir, tar.gz, or AppImage |
+| Linux arm64 | Available | Native ELF executable, AppDir, tar.gz, or AppImage |
 | Windows x64 | Available | Native PE executable and self-contained application directory |
-| Linux arm64 | Not yet available | — |
 | Windows arm64 | Not yet available | — |
 | macOS | Not included in this fork | — |
 
@@ -40,7 +40,7 @@ The native targets include:
 
 ### Platform feature matrix
 
-| Feature | Linux x64 | Windows x64 |
+| Feature | Linux x64 / arm64 | Windows x64 |
 | --- | --- | --- |
 | GPU renderer | OpenGL | Direct3D 12 or OpenGL |
 | Automatic software fallback | Yes | Yes |
@@ -77,8 +77,8 @@ git clone https://github.com/brahmkshatriya/compose-native.git
 
 ## Build and run on Linux
 
-Linux builds require an x86_64 Wayland or X11 session, a C++17 compiler, pkg-config, SDL 3,
-Fontconfig, D-Bus, EGL/OpenGL, WPE WebKit, and libmpv development files.
+Linux builds require an x86_64 or arm64 Wayland or X11 session, a C++17 compiler, pkg-config,
+SDL 3, Fontconfig, D-Bus, EGL/OpenGL, WPE WebKit, and libmpv development files.
 
 Arch Linux:
 
@@ -93,23 +93,34 @@ sudo apt install git openjdk-21-jdk g++ pkg-config libsdl3-dev libfontconfig1-de
     libdbus-1-dev libwpewebkit-2.0-dev libwpe-1.0-dev libegl-dev libgl-dev libmpv-dev
 ```
 
-Publish the Linux Skiko Native artifact:
+Publish the Linux Skiko Native and Compose Native artifacts with the helper script. It detects
+the build host and publishes the matching `linuxX64` or `linuxArm64` variants:
 
 ```shell
-cd skiko-native
-./gradlew -p skiko \
-    publishKotlinMultiplatformPublicationToMavenLocal \
-    publishLinuxX64PublicationToMavenLocal \
-    -Pskiko.awt.enabled=false \
-    -Pskiko.native.linux.enabled=true
+cd compose-native
+./scripts/publish-linux-native-to-maven-local.sh
 ```
+
+On a native arm64 Linux host, no cross compiler is required. To publish arm64 artifacts from an
+x86_64 host instead, set:
+
+```shell
+KTNATIVE_LINUX_ARCH=arm64 ./scripts/publish-linux-native-to-maven-local.sh
+```
+
+Skiko's x86_64-to-arm64 build expects the Arm GNU 10.3 toolchain used by
+`skiko/docker/linux-amd64` at `/opt/arm-gnu-toolchain`. A complete cross-linked application also
+needs arm64 development headers and libraries for the Linux system dependencies listed above. For
+reproducible cross builds, use an environment equivalent to Skiko's `linux-amd64` Docker image.
 
 Build and run the complete catalogue from the Compose Native checkout:
 
 ```shell
-cd compose-native
 ./gradlew :demo:runLinuxReleaseDistributable
 ```
+
+The Linux application plugin selects `linuxX64` on x86_64 hosts and `linuxArm64` on arm64 hosts.
+Package classifiers and AppImage architecture metadata are selected to match the same target.
 
 The first build downloads the Kotlin/Native toolchain and other Gradle dependencies. Subsequent
 builds are incremental.
@@ -141,7 +152,8 @@ outputs are written below:
 out/compose-multiplatform-core/demo/build/compose/binaries/main-release/
 ```
 
-The Linux package uses system SDL, Fontconfig, D-Bus, OpenGL/EGL, WPE WebKit, and libmpv libraries.
+The Linux package uses system SDL, Fontconfig, D-Bus, OpenGL/EGL, WPE WebKit, and libmpv libraries,
+so the target machine must provide matching libraries for its architecture.
 
 ## Build the Windows application
 
@@ -246,6 +258,11 @@ kotlin {
             entryPoint = "com.example.main"
         }
     }
+    linuxArm64 {
+        binaries.executable {
+            entryPoint = "com.example.main"
+        }
+    }
     mingwX64 {
         binaries.executable {
             entryPoint = "com.example.main"
@@ -262,7 +279,7 @@ kotlin {
                 "org.jetbrains.compose.components:components-resources:9999.0.0-SNAPSHOT"
             )
         }
-        linuxX64Main.dependencies {
+        linuxMain.dependencies {
             implementation("org.jetbrains.compose.ui:ui-sdl3:9999.0.0-SNAPSHOT")
         }
         mingwX64Main.dependencies {
@@ -273,8 +290,9 @@ kotlin {
 ```
 
 Set `entryPoint` to the fully qualified package name of your top-level `main` function. Consumer
-projects also need the matching
-`org.jetbrains.skiko:skiko:0.0.1-linux-native-SNAPSHOT` publication in Maven Local.
+projects also need the matching Skiko Native publication in Maven Local: `skiko-linuxx64` for
+`linuxX64` and `skiko-linuxarm64` for `linuxArm64`, both under version
+`0.0.1-linux-native-SNAPSHOT`.
 
 ## Demo catalogue
 
@@ -321,7 +339,9 @@ KTNATIVE_MAX_FPS=60
 ## Current limitations
 
 * Native desktop artifacts are development snapshots and are not published to Maven Central.
-* Linux and Windows targets are currently x64 only.
+* Linux supports x64 and arm64; Windows is currently x64 only.
+* Cross-linking Linux arm64 applications on x86_64 requires an arm64 sysroot containing the system
+  development libraries used by the application.
 * Windows WebView2 uses the system WebView2 Runtime; the packaged catalogue includes its loader and
   the complete libmpv runtime.
 * Windows accessibility does not yet expose a complete UI Automation provider.

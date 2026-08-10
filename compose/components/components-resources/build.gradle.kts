@@ -19,17 +19,17 @@ kotlin {
         }
     }
 
-    linuxX64 {
-        compilerOptions {
-            freeCompilerArgs.addAll(
-                "-Xbackend-threads=0",
-                "-opt-in=org.jetbrains.compose.resources.ExperimentalResourceApi",
-                "-opt-in=org.jetbrains.compose.resources.InternalResourceApi",
-                "-opt-in=androidx.compose.ui.InternalComposeUiApi",
-                "-opt-in=androidx.compose.ui.text.ExperimentalTextApi",
-            )
-        }
+    val linuxCompilerOptions: org.jetbrains.kotlin.gradle.dsl.KotlinNativeCompilerOptions.() -> Unit = {
+        freeCompilerArgs.addAll(
+            "-Xbackend-threads=0",
+            "-opt-in=org.jetbrains.compose.resources.ExperimentalResourceApi",
+            "-opt-in=org.jetbrains.compose.resources.InternalResourceApi",
+            "-opt-in=androidx.compose.ui.InternalComposeUiApi",
+            "-opt-in=androidx.compose.ui.text.ExperimentalTextApi",
+        )
     }
+    linuxX64 { compilerOptions(linuxCompilerOptions) }
+    linuxArm64 { compilerOptions(linuxCompilerOptions) }
     mingwX64 {
         compilerOptions {
             freeCompilerArgs.addAll(

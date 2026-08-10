@@ -54,10 +54,7 @@ class LinuxComposeUiTestTest {
                 var clicks by remember { mutableStateOf(0) }
                 BasicText(
                     text = "Clicks: $clicks",
-                    modifier =
-                        Modifier
-                            .testTag("counter")
-                            .clickable { clicks += 1 },
+                    modifier = Modifier.testTag("counter").clickable { clicks += 1 },
                 )
             }
 
@@ -96,9 +93,10 @@ class LinuxComposeUiTestTest {
             setContent {
                 DialogWindow(
                     onCloseRequest = {},
-                    state = androidx.compose.ui.window.rememberDialogState(
-                        size = DpSize(160.dp, 100.dp)
-                    ),
+                    state =
+                        androidx.compose.ui.window.rememberDialogState(
+                            size = DpSize(160.dp, 100.dp)
+                        ),
                     title = "Dialog test window",
                 ) {
                     BasicText("Dialog", Modifier.testTag("dialog-node"))
@@ -111,14 +109,7 @@ class LinuxComposeUiTestTest {
     @Test
     fun capturesNodePixelsFromOwningWindow() =
         runLinuxComposeUiTest(testTimeout = 10.seconds) {
-            setContent {
-                Box(
-                    Modifier
-                        .size(24.dp)
-                        .background(Color.Red)
-                        .testTag("red"),
-                )
-            }
+            setContent { Box(Modifier.size(24.dp).background(Color.Red).testTag("red")) }
 
             val image = onNodeWithTag("red").captureToImage()
             val pixels = image.toPixelMap()
@@ -131,16 +122,18 @@ class LinuxComposeUiTestTest {
         runLinuxComposeUiTest(testTimeout = 10.seconds) {
             setContent { BasicText("Ready", Modifier.testTag("ready")) }
             val idle = atomic(false)
-            val resource = object : IdlingResource {
-                override val isIdleNow: Boolean
-                    get() = idle.value
-            }
+            val resource =
+                object : IdlingResource {
+                    override val isIdleNow: Boolean
+                        get() = idle.value
+                }
             assertTrue(registerIdlingResource(resource))
             val worker = Worker.start(name = "Linux idling-resource test")
-            val future = worker.execute(TransferMode.UNSAFE, { idle }) {
-                usleep(50_000u)
-                it.value = true
-            }
+            val future =
+                worker.execute(TransferMode.UNSAFE, { idle }) {
+                    usleep(50_000u)
+                    it.value = true
+                }
             try {
                 waitForIdle()
                 assertTrue(idle.value)

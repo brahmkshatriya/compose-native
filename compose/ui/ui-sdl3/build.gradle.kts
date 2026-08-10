@@ -1,5 +1,6 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
 
+import java.io.File
 import java.net.URI
 import java.security.MessageDigest
 
@@ -19,6 +20,48 @@ val atspiSupportObject = layout.buildDirectory.file("native-support/atspi_suppor
 val traySupportObject = layout.buildDirectory.file("native-support/tray_support.o")
 val dragSupportObject = layout.buildDirectory.file("native-support/drag_support.o")
 val nativeSupportArchive = layout.buildDirectory.file("native-support/libcompose_sdl3.a")
+val linuxArm64SupportDirectory = layout.buildDirectory.dir("native-support-linux-arm64")
+val linuxArm64GlInteropObject = linuxArm64SupportDirectory.map { it.file("gl_interop.o") }
+val linuxArm64ClipperEngineObject = linuxArm64SupportDirectory.map { it.file("clipper.engine.o") }
+val linuxArm64NativeDesktopSupportObject =
+    linuxArm64SupportDirectory.map { it.file("native_desktop_support.o") }
+val linuxArm64AtspiSupportObject = linuxArm64SupportDirectory.map { it.file("atspi_support.o") }
+val linuxArm64TraySupportObject = linuxArm64SupportDirectory.map { it.file("tray_support.o") }
+val linuxArm64DragSupportObject = linuxArm64SupportDirectory.map { it.file("drag_support.o") }
+val linuxArm64NativeSupportArchive =
+    linuxArm64SupportDirectory.map { it.file("libcompose_sdl3.a") }
+
+fun findKonanLinuxArm64Tool(tool: String): String? {
+    val dependencies = File(System.getProperty("user.home"), ".konan/dependencies")
+    return dependencies
+        .listFiles()
+        ?.asSequence()
+        ?.filter { it.isDirectory && it.name.startsWith("aarch64-unknown-linux-gnu-gcc-") }
+        ?.sortedByDescending { it.name }
+        ?.map { it.resolve("bin/aarch64-unknown-linux-gnu-$tool") }
+        ?.firstOrNull { it.isFile && it.canExecute() }
+        ?.absolutePath
+}
+
+val hostIsLinuxArm64 =
+    System.getProperty("os.arch").lowercase() == "aarch64" ||
+        System.getProperty("os.arch").lowercase() == "arm64"
+val linuxArm64Cxx =
+    providers.gradleProperty("compose.linux.arm64.cxx").orElse(
+        providers.provider {
+            if (hostIsLinuxArm64) "c++"
+            else findKonanLinuxArm64Tool("g++") ?: "aarch64-linux-gnu-g++"
+        }
+    )
+val linuxArm64Ar =
+    providers.gradleProperty("compose.linux.arm64.ar").orElse(
+        providers.provider {
+            if (hostIsLinuxArm64) "ar"
+            else findKonanLinuxArm64Tool("ar") ?: "aarch64-linux-gnu-ar"
+        }
+    )
+val linuxArm64SystemIncludes =
+    if (hostIsLinuxArm64) emptyList() else listOf("-idirafter", "/usr/include")
 
 val windowsSdlVersion = "3.4.10"
 val windowsSdlSha256 = "39dd2ac370bf33d6332a21ed768d8d49c37cc6f3211d788ead765102722639a8"
@@ -265,6 +308,168 @@ val archiveNativeSupport by tasks.registering(Exec::class) {
     )
 }
 
+val compileGlInteropLinuxArm64 by tasks.registering(Exec::class) {
+    inputs.files(
+        "src/nativeInterop/cinterop/gl_interop.cpp",
+        "src/nativeInterop/cinterop/include/native_gl.h",
+    )
+    inputs.property("compiler", linuxArm64Cxx)
+    outputs.file(linuxArm64GlInteropObject)
+    doFirst {
+        val output = linuxArm64GlInteropObject.get().asFile
+        output.parentFile.mkdirs()
+        commandLine(
+            linuxArm64Cxx.get(), "-std=c++17", "-O3", "-fPIC", "-w",
+            "-Isrc/nativeInterop/cinterop",
+            *linuxArm64SystemIncludes.toTypedArray(),
+            "-c", "src/nativeInterop/cinterop/gl_interop.cpp",
+            "-o", output.absolutePath,
+        )
+    }
+}
+
+val compileClipperEngineLinuxArm64 by tasks.registering(Exec::class) {
+    inputs.files(fileTree("src/nativeInterop/cinterop/clipper2"))
+    inputs.property("compiler", linuxArm64Cxx)
+    outputs.file(linuxArm64ClipperEngineObject)
+    doFirst {
+        val output = linuxArm64ClipperEngineObject.get().asFile
+        output.parentFile.mkdirs()
+        commandLine(
+            linuxArm64Cxx.get(), "-std=c++17", "-O3", "-fPIC",
+            "-Isrc/nativeInterop/cinterop",
+            "-c", "src/nativeInterop/cinterop/clipper2/clipper.engine.cpp",
+            "-o", output.absolutePath,
+        )
+    }
+}
+
+val compileNativeDesktopSupportLinuxArm64 by tasks.registering(Exec::class) {
+    inputs.files(
+        "src/nativeInterop/cinterop/native_desktop_support.cpp",
+        "src/nativeInterop/cinterop/include/native_desktop.h",
+    )
+    inputs.property("compiler", linuxArm64Cxx)
+    outputs.file(linuxArm64NativeDesktopSupportObject)
+    doFirst {
+        val output = linuxArm64NativeDesktopSupportObject.get().asFile
+        output.parentFile.mkdirs()
+        commandLine(
+            linuxArm64Cxx.get(), "-std=c++17", "-O3", "-fPIC", "-pthread", "-w",
+            "-Isrc/nativeInterop/cinterop/include",
+            "-I/usr/include/SDL3",
+            "-D_REENTRANT",
+            "-I/usr/include/dbus-1.0",
+            "-I/usr/lib/dbus-1.0/include",
+            *linuxArm64SystemIncludes.toTypedArray(),
+            "-c", "src/nativeInterop/cinterop/native_desktop_support.cpp",
+            "-o", output.absolutePath,
+        )
+    }
+}
+
+val compileDragSupportLinuxArm64 by tasks.registering(Exec::class) {
+    inputs.files(
+        "src/nativeInterop/cinterop/drag_support.cpp",
+        "src/nativeInterop/cinterop/include/native_drag.h",
+    )
+    inputs.property("compiler", linuxArm64Cxx)
+    outputs.file(linuxArm64DragSupportObject)
+    doFirst {
+        val output = linuxArm64DragSupportObject.get().asFile
+        output.parentFile.mkdirs()
+        commandLine(
+            linuxArm64Cxx.get(), "-std=c++17", "-O3", "-fPIC", "-w",
+            "-Isrc/nativeInterop/cinterop/include",
+            "-I/usr/include/SDL3",
+            "-D_REENTRANT",
+            *linuxArm64SystemIncludes.toTypedArray(),
+            "-c", "src/nativeInterop/cinterop/drag_support.cpp",
+            "-o", output.absolutePath,
+        )
+    }
+}
+
+val compileTraySupportLinuxArm64 by tasks.registering(Exec::class) {
+    inputs.files(
+        "src/nativeInterop/cinterop/tray_support.cpp",
+        "src/nativeInterop/cinterop/include/native_tray.h",
+    )
+    inputs.property("compiler", linuxArm64Cxx)
+    outputs.file(linuxArm64TraySupportObject)
+    doFirst {
+        val output = linuxArm64TraySupportObject.get().asFile
+        output.parentFile.mkdirs()
+        commandLine(
+            linuxArm64Cxx.get(), "-std=c++17", "-O3", "-fPIC", "-w",
+            "-Isrc/nativeInterop/cinterop/include",
+            "-I/usr/include/dbus-1.0",
+            "-I/usr/lib/dbus-1.0/include",
+            *linuxArm64SystemIncludes.toTypedArray(),
+            "-c", "src/nativeInterop/cinterop/tray_support.cpp",
+            "-o", output.absolutePath,
+        )
+    }
+}
+
+val compileAtspiSupportLinuxArm64 by tasks.registering(Exec::class) {
+    inputs.files(
+        "src/nativeInterop/cinterop/atspi_support.cpp",
+        "src/nativeInterop/cinterop/include/linux_atspi.h",
+    )
+    inputs.property("compiler", linuxArm64Cxx)
+    outputs.file(linuxArm64AtspiSupportObject)
+    doFirst {
+        val output = linuxArm64AtspiSupportObject.get().asFile
+        output.parentFile.mkdirs()
+        commandLine(
+            linuxArm64Cxx.get(), "-std=c++17", "-O3", "-fPIC", "-w",
+            "-Isrc/nativeInterop/cinterop/include",
+            "-I/usr/include/dbus-1.0",
+            "-I/usr/lib/dbus-1.0/include",
+            *linuxArm64SystemIncludes.toTypedArray(),
+            "-c", "src/nativeInterop/cinterop/atspi_support.cpp",
+            "-o", output.absolutePath,
+        )
+    }
+}
+
+val archiveLinuxArm64NativeSupport by tasks.registering(Exec::class) {
+    dependsOn(
+        compileGlInteropLinuxArm64,
+        compileClipperEngineLinuxArm64,
+        compileNativeDesktopSupportLinuxArm64,
+        compileAtspiSupportLinuxArm64,
+        compileTraySupportLinuxArm64,
+        compileDragSupportLinuxArm64,
+    )
+    inputs.files(
+        linuxArm64GlInteropObject,
+        linuxArm64ClipperEngineObject,
+        linuxArm64NativeDesktopSupportObject,
+        linuxArm64AtspiSupportObject,
+        linuxArm64TraySupportObject,
+        linuxArm64DragSupportObject,
+    )
+    inputs.property("archiver", linuxArm64Ar)
+    outputs.file(linuxArm64NativeSupportArchive)
+    doFirst {
+        val archive = linuxArm64NativeSupportArchive.get().asFile
+        archive.parentFile.mkdirs()
+        archive.delete()
+        commandLine(
+            linuxArm64Ar.get(), "rcs",
+            archive.absolutePath,
+            linuxArm64GlInteropObject.get().asFile.absolutePath,
+            linuxArm64ClipperEngineObject.get().asFile.absolutePath,
+            linuxArm64NativeDesktopSupportObject.get().asFile.absolutePath,
+            linuxArm64AtspiSupportObject.get().asFile.absolutePath,
+            linuxArm64TraySupportObject.get().asFile.absolutePath,
+            linuxArm64DragSupportObject.get().asFile.absolutePath,
+        )
+    }
+}
+
 kotlin {
     applyHierarchyTemplate {
         common {
@@ -287,6 +492,30 @@ kotlin {
             compileTaskProvider.configure {
                 dependsOn(archiveNativeSupport)
                 inputs.file(nativeSupportArchive)
+            }
+            cinterops {
+                val sdl3 by creating {
+                    defFile(project.file("src/nativeInterop/cinterop/sdl3.def"))
+                }
+                val nativeDesktop by creating {
+                    defFile(project.file("src/nativeInterop/cinterop/native-desktop.def"))
+                }
+            }
+        }
+    }
+
+    linuxArm64 {
+        compilerOptions {
+            freeCompilerArgs.add("-Xbackend-threads=0")
+            freeCompilerArgs.addAll(
+                "-include-binary",
+                linuxArm64NativeSupportArchive.get().asFile.absolutePath,
+            )
+        }
+        compilations.getByName("main") {
+            compileTaskProvider.configure {
+                dependsOn(archiveLinuxArm64NativeSupport)
+                inputs.file(linuxArm64NativeSupportArchive)
             }
             cinterops {
                 val sdl3 by creating {

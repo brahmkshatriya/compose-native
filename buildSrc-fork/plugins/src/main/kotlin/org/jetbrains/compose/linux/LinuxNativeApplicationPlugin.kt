@@ -161,6 +161,8 @@ abstract class PackageLinuxAppImageTask
 constructor(private val execOperations: ExecOperations) : DefaultTask() {
     @get:InputDirectory abstract val appDir: DirectoryProperty
 
+    @get:Input abstract val architecture: Property<String>
+
     @get:OutputFile abstract val outputFile: RegularFileProperty
 
     @TaskAction
@@ -177,7 +179,7 @@ constructor(private val execOperations: ExecOperations) : DefaultTask() {
         execOperations.exec { spec ->
             spec.executable(tool)
             spec.args(appDir.get().asFile.absolutePath, output.absolutePath)
-            spec.environment("ARCH", "x86_64")
+            spec.environment("ARCH", architecture.get())
         }
     }
 
@@ -203,6 +205,14 @@ abstract class RunLinuxAppDirTask @Inject constructor(private val execOperations
 class LinuxNativeApplicationPlugin : Plugin<Project> {
     override fun apply(project: Project) {
         with(project) {
+            val hostIsArm64 =
+                System.getProperty("os.arch").equals("aarch64", ignoreCase = true) ||
+                    System.getProperty("os.arch").equals("arm64", ignoreCase = true)
+            val kotlinTargetName = if (hostIsArm64) "LinuxArm64" else "LinuxX64"
+            val kotlinSourceSetName = if (hostIsArm64) "linuxArm64Main" else "linuxX64Main"
+            val distributionArch = if (hostIsArm64) "arm64" else "x64"
+            val appImageArch = if (hostIsArm64) "aarch64" else "x86_64"
+
             val extension =
                 extensions.create(
                     "linuxNativeApplication",
@@ -231,13 +241,13 @@ class LinuxNativeApplicationPlugin : Plugin<Project> {
             extension.releaseExecutable.convention(
                 layout.buildDirectory.file(
                     extension.executableName.map { executable ->
-                        "bin/linuxX64/releaseExecutable/$executable.kexe"
+                        "bin/${kotlinTargetName.replaceFirstChar(Char::lowercaseChar)}/releaseExecutable/$executable.kexe"
                     }
                 )
             )
             extension.resourceDirectory.convention(
                 layout.buildDirectory.dir(
-                    "generated/compose/resourceGenerator/assembledResources/linuxX64Main"
+                    "generated/compose/resourceGenerator/assembledResources/$kotlinSourceSetName"
                 )
             )
             extension.appDir.convention(
@@ -254,7 +264,7 @@ class LinuxNativeApplicationPlugin : Plugin<Project> {
                     task ->
                     task.group = "distribution"
                     task.description = "Assembles the Linux native release AppDir."
-                    task.dependsOn("linkReleaseExecutableLinuxX64")
+                    task.dependsOn("linkReleaseExecutable$kotlinTargetName")
                     task.applicationName.set(extension.applicationName)
                     task.packageName.set(extension.packageName)
                     task.executableName.set(extension.executableName)
@@ -277,7 +287,9 @@ class LinuxNativeApplicationPlugin : Plugin<Project> {
                     }
                 }
             pluginManager.withPlugin("org.jetbrains.compose") {
-                prepare.configure { task -> task.dependsOn("assembleLinuxX64MainResources") }
+                prepare.configure { task ->
+                    task.dependsOn("assemble${kotlinTargetName}MainResources")
+                }
             }
 
             tasks.register("packageLinuxReleaseTarGz", Tar::class.java) { task ->
@@ -288,7 +300,7 @@ class LinuxNativeApplicationPlugin : Plugin<Project> {
                 task.archiveExtension.set("tar.gz")
                 task.archiveBaseName.set(extension.applicationName.map(String::fileSafe))
                 task.archiveVersion.set(extension.packageVersion)
-                task.archiveClassifier.set("linux-x64")
+                task.archiveClassifier.set("linux-$distributionArch")
                 task.destinationDirectory.set(extension.distributionDirectory)
                 task.from(extension.appDir) { spec ->
                     spec.into(extension.appDir.map { directory -> directory.asFile.name })
@@ -301,10 +313,11 @@ class LinuxNativeApplicationPlugin : Plugin<Project> {
                 task.description = "Packages the Linux native AppDir as an AppImage."
                 task.dependsOn(prepare)
                 task.appDir.set(extension.appDir)
+                task.architecture.set(appImageArch)
                 task.outputFile.set(
                     extension.distributionDirectory.file(
                         extension.applicationName.zip(extension.packageVersion) { app, version ->
-                            "${app.fileSafe()}-$version-x86_64.AppImage"
+                            "${app.fileSafe()}-$version-$appImageArch.AppImage"
                         }
                     )
                 )

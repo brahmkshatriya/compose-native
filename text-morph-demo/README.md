@@ -2,10 +2,12 @@
 
 A standalone Kotlin/Native Compose application that morphs **Hi** into **Hello Compose**.
 
-Build the optimized release executable from the repository root:
+Build the optimized release executable from the repository root using the target that matches
+the host architecture:
 
 ```bash
-./gradlew :text-morph-demo:linkReleaseExecutableLinuxX64
+./gradlew :text-morph-demo:linkReleaseExecutableLinuxX64    # x86_64
+./gradlew :text-morph-demo:linkReleaseExecutableLinuxArm64  # arm64
 ```
 
 The release executable is generated as `text-morph-demo.kexe`. Run `strip --strip-unneeded` on a

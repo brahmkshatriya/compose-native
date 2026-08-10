@@ -3,12 +3,18 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import defaultdict
 from pathlib import Path
+
+LINUX_TARGETS = {
+    "linuxx64": "linux_x64",
+    "linuxarm64": "linux_arm64",
+}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Create Linux-x64-only Gradle module metadata roots for local KMP publications."
+        description="Create Linux Gradle module metadata roots for local KMP publications."
     )
     parser.add_argument("--repository", type=Path, required=True)
     parser.add_argument("--version", required=True)
@@ -16,46 +22,51 @@ def main() -> None:
 
     repository = args.repository.expanduser().resolve()
     version = args.version
-    platform_files = sorted(
-        repository.glob(f"org/jetbrains/**/**-linuxx64/{version}/*-linuxx64-{version}.module")
-    )
-    created: list[str] = []
+    roots: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
 
-    for platform_file in platform_files:
-        platform_data = json.loads(platform_file.read_text(encoding="utf-8"))
-        component = platform_data.get("component", {})
-        root_group = component.get("group")
-        root_module = component.get("module")
-        root_version = component.get("version")
-        if not root_group or not root_module or root_version != version:
-            continue
-
-        relative_parts = platform_file.relative_to(repository).parts
-        platform_group = ".".join(relative_parts[:-3])
-        platform_module = platform_file.parent.parent.name
-        variants = []
-        for variant in platform_data.get("variants", []):
-            attributes = variant.get("attributes", {})
-            if attributes.get("org.jetbrains.kotlin.native.target") != "linux_x64":
-                continue
-            variants.append(
-                {
-                    "name": variant["name"],
-                    "attributes": attributes,
-                    "available-at": {
-                        "url": (
-                            f"../../{platform_module}/{version}/"
-                            f"{platform_module}-{version}.module"
-                        ),
-                        "group": platform_group,
-                        "module": platform_module,
-                        "version": version,
-                    },
-                }
+    for platform_suffix, native_target in LINUX_TARGETS.items():
+        platform_files = sorted(
+            repository.glob(
+                f"org/jetbrains/**/**/*-{platform_suffix}/{version}/*-{platform_suffix}-{version}.module"
             )
-        if not variants:
-            continue
+        )
+        for platform_file in platform_files:
+            platform_data = json.loads(platform_file.read_text(encoding="utf-8"))
+            component = platform_data.get("component", {})
+            root_group = component.get("group")
+            root_module = component.get("module")
+            root_version = component.get("version")
+            if not root_group or not root_module or root_version != version:
+                continue
 
+            relative_parts = platform_file.relative_to(repository).parts
+            platform_group = ".".join(relative_parts[:-3])
+            platform_module = platform_file.parent.parent.name
+            for variant in platform_data.get("variants", []):
+                attributes = variant.get("attributes", {})
+                if attributes.get("org.jetbrains.kotlin.native.target") != native_target:
+                    continue
+                roots[(root_group, root_module)].append(
+                    {
+                        "name": variant["name"],
+                        "attributes": attributes,
+                        "available-at": {
+                            "url": (
+                                f"../../{platform_module}/{version}/"
+                                f"{platform_module}-{version}.module"
+                            ),
+                            "group": platform_group,
+                            "module": platform_module,
+                            "version": version,
+                        },
+                    }
+                )
+
+    if not roots:
+        raise SystemExit(f"No Linux platform publications found in {repository}")
+
+    created: list[str] = []
+    for (root_group, root_module), variants in sorted(roots.items()):
         root_directory = repository.joinpath(*root_group.split("."), root_module, version)
         root_directory.mkdir(parents=True, exist_ok=True)
         root_metadata = {
@@ -67,7 +78,7 @@ def main() -> None:
                 "attributes": {"org.gradle.status": "integration"},
             },
             "createdBy": {"gradle": {"version": "9.5.0"}},
-            "variants": variants,
+            "variants": sorted(variants, key=lambda variant: variant["name"]),
         }
         (root_directory / f"{root_module}-{version}.module").write_text(
             json.dumps(root_metadata, indent=2) + "\n",
@@ -90,9 +101,7 @@ def main() -> None:
         )
         created.append(f"{root_group}:{root_module}:{version}")
 
-    if not created:
-        raise SystemExit(f"No Linux x64 platform publications found in {repository}")
-    print(f"Generated {len(created)} Linux-only root metadata publications:")
+    print(f"Generated {len(created)} Linux root metadata publications:")
     for coordinate in created:
         print(f"  {coordinate}")
 

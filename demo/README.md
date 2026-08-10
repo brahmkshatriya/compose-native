@@ -43,7 +43,7 @@ The `:demo` module is the Linux launcher for the shared native desktop component
 
 ## Requirements
 
-- Linux x64 in a Wayland or X11 session
+- Linux x64 or arm64 in a Wayland or X11 session
 - Git, a C++17 compiler, and pkg-config
 - JDK 21 for build tooling
 - SDL 3.2 or newer, Fontconfig, D-Bus, WPE WebKit, EGL/OpenGL, and libmpv development files
@@ -231,7 +231,7 @@ every edge and corner.
 
 ## Compose Linux source fork
 
-Compose Runtime publishes Linux x64 KLIBs, but Compose UI, Foundation, and Material 3 do not currently publish a complete Linux target. The prepared source fork enables `linuxX64` through the required module graph, supplies the missing Linux platform actuals, and connects Compose's non-Android graphics/text entry points to Skia. It is based on commit `c1f04f0b9b7acda3849d76fe0d271f7255ad827c`.
+The prepared source fork publishes complete Linux x64 and arm64 KLIB graphs for Compose UI, Foundation, and Material 3. Shared Linux source sets supply the platform actuals, while architecture-specific publications resolve the matching Skiko Native artifact. The fork is based on commit `c1f04f0b9b7acda3849d76fe0d271f7255ad827c`.
 
 The Skia/SkParagraph backend covers the advanced APIs exercised by this milestone: encoded images,
 boolean paths, sweep and composite shaders, color filters, vertex meshes, blur/offset render effects,

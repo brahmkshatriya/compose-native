@@ -64,7 +64,15 @@ kotlin {
         }
     }
 
-    linuxX64 {
+    val linuxTarget =
+        if (System.getProperty("os.arch").equals("aarch64", ignoreCase = true) ||
+            System.getProperty("os.arch").equals("arm64", ignoreCase = true)
+        ) {
+            linuxArm64()
+        } else {
+            linuxX64()
+        }
+    linuxTarget.apply {
         compilerOptions {
             // Let Kotlin/Native LLVM code generation use all available processors.
             freeCompilerArgs.add("-Xbackend-threads=0")

@@ -45,7 +45,7 @@ androidXMultiplatform {
     desktop()
     mac()
     ios()
-    linuxX64()
+    linux()
     mingwX64()
     js()
     wasmJs()
@@ -218,7 +218,7 @@ androidXMultiplatform {
             dependsOn(desktopNativeMain)
         }
 
-        linuxX64Test.dependencies {
+        linuxTest.dependencies {
             implementation(project(":compose:foundation:foundation"))
             implementation(libs.kotlinTest)
         }
@@ -256,7 +256,7 @@ androidXMultiplatform {
     }
 }
 
-tasks.matching { it.name == "linuxX64Test" }.configureEach {
+tasks.matching { it.name == "linuxX64Test" || it.name == "linuxArm64Test" }.configureEach {
     environment("SDL_VIDEODRIVER", "dummy")
 }
 

@@ -11,9 +11,26 @@ java_home="$(find_task_jdk)"
 worker_count="$(nproc)"
 out_root="$app_root/build/androidx-out"
 project_cache="$app_root/build/gradle-project-cache"
-native_executable="$out_root/compose-multiplatform-core/text-morph-demo/build/bin/linuxX64/releaseExecutable/text-morph-demo.kexe"
+
+case "$(uname -m)" in
+    x86_64|amd64)
+        kotlin_target="LinuxX64"
+        target_dir="linuxX64"
+        appimage_arch="x86_64"
+        ;;
+    aarch64|arm64)
+        kotlin_target="LinuxArm64"
+        target_dir="linuxArm64"
+        appimage_arch="aarch64"
+        ;;
+    *)
+        echo "Unsupported Linux architecture: $(uname -m)" >&2
+        exit 1
+        ;;
+esac
+native_executable="$out_root/compose-multiplatform-core/text-morph-demo/build/bin/$target_dir/releaseExecutable/text-morph-demo.kexe"
 app_dir="$app_root/build/appimage/TextMorphDemo.AppDir"
-output="$app_root/build/bin/text-morph-demo-x86_64.AppImage"
+output="$app_root/build/bin/text-morph-demo-$appimage_arch.AppImage"
 
 if [[ "${KTNATIVE_SKIP_BUILD:-0}" != "1" ]]; then
     (
@@ -23,7 +40,7 @@ if [[ "${KTNATIVE_SKIP_BUILD:-0}" != "1" ]]; then
         OUT_DIR="$out_root" \
         PROJECT_PREFIX=":text-morph-demo,$task_projects" \
         ./gradlew \
-            ":text-morph-demo:linkReleaseExecutableLinuxX64" \
+            ":text-morph-demo:linkReleaseExecutable$kotlin_target" \
             -Pkotlin.native.binary.smallBinary=true \
             -Pandroidx.enabled.kmp.target.platforms=-desktop,-mac,-windows,-android_native,-js,-wasm,+linux \
             --no-configuration-cache \
@@ -56,7 +73,7 @@ install -Dm644 "$app_root/appimage/text-morph-demo.svg" "$app_dir/text-morph-dem
 ln -s text-morph-demo.svg "$app_dir/.DirIcon"
 
 mkdir -p "$(dirname "$output")"
-ARCH=x86_64 appimagetool \
+ARCH="$appimage_arch" appimagetool \
     --comp zstd \
     --mksquashfs-opt=-Xcompression-level \
     --mksquashfs-opt=22 \
