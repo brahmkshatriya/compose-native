@@ -17,6 +17,14 @@ int app_webview_render(
     int height,
     float device_scale
 );
+int app_webview_render_pixels(
+    AppWebView *view,
+    void *pixels,
+    int width,
+    int height,
+    int stride,
+    float device_scale
+);
 void app_webview_load_uri(AppWebView *view, const char *uri);
 void app_webview_go_back(AppWebView *view);
 void app_webview_go_forward(AppWebView *view);
@@ -59,7 +67,9 @@ void app_webview_key(
     int pressed,
     unsigned int modifiers
 );
+#ifndef KTNATIVE_APP_WEBVIEW_NO_DEMO_GL
 void app_demo_render_gl(int framebuffer, int width, int height, float phase);
+#endif
 
 #ifdef __cplusplus
 }

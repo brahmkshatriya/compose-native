@@ -130,7 +130,7 @@ internal open class AndroidViewHolder(
         ViewCompat.setOnApplyWindowInsetsListener(this, this)
     }
 
-    // Keep nullable to match the `expect` declaration of InteropViewFactoryHolder
+    // Keep nullable to match the `expect` declaration of InteropViewLifecycleHolder
     @Suppress("RedundantNullableReturnType") fun getInteropView(): InteropView? = view
 
     /** The update logic of the [View]. */
@@ -383,7 +383,7 @@ internal open class AndroidViewHolder(
         // Prepare layout node that proxies measure and layout passes to the View.
         val layoutNode = LayoutNode()
         @OptIn(InternalComposeUiApi::class)
-        layoutNode.interopViewFactoryHolder = this@AndroidViewHolder
+        layoutNode.interopViewLifecycleHolder = this@AndroidViewHolder
 
         val coreModifier =
             Modifier.nestedScroll(NoOpScrollConnection, dispatcher)

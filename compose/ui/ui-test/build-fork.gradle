@@ -206,7 +206,7 @@ androidXMultiplatform {
         desktopNativeMain {
             dependsOn(nativeMain)
             dependencies {
-                implementation(project(":compose:ui:ui-sdl2"))
+                implementation(project(":compose:ui:ui-sdl3"))
             }
         }
 

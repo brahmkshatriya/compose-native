@@ -1,0 +1,5 @@
+headers = SDL3/SDL.h
+headerFilter = SDL3/SDL*.h
+package = sdl3
+compilerOpts = -I/usr/include -D_GNU_SOURCE=1 -D_REENTRANT
+linkerOpts = -L/usr/lib -lSDL3 -lfontconfig -lfreetype -lpng16 -lGL -lz -ldl -lpthread -lm --allow-shlib-undefined

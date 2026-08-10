@@ -47,12 +47,12 @@ The native targets include:
 | Transparent windows | Compositor dependent | Compositor dependent |
 | Double/triple buffering requests | Yes | Yes |
 | System theme | Yes | Yes |
-| System accent color | Yes, when exposed by the desktop portal | Not currently exposed |
+| System accent color | Yes, when exposed by the desktop portal | Yes |
 | Accessibility | AT-SPI | Semantics and native events; full UI Automation provider pending |
 | CPU native views | Yes | Yes |
 | OpenGL native views | Yes | Yes |
-| Demo WebView | WPE WebKit | Not bundled |
-| Demo video player | libmpv | Not bundled |
+| Demo WebView | WPE WebKit | Bundled WebView2 loader |
+| Demo video player | libmpv | Bundled libmpv |
 
 ## Prerequisites
 
@@ -213,7 +213,7 @@ Publish the Compose modules and native variants from this checkout:
 ./gradlew :mpp:publishComposeJbToMavenLocal \
     -Pcompose.platforms=linux,mingw
 
-./gradlew :compose:ui:ui-sdl2:publishToMavenLocal
+./gradlew :compose:ui:ui-sdl3:publishToMavenLocal
 ```
 
 Development artifacts use version `9999.0.0-SNAPSHOT`. Put `mavenLocal()` before remote
@@ -259,10 +259,10 @@ kotlin {
             )
         }
         linuxX64Main.dependencies {
-            implementation("org.jetbrains.compose.ui:ui-sdl2:9999.0.0-SNAPSHOT")
+            implementation("org.jetbrains.compose.ui:ui-sdl3:9999.0.0-SNAPSHOT")
         }
         mingwX64Main.dependencies {
-            implementation("org.jetbrains.compose.ui:ui-sdl2:9999.0.0-SNAPSHOT")
+            implementation("org.jetbrains.compose.ui:ui-sdl3:9999.0.0-SNAPSHOT")
         }
     }
 }
@@ -284,8 +284,8 @@ The Linux and Windows demo applications share the same catalogue. It includes pa
 * CPU and OpenGL native views
 * Web browsing and video playback status
 
-On Linux, the browser and video pages use WPE WebKit and libmpv. On Windows, those two integrations
-are reported as unavailable; the remaining catalogue pages are shared.
+On Linux, the browser page uses WPE WebKit; on Windows it uses WebView2. Both targets use libmpv for
+the video page, with the Windows runtime included in the packaged catalogue.
 
 ## Configuration
 
@@ -316,7 +316,8 @@ KTNATIVE_MAX_FPS=60
 
 * Native desktop artifacts are development snapshots and are not published to Maven Central.
 * Linux and Windows targets are currently x64 only.
-* Windows WebView2 and libmpv integrations are not bundled.
+* Windows WebView2 uses the system WebView2 Runtime; the packaged catalogue includes its loader and
+  the complete libmpv runtime.
 * Windows accessibility does not yet expose a complete UI Automation provider.
 * Windows OpenGL native views require an OpenGL window; the packaged catalogue selects OpenGL by
   default for those pages.

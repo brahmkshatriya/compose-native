@@ -81,7 +81,7 @@ publish_tasks=(
     :compose:foundation:foundation:publishLinuxX64PublicationToMavenLocal
     :compose:material:material-ripple:publishLinuxX64PublicationToMavenLocal
     :compose:material3:material3:publishLinuxX64PublicationToMavenLocal
-    :compose:ui:ui-sdl2:publishLinuxX64PublicationToMavenLocal
+    :compose:ui:ui-sdl3:publishLinuxX64PublicationToMavenLocal
     :compose:components:components-resources:publishLinuxX64PublicationToMavenLocal
 )
 

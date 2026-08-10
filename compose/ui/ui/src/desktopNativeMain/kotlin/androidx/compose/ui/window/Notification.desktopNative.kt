@@ -19,11 +19,11 @@ package androidx.compose.ui.window
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.platform.LinuxDesktopEvent
-import androidx.compose.ui.platform.LinuxNotificationAction
-import androidx.compose.ui.platform.LinuxNotificationHint
-import androidx.compose.ui.platform.LinuxPlatformServicesRegistry
-import androidx.compose.ui.platform.LinuxProgressUpdate
+import androidx.compose.ui.platform.NativeDesktopEvent
+import androidx.compose.ui.platform.NativeNotificationAction
+import androidx.compose.ui.platform.NativeNotificationHint
+import androidx.compose.ui.platform.NativeDesktopPlatformServicesRegistry
+import androidx.compose.ui.platform.NativeProgressUpdate
 import kotlin.math.roundToInt
 
 /** Creates and remembers a desktop [Notification]. */
@@ -152,12 +152,12 @@ object PlatformNotificationBackend : NotificationBackend {
     private val handles = mutableMapOf<UInt, PlatformNotificationHandle>()
 
     override val isSupported: Boolean
-        get() = LinuxPlatformServicesRegistry.current()?.areNotificationsSupported() == true
+        get() = NativeDesktopPlatformServicesRegistry.current()?.areNotificationsSupported() == true
 
     override val capabilities: Set<NotificationCapability>
         get() {
             val names =
-                LinuxPlatformServicesRegistry.current()?.notificationCapabilities().orEmpty()
+                NativeDesktopPlatformServicesRegistry.current()?.notificationCapabilities().orEmpty()
             return NotificationCapability.entries.filterTo(mutableSetOf()) {
                 it.protocolName in names
             }
@@ -174,13 +174,13 @@ object PlatformNotificationBackend : NotificationBackend {
         return handle
     }
 
-    internal fun dispatch(event: LinuxDesktopEvent) {
+    internal fun dispatch(event: NativeDesktopEvent) {
         when (event) {
-            is LinuxDesktopEvent.NotificationAction ->
+            is NativeDesktopEvent.NotificationAction ->
                 handles[event.notificationId]?.dispatch(
                     NotificationEvent.ActionInvoked(event.actionId)
                 )
-            is LinuxDesktopEvent.NotificationClosed -> {
+            is NativeDesktopEvent.NotificationClosed -> {
                 val handle = handles.remove(event.notificationId) ?: return
                 val reason =
                     when (event.reason) {
@@ -204,9 +204,9 @@ object PlatformNotificationBackend : NotificationBackend {
 
         fun send(request: NotificationRequest) {
             val services = requireLinuxDesktopServices()
-            val protocolHints = mutableMapOf<String, LinuxNotificationHint>()
+            val protocolHints = mutableMapOf<String, NativeNotificationHint>()
             protocolHints["urgency"] =
-                LinuxNotificationHint.ByteValue(
+                NativeNotificationHint.ByteValue(
                     when (request.type) {
                         Notification.Type.None,
                         Notification.Type.Info -> 0u
@@ -216,7 +216,7 @@ object PlatformNotificationBackend : NotificationBackend {
                 )
             request.progress?.let {
                 protocolHints["value"] =
-                    LinuxNotificationHint.IntValue((it.coerceIn(0f, 1f) * 100f).roundToInt())
+                    NativeNotificationHint.IntValue((it.coerceIn(0f, 1f) * 100f).roundToInt())
             }
             request.hints.forEach { (name, hint) -> protocolHints[name] = hint.toPlatformHint() }
             id =
@@ -226,7 +226,7 @@ object PlatformNotificationBackend : NotificationBackend {
                     message = request.message,
                     iconName = request.iconName.ifEmpty { request.type.defaultIconName },
                     replacesId = if (id != 0u) id else request.replacesId,
-                    actions = request.actions.map { LinuxNotificationAction(it.id, it.label) },
+                    actions = request.actions.map { NativeNotificationAction(it.id, it.label) },
                     hints = protocolHints,
                     timeoutMillis = request.timeoutMillis,
                 )
@@ -336,7 +336,7 @@ object PlatformProgressJobBackend : ProgressJobBackend {
 
     override val isSupported: Boolean
         get() {
-            val services = LinuxPlatformServicesRegistry.current() ?: return false
+            val services = NativeDesktopPlatformServicesRegistry.current() ?: return false
             return services.isProgressServiceSupported() || services.areNotificationsSupported()
         }
 
@@ -354,15 +354,15 @@ object PlatformProgressJobBackend : ProgressJobBackend {
         return handle
     }
 
-    internal fun dispatch(event: LinuxDesktopEvent.ProgressRequested) {
+    internal fun dispatch(event: NativeDesktopEvent.ProgressRequested) {
         val handle = handles[event.path] ?: return
         handle.dispatch(
             when (event.action) {
-                LinuxDesktopEvent.ProgressRequested.Action.Cancel ->
+                NativeDesktopEvent.ProgressRequested.Action.Cancel ->
                     ProgressJobEvent.CancelRequested
-                LinuxDesktopEvent.ProgressRequested.Action.Suspend ->
+                NativeDesktopEvent.ProgressRequested.Action.Suspend ->
                     ProgressJobEvent.SuspendRequested
-                LinuxDesktopEvent.ProgressRequested.Action.Resume ->
+                NativeDesktopEvent.ProgressRequested.Action.Resume ->
                     ProgressJobEvent.ResumeRequested
             }
         )
@@ -390,7 +390,7 @@ object PlatformProgressJobBackend : ProgressJobBackend {
             requireLinuxDesktopServices()
                 .updateProgressJob(
                     path,
-                    LinuxProgressUpdate(
+                    NativeProgressUpdate(
                         totalBytes = request.totalBytes,
                         processedBytes = update.processedBytes,
                         bytesPerSecond = update.bytesPerSecond,
@@ -519,11 +519,11 @@ fun startProgressJob(
 ): ProgressJobHandle = backend.start(request)
 
 @InternalComposeUiApi
-fun dispatchLinuxDesktopEvents() {
-    val services = LinuxPlatformServicesRegistry.current() ?: return
+fun dispatchNativeDesktopEvents() {
+    val services = NativeDesktopPlatformServicesRegistry.current() ?: return
     while (true) {
         when (val event = services.pollDesktopEvent() ?: return) {
-            is LinuxDesktopEvent.ProgressRequested -> PlatformProgressJobBackend.dispatch(event)
+            is NativeDesktopEvent.ProgressRequested -> PlatformProgressJobBackend.dispatch(event)
             else -> PlatformNotificationBackend.dispatch(event)
         }
     }
@@ -538,16 +538,16 @@ private val Notification.Type.defaultIconName: String
             Notification.Type.Error -> "dialog-error"
         }
 
-private fun NotificationHint.toPlatformHint(): LinuxNotificationHint =
+private fun NotificationHint.toPlatformHint(): NativeNotificationHint =
     when (this) {
-        is NotificationHint.ByteValue -> LinuxNotificationHint.ByteValue(value)
-        is NotificationHint.IntValue -> LinuxNotificationHint.IntValue(value)
-        is NotificationHint.UIntValue -> LinuxNotificationHint.UIntValue(value)
-        is NotificationHint.LongValue -> LinuxNotificationHint.LongValue(value)
-        is NotificationHint.ULongValue -> LinuxNotificationHint.ULongValue(value)
-        is NotificationHint.DoubleValue -> LinuxNotificationHint.DoubleValue(value)
-        is NotificationHint.BooleanValue -> LinuxNotificationHint.BooleanValue(value)
-        is NotificationHint.StringValue -> LinuxNotificationHint.StringValue(value)
+        is NotificationHint.ByteValue -> NativeNotificationHint.ByteValue(value)
+        is NotificationHint.IntValue -> NativeNotificationHint.IntValue(value)
+        is NotificationHint.UIntValue -> NativeNotificationHint.UIntValue(value)
+        is NotificationHint.LongValue -> NativeNotificationHint.LongValue(value)
+        is NotificationHint.ULongValue -> NativeNotificationHint.ULongValue(value)
+        is NotificationHint.DoubleValue -> NativeNotificationHint.DoubleValue(value)
+        is NotificationHint.BooleanValue -> NativeNotificationHint.BooleanValue(value)
+        is NotificationHint.StringValue -> NativeNotificationHint.StringValue(value)
         else ->
             error(
                 "PlatformNotificationBackend does not understand ${this::class}; " +
@@ -556,7 +556,7 @@ private fun NotificationHint.toPlatformHint(): LinuxNotificationHint =
     }
 
 private fun requireLinuxDesktopServices() =
-    checkNotNull(LinuxPlatformServicesRegistry.current()) {
+    checkNotNull(NativeDesktopPlatformServicesRegistry.current()) {
         "Linux desktop services are only available inside application { ... }"
     }
 

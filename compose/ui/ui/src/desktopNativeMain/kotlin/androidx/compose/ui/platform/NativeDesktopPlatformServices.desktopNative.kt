@@ -26,6 +26,80 @@ interface NativeDesktopPlatformServices {
     fun setClipboardText(text: String)
 
     fun openUri(uri: String)
+
+    fun notificationCapabilities(): Set<String>
+
+    fun areNotificationsSupported(): Boolean
+
+    fun sendNotification(
+        applicationName: String,
+        title: String,
+        message: String,
+        iconName: String,
+        replacesId: UInt,
+        actions: List<NativeNotificationAction>,
+        hints: Map<String, NativeNotificationHint>,
+        timeoutMillis: Int,
+    ): UInt
+
+    fun closeNotification(id: UInt)
+
+    fun isProgressServiceSupported(): Boolean
+
+    fun startProgressJob(applicationName: String, iconName: String, capabilities: Int): String
+
+    fun updateProgressJob(path: String, update: NativeProgressUpdate)
+
+    fun terminateProgressJob(path: String, errorMessage: String)
+
+    fun pollDesktopEvent(): NativeDesktopEvent?
+}
+
+@InternalComposeUiApi data class NativeNotificationAction(val id: String, val label: String)
+
+@InternalComposeUiApi
+sealed interface NativeNotificationHint {
+    data class ByteValue(val value: UByte) : NativeNotificationHint
+
+    data class IntValue(val value: Int) : NativeNotificationHint
+
+    data class UIntValue(val value: UInt) : NativeNotificationHint
+
+    data class LongValue(val value: Long) : NativeNotificationHint
+
+    data class ULongValue(val value: ULong) : NativeNotificationHint
+
+    data class DoubleValue(val value: Double) : NativeNotificationHint
+
+    data class BooleanValue(val value: Boolean) : NativeNotificationHint
+
+    data class StringValue(val value: String) : NativeNotificationHint
+}
+
+@InternalComposeUiApi
+data class NativeProgressUpdate(
+    val totalBytes: ULong,
+    val processedBytes: ULong,
+    val bytesPerSecond: ULong,
+    val elapsedMillis: ULong,
+    val percent: UInt,
+    val message: String,
+)
+
+@InternalComposeUiApi
+sealed interface NativeDesktopEvent {
+    data class NotificationAction(val notificationId: UInt, val actionId: String) :
+        NativeDesktopEvent
+
+    data class NotificationClosed(val notificationId: UInt, val reason: UInt) : NativeDesktopEvent
+
+    data class ProgressRequested(val path: String, val action: Action) : NativeDesktopEvent {
+        enum class Action {
+            Cancel,
+            Suspend,
+            Resume,
+        }
+    }
 }
 
 /** Installs native desktop services without coupling Compose UI to a window implementation. */

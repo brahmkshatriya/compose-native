@@ -297,7 +297,7 @@ private fun <T : View> Updater<LayoutNode>.updateViewHolderParams(
 @Suppress("UNCHECKED_CAST", "ExceptionMessage")
 private fun <T : View> LayoutNode.requireViewFactoryHolder(): ViewFactoryHolder<T> {
     @OptIn(InternalComposeUiApi::class)
-    return checkPreconditionNotNull(interopViewFactoryHolder) as ViewFactoryHolder<T>
+    return checkPreconditionNotNull(interopViewLifecycleHolder) as ViewFactoryHolder<T>
 }
 
 /** An empty update block used by [AndroidView]. */

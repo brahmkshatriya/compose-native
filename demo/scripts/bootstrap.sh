@@ -19,7 +19,7 @@ if [[ ! -f "$task_app_root/build.gradle.kts" ]]; then
     echo "The native Wayland app module is missing at $task_app_root." >&2
     exit 1
 fi
-if [[ ! -f "$task_app_root/src/linuxMain/kotlin/Main.kt" ]]; then
+if [[ ! -f "$task_app_root/src/desktopNativeMain/kotlin/Main.kt" ]]; then
     echo "The native Wayland app sources are missing at $task_app_root/src." >&2
     exit 1
 fi

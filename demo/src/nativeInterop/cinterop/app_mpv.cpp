@@ -89,7 +89,7 @@ static bool app_mpv_initialize(AppMpv *player) {
     mpv_set_option_string(player->handle, "vo", "libmpv");
     mpv_set_option_string(player->handle, "hwdec", "auto-safe");
     mpv_set_option_string(player->handle, "keep-open", "yes");
-    mpv_set_option_string(player->handle, "audio-client-name", "Compose Linux catalogue");
+    mpv_set_option_string(player->handle, "audio-client-name", "Compose native catalogue");
     if (mpv_initialize(player->handle) < 0) {
         player->error = "Could not initialize MPV";
         return false;

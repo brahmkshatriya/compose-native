@@ -183,13 +183,13 @@ private fun <T : InteropView> Updater<LayoutNode>.updateParameters(
 /**
  * Returns the [TypedInteropViewHolder] associated with the current [LayoutNode].
  * Since the [TypedInteropViewHolder] is responsible for constructing the [LayoutNode], it
- * associates itself with the [LayoutNode] by setting the [LayoutNode.interopViewFactoryHolder]
+ * associates itself with the [LayoutNode] by setting the [LayoutNode.interopViewLifecycleHolder]
  * property and it's safe to cast from [InteropViewHolder]
  */
 @Suppress("UNCHECKED_CAST")
 private fun <T : InteropView> LayoutNode.requireViewFactoryHolder(): TypedInteropViewHolder<T> {
     // This LayoutNode is created and managed internally here, so it's safe to cast
-    return checkNotNull(interopViewFactoryHolder) as TypedInteropViewHolder<T>
+    return checkNotNull(interopViewLifecycleHolder) as TypedInteropViewHolder<T>
 }
 
 /**

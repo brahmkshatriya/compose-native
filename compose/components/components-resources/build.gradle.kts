@@ -54,7 +54,7 @@ kotlin {
 
         val desktopNativeMain by getting {
             dependencies {
-                implementation(project(":compose:ui:ui-sdl2"))
+                implementation(project(":compose:ui:ui-sdl3"))
             }
         }
     }
