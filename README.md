@@ -16,6 +16,10 @@ This repository currently provides development snapshots for:
 The APIs and artifacts are still under active development. Pin both the Compose Native and
 [Skiko Native](https://github.com/brahmkshatriya/skiko-native) revisions used by your project.
 
+Linux and Windows now share the same `compose/ui/ui-sdl3` desktop-native implementation. Platform
+integration remains target-specific, but application code and the Compose-facing window, input,
+interop, tray, notification, and lifecycle APIs are shared across both native desktop targets.
+
 ## Features
 
 The native targets include:
@@ -47,7 +51,7 @@ The native targets include:
 | Transparent windows | Compositor dependent | Compositor dependent |
 | Double/triple buffering requests | Yes | Yes |
 | System theme | Yes | Yes |
-| System accent color | Yes, when exposed by the desktop portal | Yes |
+| System accent color | Yes, when exposed by the desktop portal | Yes, with live settings updates |
 | Accessibility | AT-SPI | Semantics and native events; full UI Automation provider pending |
 | CPU native views | Yes | Yes |
 | OpenGL native views | Yes | Yes |
@@ -301,7 +305,9 @@ SKIKO_FPS_ENABLED=true
 ```
 
 Supported Windows renderer values are `DIRECT3D`, `OPENGL`, `SOFTWARE_FAST`, and
-`SOFTWARE_COMPAT`. Linux supports `OPENGL`, `SOFTWARE_FAST`, and `SOFTWARE_COMPAT`. See the
+`SOFTWARE_COMPAT`. Linux supports `OPENGL`, `SOFTWARE_FAST`, and `SOFTWARE_COMPAT`. On Windows,
+OpenGL selection also creates the SDL3 window with the OpenGL flag, so OpenGL-backed native views
+and renderer initialization use the correct native window configuration. See the
 [Skiko Native README](https://github.com/brahmkshatriya/skiko-native) for all renderer settings.
 
 Demo-specific options:
