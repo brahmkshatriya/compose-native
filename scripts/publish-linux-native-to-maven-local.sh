@@ -40,12 +40,6 @@ prepare_linux_arm64_cross_tools() {
         echo "Build on an arm64 host instead, or install the toolchain used by skiko/docker/linux-amd64." >&2
         exit 1
     fi
-    if [[ "$toolchain" != "/opt/arm-gnu-toolchain" ]]; then
-        echo "Skiko currently uses /opt/arm-gnu-toolchain as its cross sysroot." >&2
-        echo "Use that location when cross-publishing Linux arm64 from x86_64." >&2
-        exit 1
-    fi
-
     arm64_cross_tool_aliases="$(mktemp -d)"
     trap 'rm -rf "${arm64_cross_tool_aliases:-}"' EXIT
     ln -s "$compiler" "$arm64_cross_tool_aliases/aarch64-linux-gnu-g++"

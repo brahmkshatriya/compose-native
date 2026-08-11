@@ -6,15 +6,16 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-LINUX_TARGETS = {
+NATIVE_TARGETS = {
     "linuxx64": "linux_x64",
     "linuxarm64": "linux_arm64",
+    "mingwx64": "mingw_x64",
 }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Create Linux Gradle module metadata roots for local KMP publications."
+        description="Create desktop-native Gradle module metadata roots for local KMP publications."
     )
     parser.add_argument("--repository", type=Path, required=True)
     parser.add_argument("--version", required=True)
@@ -24,10 +25,10 @@ def main() -> None:
     version = args.version
     roots: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
 
-    for platform_suffix, native_target in LINUX_TARGETS.items():
+    for platform_suffix, native_target in NATIVE_TARGETS.items():
         platform_files = sorted(
             repository.glob(
-                f"org/jetbrains/**/**/*-{platform_suffix}/{version}/*-{platform_suffix}-{version}.module"
+                f"**/*-{platform_suffix}/{version}/*-{platform_suffix}-{version}.module"
             )
         )
         for platform_file in platform_files:
@@ -63,7 +64,7 @@ def main() -> None:
                 )
 
     if not roots:
-        raise SystemExit(f"No Linux platform publications found in {repository}")
+        raise SystemExit(f"No desktop-native platform publications found in {repository}")
 
     created: list[str] = []
     for (root_group, root_module), variants in sorted(roots.items()):
@@ -101,7 +102,7 @@ def main() -> None:
         )
         created.append(f"{root_group}:{root_module}:{version}")
 
-    print(f"Generated {len(created)} Linux root metadata publications:")
+    print(f"Generated {len(created)} desktop-native root metadata publications:")
     for coordinate in created:
         print(f"  {coordinate}")
 
