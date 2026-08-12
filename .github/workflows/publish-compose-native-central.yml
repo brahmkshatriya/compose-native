@@ -76,13 +76,6 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - uses: android-actions/setup-android@v3
-        name: Set up Android SDK
-
-      - name: Install Android platform
-        shell: bash
-        run: sdkmanager 'platforms;android-34' 'build-tools;36.0.0'
-
       - name: Export AndroidX JDK location
         shell: bash
         run: echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
