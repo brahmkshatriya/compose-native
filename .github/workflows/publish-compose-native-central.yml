@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
-            echo "Tag must be a Maven version such as 1.12.10-alpha02 or v1.12.10-alpha02" >&2
+            echo "Tag must be a Maven version such as 1.12.10-alpha03 or v1.12.10-alpha03" >&2
             exit 1
           fi
           contract_version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
@@ -281,10 +281,20 @@ jobs:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
+          upstream_compose="$(sed -n 's/^compose.native.upstream.version.COMPOSE=//p' gradle.properties | tail -n1)"
+          upstream_material3="$(sed -n 's/^compose.native.upstream.version.COMPOSE_MATERIAL3=//p' gradle.properties | tail -n1)"
+          upstream_lifecycle="$(sed -n 's/^compose.native.upstream.version.LIFECYCLE=//p' gradle.properties | tail -n1)"
+          upstream_navigationevent="$(sed -n 's/^compose.native.upstream.version.NAVIGATION_EVENT=//p' gradle.properties | tail -n1)"
+          upstream_savedstate="$(sed -n 's/^compose.native.upstream.version.SAVEDSTATE=//p' gradle.properties | tail -n1)"
           python3 scripts/write-linux-native-root-metadata.py \
             --repository release/merged-repository \
             --version "$RELEASE_VERSION" \
             --group-prefix dev.brahmkshatriya \
+            --upstream-compose-version "$upstream_compose" \
+            --upstream-material3-version "$upstream_material3" \
+            --upstream-lifecycle-version "$upstream_lifecycle" \
+            --upstream-navigationevent-version "$upstream_navigationevent" \
+            --upstream-savedstate-version "$upstream_savedstate" \
             --all-platforms
 
       - name: Publish Gradle plugin into the merged repository
@@ -319,6 +329,24 @@ jobs:
           for module in ui-linuxx64 ui-linuxarm64 ui-mingwx64 ui-android ui-js ui-wasm-js; do
             test -d "$group_root/compose/ui/$module/$RELEASE_VERSION"
           done
+          while IFS= read -r -d '' module_file; do
+            if jq -e --arg release "$RELEASE_VERSION" '
+              .variants[] |
+              (.dependencies[]?, .dependencyConstraints[]?) |
+              select(
+                ((.group // "") | startswith("dev.brahmkshatriya.compose.") or
+                  startswith("dev.brahmkshatriya.androidx.")) or
+                (
+                  ((.group // "") | startswith("org.jetbrains.compose.") or
+                    startswith("org.jetbrains.androidx.")) and
+                  ([.version.requires?, .version.strictly?, .version.prefers?] | index($release))
+                )
+              )
+            ' "$module_file" >/dev/null; then
+              echo "Fork-internal dependency coordinate leaked into $module_file" >&2
+              exit 1
+            fi
+          done < <(find "$group_root" -path "*/$RELEASE_VERSION/*.module" -print0)
           plugin_dir="$group_root/compose/compose-gradle-plugin/$RELEASE_VERSION"
           marker_dir="$group_root/compose/dev.brahmkshatriya.compose.gradle.plugin/$RELEASE_VERSION"
           test -s "$plugin_dir/compose-gradle-plugin-$RELEASE_VERSION.jar"

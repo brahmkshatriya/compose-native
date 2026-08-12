@@ -122,4 +122,53 @@ class ComposeNativePluginTest {
             ),
         )
     }
+
+    @Test
+    fun mapsTransitiveJetBrainsComposeModulesUsingDeclaredForkVersion() {
+        assertEquals(
+            "dev.brahmkshatriya.compose.ui:ui-graphics:1.12.10-alpha02",
+            composeForkCoordinateFor(
+                "org.jetbrains.compose.ui",
+                "ui-graphics",
+                "1.12.10-alpha02",
+                includeAndroidx = false,
+            ),
+        )
+        assertEquals(
+            "dev.brahmkshatriya.compose.animation:animation-core:1.12.10-alpha02",
+            composeForkCoordinateFor(
+                "org.jetbrains.compose.animation",
+                "animation-core",
+                "1.12.10-alpha02",
+                includeAndroidx = false,
+            ),
+        )
+        assertEquals(
+            "dev.brahmkshatriya.compose.components:components-resources:1.12.10-alpha02",
+            composeForkCoordinateFor(
+                "org.jetbrains.compose.components",
+                "components-resources",
+                "1.12.10-alpha02",
+                includeAndroidx = false,
+            ),
+        )
+        assertEquals(
+            "dev.brahmkshatriya.androidx.lifecycle:lifecycle-runtime:1.12.10-alpha02",
+            composeForkCoordinateFor(
+                "org.jetbrains.androidx.lifecycle",
+                "lifecycle-runtime",
+                "1.12.10-alpha02",
+                includeAndroidx = false,
+            ),
+        )
+        assertNull(
+            composeForkCoordinateFor(
+                "androidx.compose.runtime",
+                "runtime",
+                "1.12.10-alpha02",
+                includeAndroidx = false,
+            )
+        )
+    }
+
 }

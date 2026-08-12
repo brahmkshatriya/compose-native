@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import defaultdict
 from html import escape
 from pathlib import Path
@@ -15,6 +16,145 @@ NATIVE_TARGETS = {
     "linuxarm64": "linux_arm64",
     "mingwx64": "mingw_x64",
 }
+
+
+def upstream_group_for_fork_dependency(group: str, group_prefix: str) -> str | None:
+    compose_prefix = f"{group_prefix}.compose."
+    androidx_prefix = f"{group_prefix}.androidx."
+    if group.startswith(compose_prefix):
+        return f"org.jetbrains.compose.{group.removeprefix(compose_prefix)}"
+    if group.startswith(androidx_prefix):
+        return f"org.jetbrains.androidx.{group.removeprefix(androidx_prefix)}"
+    return None
+
+
+def upstream_version_for_dependency(
+    group: str, upstream_versions: dict[str, str]
+) -> str | None:
+    if group == "org.jetbrains.compose.material3":
+        return upstream_versions.get("material3")
+    if group.startswith("org.jetbrains.compose."):
+        return upstream_versions.get("compose")
+    if group == "org.jetbrains.androidx.lifecycle":
+        return upstream_versions.get("lifecycle")
+    if group == "org.jetbrains.androidx.navigationevent":
+        return upstream_versions.get("navigationevent")
+    if group == "org.jetbrains.androidx.savedstate":
+        return upstream_versions.get("savedstate")
+    return None
+
+
+def rewrite_module_dependency_groups(
+    module_file: Path,
+    group_prefix: str,
+    publication_version: str,
+    upstream_versions: dict[str, str],
+) -> int:
+    metadata = json.loads(module_file.read_text(encoding="utf-8"))
+    rewritten = 0
+    for variant in metadata.get("variants", []):
+        for dependency_section in ("dependencies", "dependencyConstraints"):
+            for dependency in variant.get(dependency_section, []):
+                group = dependency.get("group")
+                if not isinstance(group, str):
+                    continue
+                upstream_group = upstream_group_for_fork_dependency(
+                    group, group_prefix
+                )
+                was_fork_dependency = upstream_group is not None
+                if was_fork_dependency:
+                    dependency["group"] = upstream_group
+                    rewritten += 1
+                else:
+                    upstream_group = group
+                upstream_version = upstream_version_for_dependency(
+                    upstream_group, upstream_versions
+                )
+                version = dependency.get("version")
+                if upstream_version is not None and isinstance(version, dict):
+                    for key in ("requires", "strictly", "prefers"):
+                        if version.get(key) == publication_version:
+                            version[key] = upstream_version
+                            rewritten += 1
+    if rewritten:
+        module_file.write_text(
+            json.dumps(metadata, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    return rewritten
+
+
+def rewrite_pom_dependency_groups(
+    pom_file: Path,
+    group_prefix: str,
+    publication_version: str,
+    upstream_versions: dict[str, str],
+) -> int:
+    pom = pom_file.read_text(encoding="utf-8")
+    rewritten = 0
+
+    def rewrite_dependency(match: re.Match[str]) -> str:
+        nonlocal rewritten
+        dependency = match.group(0)
+
+        group_match = re.search(r"<groupId>([^<]+)</groupId>", dependency)
+        if group_match is None:
+            return dependency
+        group = group_match.group(1)
+        upstream_group = upstream_group_for_fork_dependency(group, group_prefix)
+        if upstream_group is not None:
+            dependency = dependency.replace(
+                f"<groupId>{group}</groupId>",
+                f"<groupId>{upstream_group}</groupId>",
+                1,
+            )
+            rewritten += 1
+        else:
+            upstream_group = group
+
+        upstream_version = upstream_version_for_dependency(
+            upstream_group, upstream_versions
+        )
+        if upstream_version is not None:
+            version_pattern = re.compile(
+                rf"(<version>)({re.escape(publication_version)})(</version>)"
+            )
+            dependency, version_rewrites = version_pattern.subn(
+                rf"\g<1>{upstream_version}\g<3>", dependency, count=1
+            )
+            rewritten += version_rewrites
+        return dependency
+
+    modified_pom = re.sub(
+        r"<dependency>.*?</dependency>",
+        rewrite_dependency,
+        pom,
+        flags=re.DOTALL,
+    )
+    if rewritten:
+        pom_file.write_text(modified_pom, encoding="utf-8")
+    return rewritten
+
+
+def rewrite_repository_dependency_groups(
+    repository: Path,
+    version: str,
+    group_prefix: str,
+    upstream_versions: dict[str, str],
+) -> tuple[int, int]:
+    modules_rewritten = sum(
+        rewrite_module_dependency_groups(
+            module_file, group_prefix, version, upstream_versions
+        )
+        for module_file in repository.glob(f"**/{version}/*-{version}.module")
+    )
+    poms_rewritten = sum(
+        rewrite_pom_dependency_groups(
+            pom_file, group_prefix, version, upstream_versions
+        )
+        for pom_file in repository.glob(f"**/{version}/*-{version}.pom")
+    )
+    return modules_rewritten, poms_rewritten
 
 
 def is_publishable_root_variant(variant: dict[str, object]) -> bool:
@@ -61,6 +201,11 @@ def main() -> None:
     parser.add_argument("--module", help="Limit generation to this root module.")
     parser.add_argument("--upstream-repository")
     parser.add_argument("--upstream-version")
+    parser.add_argument("--upstream-compose-version")
+    parser.add_argument("--upstream-material3-version")
+    parser.add_argument("--upstream-lifecycle-version")
+    parser.add_argument("--upstream-navigationevent-version")
+    parser.add_argument("--upstream-savedstate-version")
     args = parser.parse_args()
 
     if bool(args.upstream_repository) != bool(args.upstream_version):
@@ -71,6 +216,26 @@ def main() -> None:
         parser.error("--group and --group-prefix cannot be used together")
     repository = args.repository.expanduser().resolve()
     version = args.version
+    upstream_versions = {
+        key: value
+        for key, value in {
+            "compose": args.upstream_compose_version,
+            "material3": args.upstream_material3_version,
+            "lifecycle": args.upstream_lifecycle_version,
+            "navigationevent": args.upstream_navigationevent_version,
+            "savedstate": args.upstream_savedstate_version,
+        }.items()
+        if value
+    }
+    if args.group_prefix:
+        module_dependencies_rewritten, pom_dependencies_rewritten = (
+            rewrite_repository_dependency_groups(
+                repository, version, args.group_prefix, upstream_versions
+            )
+        )
+    else:
+        module_dependencies_rewritten = 0
+        pom_dependencies_rewritten = 0
     roots: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
 
     if args.all_platforms:
@@ -237,10 +402,24 @@ def main() -> None:
         )
         created.append(f"{root_group}:{root_module}:{version}")
 
+    if args.group_prefix:
+        additional_module_dependencies, additional_pom_dependencies = (
+            rewrite_repository_dependency_groups(
+                repository, version, args.group_prefix, upstream_versions
+            )
+        )
+        module_dependencies_rewritten += additional_module_dependencies
+        pom_dependencies_rewritten += additional_pom_dependencies
+
     publication_kind = "platform" if args.all_platforms else "desktop-native"
     print(f"Generated {len(created)} {publication_kind} root metadata publications:")
     for coordinate in created:
         print(f"  {coordinate}")
+    print(
+        "Rewrote "
+        f"{module_dependencies_rewritten} module and "
+        f"{pom_dependencies_rewritten} POM dependency coordinates to upstream groups"
+    )
 
 
 if __name__ == "__main__":

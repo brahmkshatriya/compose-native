@@ -98,6 +98,11 @@ metadata_args=(
     --repository "$maven_repository"
     --version "$version"
     --group-prefix "$group_prefix"
+    --upstream-compose-version "$(read_compose_property 'compose.native.upstream.version.COMPOSE')"
+    --upstream-material3-version "$(read_compose_property 'compose.native.upstream.version.COMPOSE_MATERIAL3')"
+    --upstream-lifecycle-version "$(read_compose_property 'compose.native.upstream.version.LIFECYCLE')"
+    --upstream-navigationevent-version "$(read_compose_property 'compose.native.upstream.version.NAVIGATION_EVENT')"
+    --upstream-savedstate-version "$(read_compose_property 'compose.native.upstream.version.SAVEDSTATE')"
 )
 "$compose_root/scripts/write-linux-native-root-metadata.py" "${metadata_args[@]}"
 

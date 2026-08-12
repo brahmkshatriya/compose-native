@@ -5,13 +5,46 @@ import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ModuleComponentSelector
 import org.gradle.api.plugins.ExtensionAware
 
 class ComposeNativePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.addDesktopNativeSourceSets()
+        project.configureSkikoCapabilityResolution()
         project.configureDependencySubstitutions()
+    }
+}
+
+private fun Project.configureSkikoCapabilityResolution() {
+    dependencies.components.all { details ->
+        if (details.id.group != FORK_SKIKO_GROUP) return@all
+        details.allVariants { variant ->
+            variant.withCapabilities { capabilities ->
+                capabilities.addCapability(
+                    OFFICIAL_SKIKO_GROUP,
+                    details.id.name,
+                    details.id.version,
+                )
+            }
+        }
+    }
+    configurations.configureEach { configuration ->
+        if (!configuration.name.isDesktopNativeConfiguration()) return@configureEach
+        configuration.resolutionStrategy.capabilitiesResolution.all { details ->
+            if (
+                details.capability.group != OFFICIAL_SKIKO_GROUP ||
+                    !details.capability.name.startsWith("skiko")
+            ) {
+                return@all
+            }
+            val forkCandidate =
+                details.candidates.firstOrNull { candidate ->
+                    (candidate.id as? ModuleComponentIdentifier)?.group == FORK_SKIKO_GROUP
+                }
+            if (forkCandidate != null) details.select(forkCandidate)
+        }
     }
 }
 
@@ -29,8 +62,23 @@ private fun Project.configureDependencySubstitutions() {
                 .flatMap { it.dependencies }
                 .mapNotNull(::overlaySubstitutionFor)
                 .associateBy(ModuleSubstitution::officialCoordinate)
+        val fullForkComposeVersion =
+            configurations
+                .matching { it.name.startsWith(COMMON_MAIN_CONFIGURATION_PREFIX) }
+                .flatMap { it.dependencies }
+                .singleComposeForkVersionOrNull()
+        val nativeOverlayComposeVersion =
+            configurations
+                .matching { it.name.startsWith(DESKTOP_NATIVE_MAIN_CONFIGURATION_PREFIX) }
+                .flatMap { it.dependencies }
+                .singleComposeForkVersionOrNull()
 
-        if (fullForkSubstitutions.isEmpty() && nativeOverlaySubstitutions.isEmpty()) {
+        if (
+            fullForkSubstitutions.isEmpty() &&
+                nativeOverlaySubstitutions.isEmpty() &&
+                fullForkComposeVersion == null &&
+                nativeOverlayComposeVersion == null
+        ) {
             return@afterEvaluate
         }
 
@@ -42,19 +90,75 @@ private fun Project.configureDependencySubstitutions() {
                     } else {
                         fullForkSubstitutions
                     }
-                if (substitutions.isEmpty()) return@configureEach
+                val composeForkVersion =
+                    if (configuration.name.isDesktopNativeConfiguration()) {
+                        nativeOverlayComposeVersion ?: fullForkComposeVersion
+                    } else {
+                        fullForkComposeVersion
+                    }
+                if (substitutions.isEmpty() && composeForkVersion == null) return@configureEach
 
                 configuration.resolutionStrategy.dependencySubstitution { rules ->
                     rules.all { details ->
                         val selector =
                             details.requested as? ModuleComponentSelector ?: return@all
                         val substitution =
-                            substitutions["${selector.group}:${selector.module}"] ?: return@all
-                        details.useTarget(substitution.forkCoordinate)
+                            substitutions["${selector.group}:${selector.module}"]
+                        if (substitution != null) {
+                            details.useTarget(substitution.forkCoordinate)
+                            return@all
+                        }
+                        val composeTarget =
+                            composeForkVersion?.let {
+                                composeForkCoordinateFor(
+                                    selector.group,
+                                    selector.module,
+                                    it,
+                                    includeAndroidx = fullForkComposeVersion != null,
+                                )
+                            } ?: return@all
+                        details.useTarget(composeTarget)
                     }
                 }
             }
     }
+}
+
+private fun Iterable<Dependency>.singleComposeForkVersionOrNull(): String? {
+    val versions =
+        mapNotNull { dependency ->
+            dependency.version?.takeIf(String::isNotBlank)?.takeIf {
+                dependency.group?.startsWith(FORK_COMPOSE_GROUP_PREFIX) == true
+            }
+        }.distinct()
+    return versions.singleOrNull()
+}
+
+internal fun composeForkCoordinateFor(
+    group: String,
+    module: String,
+    version: String,
+    includeAndroidx: Boolean,
+): String? {
+    if (group.startsWith(OFFICIAL_COMPOSE_GROUP_PREFIX)) {
+        val family = group.removePrefix(OFFICIAL_COMPOSE_GROUP_PREFIX)
+        if (family in COMPOSE_FAMILIES) {
+            return "$FORK_COMPOSE_GROUP_PREFIX$family:$module:$version"
+        }
+    }
+    if (group.startsWith(OFFICIAL_ANDROIDX_GROUP_PREFIX)) {
+        val family = group.removePrefix(OFFICIAL_ANDROIDX_GROUP_PREFIX)
+        if (family in FORK_ANDROIDX_FAMILIES) {
+            return "$FORK_ANDROIDX_GROUP_PREFIX$family:$module:$version"
+        }
+    }
+    if (includeAndroidx && group.startsWith(ANDROIDX_COMPOSE_GROUP_PREFIX)) {
+        val family = group.removePrefix(ANDROIDX_COMPOSE_GROUP_PREFIX)
+        if (family in ANDROIDX_COMPOSE_FAMILIES) {
+            return "$FORK_COMPOSE_GROUP_PREFIX$family:$module:$version"
+        }
+    }
+    return null
 }
 
 internal data class ModuleSubstitution(
@@ -228,12 +332,18 @@ private const val KOTLIN_NATIVE_BINARY_CONTAINER_CLASS =
 private const val COMMON_MAIN_CONFIGURATION_PREFIX = "commonMain"
 private const val DESKTOP_NATIVE_MAIN_CONFIGURATION_PREFIX = "desktopNativeMain"
 private const val OFFICIAL_COMPOSE_GROUP_PREFIX = "org.jetbrains.compose."
+private const val OFFICIAL_ANDROIDX_GROUP_PREFIX = "org.jetbrains.androidx."
 private const val ANDROIDX_COMPOSE_GROUP_PREFIX = "androidx.compose."
 private const val FORK_COMPOSE_GROUP_PREFIX = "dev.brahmkshatriya.compose."
+private const val FORK_ANDROIDX_GROUP_PREFIX = "dev.brahmkshatriya.androidx."
 private const val OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 private const val FORK_SKIKO_GROUP = "dev.brahmkshatriya.skiko"
 private val ANDROIDX_COMPOSE_FAMILIES =
     setOf("animation", "foundation", "material", "material3", "runtime", "ui")
+private val COMPOSE_FAMILIES =
+    ANDROIDX_COMPOSE_FAMILIES + setOf("components", "desktop")
+private val FORK_ANDROIDX_FAMILIES =
+    setOf("lifecycle", "navigation", "navigation3", "navigationevent", "savedstate")
 private val DEFAULT_LINUX_LINKER_OPTIONS = listOf("-L/usr/lib")
 private val DESKTOP_NATIVE_CONFIGURATION_MARKERS =
     listOf("desktopnative", "linuxx64", "linuxarm64", "mingwx64")
