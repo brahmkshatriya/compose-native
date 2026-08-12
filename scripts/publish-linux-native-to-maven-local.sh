@@ -2,20 +2,40 @@
 set -euo pipefail
 
 compose_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-version="9999.0.0-SNAPSHOT"
+
+read_compose_property() {
+    local property_name="$1"
+    sed -n "s/^${property_name}=//p" "$compose_root/gradle.properties" | tail -n 1
+}
+
+contract_version="$(read_compose_property 'jetbrains.publication.version.COMPOSE')"
+contract_group_prefix="$(read_compose_property 'jetbrains.publication.groupPrefix')"
+
+version="${1:-${COMPOSE_NATIVE_VERSION:-$contract_version}}"
+group_prefix="${COMPOSE_NATIVE_GROUP_PREFIX:-$contract_group_prefix}"
 maven_repository="${MAVEN_LOCAL_REPOSITORY:-$HOME/.m2/repository}"
-skiko_root="${SKIKO_ROOT:-$compose_root/../skiko-native}"
+
+for checked_version in "$version"; do
+    if [[ ! "$checked_version" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
+        echo "Invalid Maven version: $checked_version" >&2
+        exit 1
+    fi
+done
+for checked_group in "$group_prefix"; do
+    if [[ ! "$checked_group" =~ ^[A-Za-z0-9_]+([.][A-Za-z0-9_]+)+$ ]]; then
+        echo "Invalid Maven group: $checked_group" >&2
+        exit 1
+    fi
+done
 
 case "${KTNATIVE_LINUX_ARCH:-$(uname -m)}" in
     x64|x86_64|amd64)
         linux_arch="x64"
         kotlin_target="LinuxX64"
-        platform_module_suffix="linuxx64"
         ;;
     arm64|aarch64)
         linux_arch="arm64"
         kotlin_target="LinuxArm64"
-        platform_module_suffix="linuxarm64"
         ;;
     *)
         echo "Unsupported Linux architecture: ${KTNATIVE_LINUX_ARCH:-$(uname -m)}" >&2
@@ -23,33 +43,6 @@ case "${KTNATIVE_LINUX_ARCH:-$(uname -m)}" in
         exit 1
         ;;
 esac
-
-prepare_linux_arm64_cross_tools() {
-    [[ "$linux_arch" == "arm64" ]] || return
-    case "$(uname -m)" in
-        aarch64|arm64) return ;;
-    esac
-
-    local toolchain="${SKIKO_ARM64_TOOLCHAIN:-/opt/arm-gnu-toolchain}"
-    local compiler="$toolchain/bin/aarch64-none-linux-gnu-g++"
-    local archiver="$toolchain/bin/aarch64-none-linux-gnu-ar"
-    local sysroot="$toolchain/aarch64-none-linux-gnu/libc"
-    if [[ ! -x "$compiler" || ! -x "$archiver" || ! -d "$sysroot" ]]; then
-        echo "Skiko Linux arm64 cross builds require the Arm GNU 10.3 toolchain." >&2
-        echo "Expected it at $toolchain (override with SKIKO_ARM64_TOOLCHAIN)." >&2
-        echo "Build on an arm64 host instead, or install the toolchain used by skiko/docker/linux-amd64." >&2
-        exit 1
-    fi
-    arm64_cross_tool_aliases="$(mktemp -d)"
-    trap 'rm -rf "${arm64_cross_tool_aliases:-}"' EXIT
-    ln -s "$compiler" "$arm64_cross_tool_aliases/aarch64-linux-gnu-g++"
-    ln -s "$toolchain/bin/aarch64-none-linux-gnu-gcc" \
-        "$arm64_cross_tool_aliases/aarch64-linux-gnu-gcc"
-    ln -s "$archiver" "$arm64_cross_tool_aliases/aarch64-linux-gnu-ar"
-    export PATH="$arm64_cross_tool_aliases:$PATH"
-}
-
-prepare_linux_arm64_cross_tools
 
 find_jdk() {
     if [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]]; then
@@ -86,58 +79,33 @@ if [[ -n "${ANDROID_HOME:-}" ]]; then
     export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
 fi
 
-if [[ -x "$skiko_root/gradlew" ]]; then
-    echo "Publishing Linux $linux_arch Skiko from $skiko_root"
-    "$skiko_root/gradlew" \
-        -p "$skiko_root" \
-        --no-configuration-cache \
-        -Pskiko.native.enabled=true \
-        -Pskiko.native.linux.enabled=true \
-        :skiko:publish${kotlin_target}PublicationToMavenLocal
-else
-    skiko_klib="$maven_repository/org/jetbrains/skiko/skiko-$platform_module_suffix/0.0.1-linux-native-SNAPSHOT/skiko-$platform_module_suffix-0.0.1-linux-native-SNAPSHOT.klib"
-    if [[ ! -f "$skiko_klib" ]]; then
-        echo "Skiko checkout not found at $skiko_root and $skiko_klib is missing." >&2
-        echo "Set SKIKO_ROOT to the Linux-native Skiko checkout." >&2
-        exit 1
-    fi
-    echo "Using existing local Skiko publication at $skiko_klib"
-fi
-
-"$compose_root/scripts/write-linux-native-root-metadata.py" \
-    --repository "$maven_repository" \
-    --version "0.0.1-linux-native-SNAPSHOT"
-
-publish_tasks=(
-    :compose:runtime:runtime:publish${kotlin_target}PublicationToMavenLocal
-    :compose:runtime:runtime-saveable:publish${kotlin_target}PublicationToMavenLocal
-    :navigationevent:navigationevent-compose:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui-util:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui-unit:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui-geometry:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui-graphics:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui-text:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui-backhandler:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui-skiko:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui:publish${kotlin_target}PublicationToMavenLocal
-    :compose:animation:animation-core:publish${kotlin_target}PublicationToMavenLocal
-    :compose:animation:animation:publish${kotlin_target}PublicationToMavenLocal
-    :compose:foundation:foundation-layout:publish${kotlin_target}PublicationToMavenLocal
-    :compose:foundation:foundation:publish${kotlin_target}PublicationToMavenLocal
-    :compose:material:material-ripple:publish${kotlin_target}PublicationToMavenLocal
-    :compose:material3:material3:publish${kotlin_target}PublicationToMavenLocal
-    :compose:ui:ui-sdl3:publish${kotlin_target}PublicationToMavenLocal
-    :compose:components:components-resources:publish${kotlin_target}PublicationToMavenLocal
-)
-
-echo "Publishing Compose Linux $linux_arch KLIBs as $version"
+echo "Publishing Compose Linux $linux_arch KLIBs as $group_prefix:*:$version"
+echo "Resolving native Skiko from Maven Central"
 "$compose_root/gradlew" \
     -p "$compose_root" \
     --no-configuration-cache \
-    "${publish_tasks[@]}"
+    "-Dmaven.repo.local=$maven_repository" \
+    "-Pcompose.platforms=$kotlin_target" \
+    "-Pjetbrains.publication.groupPrefix=$group_prefix" \
+    "-Pjetbrains.publication.version.COMPOSE=$version" \
+    "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
+    "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
+    "-Pjetbrains.publication.version.LIFECYCLE=$version" \
+    "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
+    :mpp:publishComposeNativeToMavenLocal
 
-"$compose_root/scripts/write-linux-native-root-metadata.py" \
-    --repository "$maven_repository" \
+metadata_args=(
+    --repository "$maven_repository"
     --version "$version"
+    --group-prefix "$group_prefix"
+)
+"$compose_root/scripts/write-linux-native-root-metadata.py" "${metadata_args[@]}"
+
+echo "Publishing dev.brahmkshatriya.compose Gradle plugin"
+"$compose_root/gradlew" \
+    -p "$compose_root/gradle-plugin" \
+    --no-configuration-cache \
+    "-Dmaven.repo.local=$maven_repository" \
+    publishToMavenLocal
 
 echo "Linux-native Compose is available in $maven_repository"

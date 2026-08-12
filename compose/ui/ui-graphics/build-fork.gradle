@@ -116,9 +116,6 @@ androidXMultiplatform {
         // neutral actuals in linuxMain and therefore must not inherit this source set.
         skikoMain {
             dependsOn(nonAndroidMain)
-            dependencies {
-                api(libs.skiko)
-            }
         }
 
         nonAndroidExcludingWebMain {
@@ -132,6 +129,9 @@ androidXMultiplatform {
         desktopMain {
             dependsOn(skikoMain)
             dependsOn(nonAndroidExcludingWebMain)
+            dependencies {
+                api(libs.skiko)
+            }
         }
 
         desktopTest {
@@ -161,6 +161,9 @@ androidXMultiplatform {
         nativeMain {
             dependsOn(nonJvmMain)
             dependsOn(nonAndroidExcludingWebMain)
+            dependencies {
+                api(libs.skikoNative)
+            }
         }
 
         nativeTest {
@@ -186,6 +189,9 @@ androidXMultiplatform {
 
         webMain {
             dependsOn(skikoMain)
+            dependencies {
+                api(libs.skiko)
+            }
         }
 
         wasmJsMain {

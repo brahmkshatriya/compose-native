@@ -1,17 +1,17 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
 
+import androidx.build.SoftwareType
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
 
 plugins {
+    id("AndroidXPlugin")
     id("org.jetbrains.kotlin.multiplatform")
     id("AndroidXComposePlugin")
+    id("JetBrainsAndroidXPlugin")
     id("maven-publish")
 }
-
-group = "org.jetbrains.compose.ui"
-version = "9999.0.0-SNAPSHOT"
 
 val glInteropObject = layout.buildDirectory.file("native-support/gl_interop.o")
 val clipperEngineObject = layout.buildDirectory.file("native-support/clipper.engine.o")
@@ -564,7 +564,7 @@ kotlin {
             dependencies {
                 api(project(":compose:ui:ui"))
                 implementation(project(":compose:foundation:foundation"))
-                implementation(libs.skiko)
+                implementation(libs.skikoNative)
             }
         }
         linuxTest.dependencies { implementation(kotlin("test")) }
@@ -576,4 +576,12 @@ tasks.matching {
     it.name == "cinteropSdl3MingwX64" || it.name == "cinteropNativeDesktopMingwX64"
 }.configureEach {
     dependsOn(prepareWindowsSdl)
+}
+
+androidx {
+    name = "Compose Native Desktop"
+    type = SoftwareType.PUBLISHED_LIBRARY_ONLY_USED_BY_KOTLIN_CONSUMERS
+    inceptionYear = "2026"
+    description = "Native desktop application host for Compose Multiplatform"
+    legacyDisableKotlinStrictApiMode = true
 }

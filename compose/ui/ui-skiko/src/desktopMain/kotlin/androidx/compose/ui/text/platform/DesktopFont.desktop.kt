@@ -27,7 +27,6 @@ import org.jetbrains.skia.Data
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontSlant
 import org.jetbrains.skia.FontStyle as SkFontStyle
-import org.jetbrains.skia.FontWeight as SkFontWeight
 import org.jetbrains.skia.FontWidth
 import org.jetbrains.skia.Typeface as SkTypeface
 
@@ -36,32 +35,36 @@ internal actual fun loadTypeface(font: Font): SkTypeface {
     if (font !is PlatformFont) {
         throw IllegalArgumentException("Unsupported font type: $font")
     }
-    val typeface = when (font) {
-        is ResourceFont -> typefaceResource(font.name)
-        is FileFont -> FontMgr.default.makeFromFile(font.file.toString())
-        is LoadedFont -> FontMgr.default.makeFromData(Data.makeFromBytes(font.data))
-        is SystemFont -> FontMgr.default.matchFamilyStyle(font.identity, font.skFontStyle)
-    } ?: (FontMgr.default.legacyMakeTypeface(font.identity, font.skFontStyle)
-        ?: error("loadTypeface legacyMakeTypeface failed"))
+    val typeface =
+        when (font) {
+            is ResourceFont -> typefaceResource(font.name)
+            is FileFont -> FontMgr.default.makeFromFile(font.file.toString())
+            is LoadedFont -> FontMgr.default.makeFromData(Data.makeFromBytes(font.data))
+            is SystemFont -> FontMgr.default.matchFamilyStyle(font.identity, font.skFontStyle)
+        }
+            ?: (FontMgr.default.legacyMakeTypeface(font.identity, font.skFontStyle)
+                ?: error("loadTypeface legacyMakeTypeface failed"))
     return typeface.cloneWithVariationSettings(font.variationSettings)
 }
 
 private fun typefaceResource(resourceName: String): SkTypeface {
     val contextClassLoader = Thread.currentThread().contextClassLoader!!
-    val resource = contextClassLoader.getResourceAsStream(resourceName)
-        ?: (::typefaceResource.javaClass).getResourceAsStream(resourceName)
-        ?: error("Can't load font from $resourceName")
+    val resource =
+        contextClassLoader.getResourceAsStream(resourceName)
+            ?: (::typefaceResource.javaClass).getResourceAsStream(resourceName)
+            ?: error("Can't load font from $resourceName")
 
     val bytes = resource.use { it.readAllBytes() }
     return FontMgr.default.makeFromData(Data.makeFromBytes(bytes))!!
 }
 
 private val Font.skFontStyle: SkFontStyle
-    get() = SkFontStyle(
-        weight = SkFontWeight(weight.weight),
-        width = FontWidth.NORMAL,
-        slant = if (style == FontStyle.Italic) FontSlant.ITALIC else FontSlant.UPRIGHT
-    )
+    get() =
+        SkFontStyle(
+            weight = weight.weight,
+            width = FontWidth.NORMAL,
+            slant = if (style == FontStyle.Italic) FontSlant.ITALIC else FontSlant.UPRIGHT,
+        )
 
 internal actual fun currentPlatform(): Platform {
     val name = System.getProperty("os.name")
@@ -78,16 +81,16 @@ internal actual fun currentPlatform(): Platform {
  *
  * @param resource The resource name in classpath.
  * @param weight The weight of the font. The system uses this to match a font to a font request that
- * is given in a [androidx.compose.ui.text.SpanStyle].
+ *   is given in a [androidx.compose.ui.text.SpanStyle].
  * @param style The style of the font, normal or italic. The system uses this to match a font to a
- * font request that is given in a [androidx.compose.ui.text.SpanStyle].
+ *   font request that is given in a [androidx.compose.ui.text.SpanStyle].
  * @see FontFamily
  */
 @OptIn(InternalComposeUiApi::class)
 fun Font(
     resource: String,
     weight: FontWeight = FontWeight.Normal,
-    style: FontStyle = FontStyle.Normal
+    style: FontStyle = FontStyle.Normal,
 ): Font = ResourceFont(resource, weight, style, FontVariation.Settings())
 
 @OptIn(InternalComposeUiApi::class)
@@ -95,7 +98,7 @@ fun Font(
     resource: String,
     weight: FontWeight = FontWeight.Normal,
     style: FontStyle = FontStyle.Normal,
-    variationSettings: FontVariation.Settings = FontVariation.Settings(weight, style)
+    variationSettings: FontVariation.Settings = FontVariation.Settings(weight, style),
 ): Font = ResourceFont(resource, weight, style, variationSettings)
 
 /**
@@ -103,16 +106,16 @@ fun Font(
  *
  * @param file File path to font.
  * @param weight The weight of the font. The system uses this to match a font to a font request that
- * is given in a [androidx.compose.ui.text.SpanStyle].
+ *   is given in a [androidx.compose.ui.text.SpanStyle].
  * @param style The style of the font, normal or italic. The system uses this to match a font to a
- * font request that is given in a [androidx.compose.ui.text.SpanStyle].
+ *   font request that is given in a [androidx.compose.ui.text.SpanStyle].
  * @see FontFamily
  */
 @OptIn(InternalComposeUiApi::class)
 fun Font(
     file: File,
     weight: FontWeight = FontWeight.Normal,
-    style: FontStyle = FontStyle.Normal
+    style: FontStyle = FontStyle.Normal,
 ): Font = FileFont(file, weight, style, FontVariation.Settings())
 
 @OptIn(InternalComposeUiApi::class)
@@ -120,5 +123,5 @@ fun Font(
     file: File,
     weight: FontWeight = FontWeight.Normal,
     style: FontStyle = FontStyle.Normal,
-    variationSettings: FontVariation.Settings = FontVariation.Settings(weight, style)
+    variationSettings: FontVariation.Settings = FontVariation.Settings(weight, style),
 ): Font = FileFont(file, weight, style, variationSettings)

@@ -24,8 +24,8 @@ enum class InteropRenderBackend {
 /**
  * A framebuffer owned by Compose and temporarily lent to native code.
  *
- * The pointer is valid only for the duration of [NativeInteropView.render]. Native integrations must
- * not retain it. [stride] is measured in bytes.
+ * The pointer is valid only for the duration of [NativeInteropView.render]. Native integrations
+ * must not retain it. [stride] is measured in bytes.
  */
 class InteropRenderTarget(
     val pixels: COpaquePointer,
@@ -71,8 +71,8 @@ data class InteropKeyEvent(
 )
 
 /**
- * A lifecycle-managed native renderer that can be placed in the Compose hierarchy by ui-sdl3's
- * `NativeView` composable.
+ * A lifecycle-managed native renderer that can be placed in the Compose hierarchy by the native
+ * desktop host's `NativeView` composable.
  *
  * Rendering into a Compose-owned framebuffer preserves Compose transforms, clipping, and sibling
  * composition without relying on platform child-window embedding.

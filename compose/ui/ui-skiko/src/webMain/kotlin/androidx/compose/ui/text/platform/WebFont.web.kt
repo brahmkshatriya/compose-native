@@ -16,16 +16,15 @@
 
 package androidx.compose.ui.text.platform
 
-import org.jetbrains.skia.FontStyle as SkFontStyle
-import org.jetbrains.skia.Typeface as SkTypeface
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontStyle
 import org.jetbrains.skia.Data
 import org.jetbrains.skia.FontMgr
 import org.jetbrains.skia.FontSlant
-import org.jetbrains.skia.FontWeight
+import org.jetbrains.skia.FontStyle as SkFontStyle
 import org.jetbrains.skia.FontWidth
+import org.jetbrains.skia.Typeface as SkTypeface
 import org.jetbrains.skiko.OS
 import org.jetbrains.skiko.hostOs
 
@@ -35,26 +34,30 @@ internal actual fun loadTypeface(font: Font): SkTypeface {
         throw IllegalArgumentException("Unsupported font type: $font")
     }
     return when (font) {
-        is LoadedFont -> FontMgr.default.makeFromData(Data.makeFromBytes(font.data))
-            ?: error("loadTypeface makeFromData failed")
+        is LoadedFont ->
+            FontMgr.default.makeFromData(Data.makeFromBytes(font.data))
+                ?: error("loadTypeface makeFromData failed")
 
-        is SystemFont -> FontMgr.default.legacyMakeTypeface(font.identity, font.skFontStyle)
-            ?: error("loadTypeface legacyMakeTypeface failed")
+        is SystemFont ->
+            FontMgr.default.legacyMakeTypeface(font.identity, font.skFontStyle)
+                ?: error("loadTypeface legacyMakeTypeface failed")
     }.cloneWithVariationSettings(font.variationSettings)
 }
 
 private val Font.skFontStyle: SkFontStyle
-    get() = SkFontStyle(
-        weight = FontWeight(weight.weight),
-        width = FontWidth.NORMAL,
-        slant = if (style == FontStyle.Italic) FontSlant.ITALIC else FontSlant.UPRIGHT
-    )
+    get() =
+        SkFontStyle(
+            weight = weight.weight,
+            width = FontWidth.NORMAL,
+            slant = if (style == FontStyle.Italic) FontSlant.ITALIC else FontSlant.UPRIGHT,
+        )
 
-internal actual fun currentPlatform(): Platform = when (hostOs) {
-    OS.Android -> Platform.Android
-    OS.Ios -> Platform.IOS
-    OS.MacOS -> Platform.MacOS
-    OS.Linux -> Platform.Linux
-    OS.Windows -> Platform.Windows
-    else -> Platform.Unknown
-}
+internal actual fun currentPlatform(): Platform =
+    when (hostOs) {
+        OS.Android -> Platform.Android
+        OS.Ios -> Platform.IOS
+        OS.MacOS -> Platform.MacOS
+        OS.Linux -> Platform.Linux
+        OS.Windows -> Platform.Windows
+        else -> Platform.Unknown
+    }

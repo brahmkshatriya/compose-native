@@ -43,9 +43,13 @@ import org.dom4j.io.XMLWriter
 import org.gradle.api.Project
 import org.gradle.api.XmlProvider
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.ModuleIdentifier
+import org.gradle.api.artifacts.ModuleVersionIdentifier
+import org.gradle.api.artifacts.ResolvedDependency
 import org.gradle.api.component.ComponentWithVariants
 import org.gradle.api.component.SoftwareComponent
 import org.gradle.api.component.SoftwareComponentFactory
+import org.gradle.api.internal.artifacts.DefaultModuleIdentifier
 import org.gradle.api.internal.component.SoftwareComponentInternal
 import org.gradle.api.internal.component.UsageContext
 import org.gradle.api.plugins.JavaPlugin
@@ -61,17 +65,11 @@ import org.gradle.kotlin.dsl.create
 import org.gradle.kotlin.dsl.findByType
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinMultiplatformPluginWrapper
+import org.w3c.dom.Node
 import org.xml.sax.InputSource
 import org.xml.sax.XMLReader
-import org.gradle.api.artifacts.ModuleIdentifier
-import org.gradle.api.artifacts.ModuleVersionIdentifier
-import org.gradle.api.artifacts.ResolvedDependency
-import org.gradle.api.internal.artifacts.DefaultModuleIdentifier
-import org.w3c.dom.Node
 
-fun Project.configureMavenArtifactUpload(
-    componentFactory: SoftwareComponentFactory
-) {
+fun Project.configureMavenArtifactUpload(componentFactory: SoftwareComponentFactory) {
     if (!JetBrainsPublication.shouldPublish(project)) return
     apply(mapOf("plugin" to "maven-publish"))
     var registered = false
@@ -90,21 +88,16 @@ fun Project.configureMavenArtifactUpload(
     }
 }
 
-/**
- * Configure publishing for a [SoftwareComponent].
- */
+/** Configure publishing for a [SoftwareComponent]. */
 private fun Project.configureComponentPublishing(
     component: SoftwareComponent,
-    componentFactory: SoftwareComponentFactory
+    componentFactory: SoftwareComponentFactory,
 ) {
     val extension = project.extensions.getByType(AndroidXExtension::class.java)
-    val kmpExtension =
-        project.extensions.getByType(AndroidXMultiplatformExtension::class.java)
+    val kmpExtension = project.extensions.getByType(AndroidXMultiplatformExtension::class.java)
 
-    val projectArchiveDir = File(
-        getRepositoryDirectory(),
-        "${group.toString().replace('.', '/')}/$name"
-    )
+    val projectArchiveDir =
+        File(getRepositoryDirectory(), "${group.toString().replace('.', '/')}/$name")
 
     /*
      * Provides a set of maven coordinates (groupId:artifactId) of artifacts in AndroidX
@@ -128,11 +121,7 @@ private fun Project.configureComponentPublishing(
     }
 
     configure<PublishingExtension> {
-        repositories {
-            it.maven { repo ->
-                repo.setUrl(getRepositoryDirectory())
-            }
-        }
+        repositories { it.maven { repo -> repo.setUrl(getRepositoryDirectory()) } }
         publications {
             if (appliesJavaGradlePluginPlugin()) {
                 // The 'java-gradle-plugin' will also add to the 'pluginMaven' publication
@@ -144,9 +133,7 @@ private fun Project.configureComponentPublishing(
                 if (project.isMultiplatformPublicationEnabled()) {
                     configureMultiplatformPublication(componentFactory)
                 } else {
-                    it.create<MavenPublication>("maven") {
-                        from(component)
-                    }
+                    it.create<MavenPublication>("maven") { from(component) }
                     tasks.getByName("publishMavenPublicationToMavenRepository").doFirst {
                         removePreviouslyUploadedArchives(projectArchiveDir)
                     }
@@ -154,30 +141,40 @@ private fun Project.configureComponentPublishing(
             }
         }
         publications.withType(MavenPublication::class.java).all { publication ->
-            // TODO CMP-10368 fix old capability mechanism after migration to new artifact redirection
-//            if (kmpExtension.redirectTargetDecls.isNotEmpty()) {
-//                // Gradle cannot map variant capabilities into POM metadata, so redirected
-//                // publications emit warning noise for their published component variants.
-//                publication.suppressRedirectionPomMetadataWarnings()
-//            }
+            // TODO CMP-10368 fix old capability mechanism after migration to new artifact
+            // redirection
+            //            if (kmpExtension.redirectTargetDecls.isNotEmpty()) {
+            //                // Gradle cannot map variant capabilities into POM metadata, so
+            // redirected
+            //                // publications emit warning noise for their published component
+            // variants.
+            //                publication.suppressRedirectionPomMetadataWarnings()
+            //            }
             publication.pom { pom ->
                 addInformativeMetadata(extension, pom)
                 tweakDependenciesMetadata(
-                    pom, androidLibrariesSetProvider,
-                    publication.name == KMP_ANCHOR_PUBLICATION_NAME, kmpExtension.defaultPlatform)
+                    pom,
+                    androidLibrariesSetProvider,
+                    publication.name == KMP_ANCHOR_PUBLICATION_NAME,
+                    kmpExtension.defaultPlatform,
+                )
             }
         }
     }
 
     project.tasks.withType(GenerateModuleMetadata::class.java).configureEach { task ->
-//        val capabilitiesToRemove = publishedRedirectionCapabilities() // TODO CMP-10368 fix old capability mechanism after migration to new artifact redirection
+        //        val capabilitiesToRemove = publishedRedirectionCapabilities() // TODO CMP-10368
+        // fix old capability mechanism after migration to new artifact redirection
         task.doLast {
             val metadataFile = task.outputFile.asFile.get()
             val metadataString = metadataFile.readText()
-            val modifiedMetadataString = modifyGradleMetadata(metadataString) { metadata ->
-//                filterGradleMetadataCapabilities(metadata, capabilitiesToRemove)  // TODO CMP-10368 fix old capability mechanism after migration to new artifact redirection
-                sortGradleMetadataDependencies(metadata)
-            }
+            val modifiedMetadataString =
+                modifyGradleMetadata(metadataString) { metadata ->
+                    //                filterGradleMetadataCapabilities(metadata,
+                    // capabilitiesToRemove)  // TODO CMP-10368 fix old capability mechanism after
+                    // migration to new artifact redirection
+                    sortGradleMetadataDependencies(metadata)
+                }
 
             if (metadataString != modifiedMetadataString) {
                 metadataFile.writeText(modifiedMetadataString)
@@ -198,17 +195,20 @@ private fun Project.configureComponentPublishing(
             // generatePomFileForDesktopDecoratedPublication
             // ...
             // and take only if it is a target's component (we redirect only targets)
-            val componentName: String? = Regex("^generatePomFileFor(.*)Publication$")
-                .matchEntire(task.name)
-                ?.groupValues?.get(1)
-                ?.replaceFirstChar { it.lowercase() }
-                ?.takeIf(::hasTargetWithComponent)
+            val componentName: String? =
+                Regex("^generatePomFileFor(.*)Publication$")
+                    .matchEntire(task.name)
+                    ?.groupValues
+                    ?.get(1)
+                    ?.replaceFirstChar { it.lowercase() }
+                    ?.takeIf(::hasTargetWithComponent)
 
-            val originalToRedirected: Map<ModuleIdentifier, ModuleVersionIdentifier> = if (componentName != null) {
-                originalToRedirectedDependency(componentName)
-            } else {
-                emptyMap()
-            }
+            val originalToRedirected: Map<ModuleIdentifier, ModuleVersionIdentifier> =
+                if (componentName != null) {
+                    originalToRedirectedDependency(componentName)
+                } else {
+                    emptyMap()
+                }
 
             task.doLast {
                 val pomFile = task.destination
@@ -221,6 +221,7 @@ private fun Project.configureComponentPublishing(
         }
     }
 }
+
 /**
  * Build a `fork-coordinate -> androidx-coordinate` map used to rewrite published POM dependencies
  * (see [modifyPomDependencies]). The fork publishes under `org.jetbrains.*` group ids that redirect
@@ -237,10 +238,10 @@ internal fun Project.originalToRedirectedDependency(
     /**
      * Find a redirect to another group and version.
      *
-     * Use heuristic method that compares modules names. Example:
-     *   [first-level-dependency] org.jetbrains.androidx.lifecycle:lifecycle-runtime:2.8.4 ->
-     *   [artifact-with-the-same-name] androidx.lifecycle:lifecycle-runtime:2.8.5 ->
-     *   [artifact-with-the-same-name-plus-suffix] androidx.lifecycle:lifecycle-runtime-desktop:2.8.5
+     * Use heuristic method that compares modules names. Example: [first-level-dependency]
+     * org.jetbrains.androidx.lifecycle:lifecycle-runtime:2.8.4 -> [artifact-with-the-same-name]
+     * androidx.lifecycle:lifecycle-runtime:2.8.5 -> [artifact-with-the-same-name-plus-suffix]
+     * androidx.lifecycle:lifecycle-runtime-desktop:2.8.5
      *
      * The first dependency redirects to the last one.
      */
@@ -254,8 +255,8 @@ internal fun Project.originalToRedirectedDependency(
             ?.find { it.moduleName.startsWith(moduleName) }
 
     fun mainConfiguration() =
-        configurations.find { it.name == "${componentName}RuntimeClasspath" } ?:
-        configurations.find { it.name == "${componentName}CompileKlibraries" }!!
+        configurations.find { it.name == "${componentName}RuntimeClasspath" }
+            ?: configurations.find { it.name == "${componentName}CompileKlibraries" }!!
 
     /**
      * Extract redirections for dependencies using heuristic method (for both project, and external)
@@ -274,12 +275,13 @@ internal fun Project.originalToRedirectedDependency(
 }
 
 /**
- * Looks for a dependencies XML element within [pom], sorts its contents and modify it by redirecting coordinates
- * TODO CMP-10368 fix old capability mechanism after migration to new artifact redirection
+ * Looks for a dependencies XML element within [pom], sorts its contents and modify it by
+ * redirecting coordinates TODO CMP-10368 fix old capability mechanism after migration to new
+ * artifact redirection
  */
 internal fun modifyPomDependencies(
     pom: String,
-    originalToRedirected: Map<ModuleIdentifier, ModuleVersionIdentifier>
+    originalToRedirected: Map<ModuleIdentifier, ModuleVersionIdentifier>,
 ): String {
     // Workaround for using the default namespace in dom4j.
     val namespaceUris = mapOf("ns" to "http://maven.apache.org/POM/4.0.0")
@@ -290,28 +292,27 @@ internal fun modifyPomDependencies(
     val document = parseText(docFactory, xmlReader, pom)
 
     // For each <dependencies> element, sort the contained elements in-place.
-    document.rootElement
-        .selectNodes("ns:dependencies")
-        .filterIsInstance<Element>()
-        .forEach { element ->
-            val deps = element.elements()
-            val modifiedDeps = deps
+    document.rootElement.selectNodes("ns:dependencies").filterIsInstance<Element>().forEach {
+        element ->
+        val deps = element.elements()
+        val modifiedDeps =
+            deps
                 .onEach { modifyPomDependency(it, originalToRedirected) }
                 .sortedBy { it.stringValue }
 
-            // Content contains formatting nodes, so to avoid modifying those we replace
-            // each element with the sorted element from its respective index. Note this
-            // will not move adjacent elements, so any comments would remain in their
-            // original order.
-            element.content().replaceAll {
-                val index = deps.indexOf(it)
-                if (index >= 0) {
-                    modifiedDeps[index]
-                } else {
-                    it
-                }
+        // Content contains formatting nodes, so to avoid modifying those we replace
+        // each element with the sorted element from its respective index. Note this
+        // will not move adjacent elements, so any comments would remain in their
+        // original order.
+        element.content().replaceAll {
+            val index = deps.indexOf(it)
+            if (index >= 0) {
+                modifiedDeps[index]
+            } else {
+                it
             }
         }
+    }
 
     // Write to string. Note that this does not preserve the original indent level, but it
     // does preserve line breaks -- not that any of this matters for client XML parsing.
@@ -327,7 +328,7 @@ internal fun modifyPomDependencies(
 
 internal fun modifyPomDependency(
     dependency: Element,
-    originalToRedirected: Map<ModuleIdentifier, ModuleVersionIdentifier>
+    originalToRedirected: Map<ModuleIdentifier, ModuleVersionIdentifier>,
 ) {
     val groupIdNode = dependency.selectSingleNode("ns:groupId")
     val artifactIdNode = dependency.selectSingleNode("ns:artifactId")
@@ -343,11 +344,7 @@ internal fun modifyPomDependency(
 
 // Coped from org.dom4j.DocumentHelper with modifications to allow SAXReader configuration.
 @Throws(DocumentException::class)
-fun parseText(
-    documentFactory: DocumentFactory,
-    xmlReader: XMLReader,
-    text: String,
-): Document {
+fun parseText(documentFactory: DocumentFactory, xmlReader: XMLReader, text: String): Document {
     val reader = SAXReader.createDefault()
     reader.documentFactory = documentFactory
     reader.xmlReader = xmlReader
@@ -383,8 +380,8 @@ private fun getEncoding(text: String): String? {
 }
 
 /**
- * Workaround for https://github.com/gradle/gradle/issues/20011.
- * Looks for a dependencies JSON element within [metadata] and sorts its contents.
+ * Workaround for https://github.com/gradle/gradle/issues/20011. Looks for a dependencies JSON
+ * element within [metadata] and sorts its contents.
  */
 private fun sortGradleMetadataDependencies(metadata: JsonObject) {
     metadata.getAsJsonArray("variants").forEach { entry ->
@@ -420,10 +417,7 @@ private fun filterGradleMetadataCapabilities(
     }
 }
 
-private fun modifyGradleMetadata(
-    metadata: String,
-    block: (JsonObject) -> Unit,
-): String {
+private fun modifyGradleMetadata(metadata: String, block: (JsonObject) -> Unit): String {
     val gson = GsonBuilder().create()
     val jsonObj = gson.fromJson(metadata, JsonObject::class.java)!!
     block(jsonObj)
@@ -435,12 +429,14 @@ private fun modifyGradleMetadata(
 }
 
 private fun MavenPublication.suppressRedirectionPomMetadataWarnings() {
-    listOf("ApiElements", "RuntimeElements", "SourcesElements", "MetadataElements").forEach { suffix ->
+    listOf("ApiElements", "RuntimeElements", "SourcesElements", "MetadataElements").forEach { suffix
+        ->
         suppressPomMetadataWarningsFor("${name}$suffix-published")
     }
 }
 
-private fun JsonObject.notation(): String = "${get("group").asString}:${get("name").asString}:${get("version").asString}"
+private fun JsonObject.notation(): String =
+    "${get("group").asString}:${get("name").asString}:${get("version").asString}"
 
 private fun Project.isMultiplatformPublicationEnabled(): Boolean {
     return extensions.findByType<KotlinMultiplatformExtension>() != null
@@ -453,17 +449,14 @@ private fun Project.configureMultiplatformPublication(componentFactory: Software
 
 /**
  * KMP does not include a sources configuration (b/235486368), so we replace it with our own
- * publication that includes it.  This uses internal API as a workaround while waiting for a fix
- * on the original bug.
+ * publication that includes it. This uses internal API as a workaround while waiting for a fix on
+ * the original bug.
  */
 private fun Project.replaceBaseMultiplatformPublication(
     componentFactory: SoftwareComponentFactory
 ) {
     val kotlinComponent = components.findByName("kotlin") as SoftwareComponentInternal
-    withSourcesComponents(
-        componentFactory,
-        setOf("androidxSourcesElements")
-    ) { sourcesComponents ->
+    withSourcesComponents(componentFactory, setOf("androidxSourcesElements")) { sourcesComponents ->
         configure<PublishingExtension> {
             publications { pubs ->
                 pubs.create<MavenPublication>(KMP_ANCHOR_PUBLICATION_NAME) {
@@ -473,24 +466,26 @@ private fun Project.replaceBaseMultiplatformPublication(
                     // https://youtrack.jetbrains.com/issue/KT-36943 is fixed
                     (this as MavenPublicationInternal).publishWithOriginalFileName()
 
-                    from(object : ComponentWithVariants, SoftwareComponentInternal {
-                        override fun getName(): String {
-                            return KMP_ANCHOR_PUBLICATION_NAME
-                        }
+                    from(
+                        object : ComponentWithVariants, SoftwareComponentInternal {
+                            override fun getName(): String {
+                                return KMP_ANCHOR_PUBLICATION_NAME
+                            }
 
-                        override fun getUsages(): MutableSet<out UsageContext> {
-                            // Include sources artifact we built and root artifacts from kotlin plugin.
-                            return (
-                                sourcesComponents.flatMap { it.usages } +
-                                kotlinComponent.usages
-                            ).toMutableSet()
-                        }
+                            override fun getUsages(): MutableSet<out UsageContext> {
+                                // Include sources artifact we built and root artifacts from kotlin
+                                // plugin.
+                                return (sourcesComponents.flatMap { it.usages } +
+                                        kotlinComponent.usages)
+                                    .toMutableSet()
+                            }
 
-                        override fun getVariants(): MutableSet<out SoftwareComponent> {
-                            // Include all target-based variants from kotlin plugin.
-                            return (kotlinComponent as ComponentWithVariants).variants
+                            override fun getVariants(): MutableSet<out SoftwareComponent> {
+                                // Include all target-based variants from kotlin plugin.
+                                return (kotlinComponent as ComponentWithVariants).variants
+                            }
                         }
-                    })
+                    )
                 }
 
                 // mark original publication as an alias, so we do not try to publish it.
@@ -506,13 +501,13 @@ private fun Project.replaceBaseMultiplatformPublication(
 }
 
 /**
- * If source configurations with the given names are currently in the project, or if they
- * eventually gets added, run the given [action] with those configurations as software components.
+ * If source configurations with the given names are currently in the project, or if they eventually
+ * gets added, run the given [action] with those configurations as software components.
  */
 private fun Project.withSourcesComponents(
     componentFactory: SoftwareComponentFactory,
     names: Set<String>,
-    action: (List<SoftwareComponentInternal>) -> Unit
+    action: (List<SoftwareComponentInternal>) -> Unit,
 ) {
     val targetConfigurations = mutableSetOf<Configuration>()
     configurations.configureEach {
@@ -533,15 +528,17 @@ private fun Project.withSourcesComponents(
 
 /**
  * Now that we have created our own publication that we want published, prevent the base publication
- * from being published using the roll-up tasks.  We should be able to remove this workaround when
+ * from being published using the roll-up tasks. We should be able to remove this workaround when
  * b/235486368 is fixed.
  */
 private fun Project.disableBaseKmpPublications() {
     listOf("publish", "publishToMavenLocal").forEach { taskName ->
         tasks.named(taskName).configure { publishTask ->
-            publishTask.setDependsOn(publishTask.dependsOn.filterNot {
-                (it as String).startsWith("publishKotlinMultiplatform")
-            })
+            publishTask.setDependsOn(
+                publishTask.dependsOn.filterNot {
+                    (it as String).startsWith("publishKotlinMultiplatform")
+                }
+            )
         }
     }
 }
@@ -549,17 +546,17 @@ private fun Project.disableBaseKmpPublications() {
 private fun Project.isValidReleaseComponent(component: SoftwareComponent) =
     component.name == releaseComponentName()
 
-private fun Project.releaseComponentName() = when {
-    plugins.hasPlugin(KotlinMultiplatformPluginWrapper::class.java) -> "kotlin"
-    plugins.hasPlugin(JavaPlugin::class.java) -> "java"
-    else -> "release"
-}
+private fun Project.releaseComponentName() =
+    when {
+        plugins.hasPlugin(KotlinMultiplatformPluginWrapper::class.java) -> "kotlin"
+        plugins.hasPlugin(JavaPlugin::class.java) -> "java"
+        else -> "release"
+    }
 
 /**
- * Delete any existing archives, so that developers don't get
- * confused/surprised by the presence of old versions.
- * Additionally, deleting old versions makes it more convenient to iterate
- * over all existing archives without visiting archives having old versions too
+ * Delete any existing archives, so that developers don't get confused/surprised by the presence of
+ * old versions. Additionally, deleting old versions makes it more convenient to iterate over all
+ * existing archives without visiting archives having old versions too
  */
 private fun removePreviouslyUploadedArchives(projectArchiveDir: File) {
     projectArchiveDir.deleteRecursively()
@@ -568,7 +565,7 @@ private fun removePreviouslyUploadedArchives(projectArchiveDir: File) {
 private fun Project.addInformativeMetadata(extension: AndroidXExtension, pom: MavenPom) {
     pom.name.set(extension.name)
     pom.description.set(extension.description)
-    pom.url.set("https://github.com/JetBrains/compose-multiplatform")
+    pom.url.set("https://github.com/brahmkshatriya/compose-native")
     pom.inceptionYear.set(extension.inceptionYear)
     pom.licenses { licenses ->
         licenses.license { license ->
@@ -585,12 +582,17 @@ private fun Project.addInformativeMetadata(extension: AndroidXExtension, pom: Ma
         }
     }
     pom.scm { scm ->
-        scm.url.set("https://cs.android.com/androidx/platform/frameworks/support")
-        scm.connection.set(ANDROID_GIT_URL)
+        scm.url.set("https://github.com/brahmkshatriya/compose-native")
+        scm.connection.set("scm:git:https://github.com/brahmkshatriya/compose-native.git")
+        scm.developerConnection.set(
+            "scm:git:ssh://git@github.com/brahmkshatriya/compose-native.git"
+        )
     }
     pom.developers { devs ->
         devs.developer { dev ->
-            dev.name.set("The Android Open Source Project")
+            dev.id.set("brahmkshatriya")
+            dev.name.set("Shivam Brahmkshatriya")
+            dev.url.set("https://github.com/brahmkshatriya")
         }
     }
 }
@@ -599,7 +601,7 @@ private fun tweakDependenciesMetadata(
     pom: MavenPom,
     androidLibrariesSetProvider: Provider<Set<String>>,
     kmpAnchor: Boolean,
-    pomPlatform: String?
+    pomPlatform: String?,
 ) {
     pom.withXml { xml ->
         // The following code depends on getProjectsMap which is only available late in
@@ -609,6 +611,7 @@ private fun tweakDependenciesMetadata(
         // https://android-review.googlesource.com/c/platform/frameworks/support/+/1144664/8/buildSrc/src/main/kotlin/androidx/build/MavenUploadHelper.kt#177
         assignAarTypes(xml, androidLibrariesSetProvider.get())
         ensureConsistentJvmSuffix(xml)
+        removeUnpublishableProjectDependencies(xml)
 
         if (kmpAnchor && pomPlatform != null) {
             insertDefaultMultiplatformDependencies(xml, pomPlatform)
@@ -616,44 +619,55 @@ private fun tweakDependenciesMetadata(
     }
 }
 
+/** Removes local project constraints that have no valid external Maven coordinate. */
+fun removeUnpublishableProjectDependencies(xml: XmlProvider) {
+    val dependencies = xml.asElement().getElementsByTagName("dependency")
+    val toRemove = mutableListOf<Node>()
+    dependencies.forEach { dependency ->
+        val groupId = dependency.find { it.nodeName == "groupId" }?.textContent.orEmpty()
+        val version = dependency.find { it.nodeName == "version" }?.textContent.orEmpty()
+        if (groupId.startsWith("compose-multiplatform-core.") && version == "unspecified") {
+            toRemove += dependency
+        }
+    }
+    toRemove.forEach { dependency -> dependency.parentNode.removeChild(dependency) }
+}
+
 // TODO(aurimas): remove this when Gradle bug is fixed.
 // https://github.com/gradle/gradle/issues/3170
-fun assignAarTypes(
-    xml: XmlProvider,
-    androidLibrariesSet: Set<String>
-) {
+fun assignAarTypes(xml: XmlProvider, androidLibrariesSet: Set<String>) {
     val xmlElement = xml.asElement()
-    val dependencies = xmlElement.find {
-        it.nodeName == "dependencies"
-    } as? org.w3c.dom.Element
+    val dependencies = xmlElement.find { it.nodeName == "dependencies" } as? org.w3c.dom.Element
 
     dependencies?.getElementsByTagName("dependency")?.forEach { dependency ->
-        val groupId = dependency.find { it.nodeName == "groupId" }?.textContent
-            ?: throw IllegalArgumentException("Failed to locate groupId node")
-        val artifactId = dependency.find { it.nodeName == "artifactId" }?.textContent
-            ?: throw IllegalArgumentException("Failed to locate artifactId node")
+        val groupId =
+            dependency.find { it.nodeName == "groupId" }?.textContent
+                ?: throw IllegalArgumentException("Failed to locate groupId node")
+        val artifactId =
+            dependency.find { it.nodeName == "artifactId" }?.textContent
+                ?: throw IllegalArgumentException("Failed to locate artifactId node")
         if (androidLibrariesSet.contains("$groupId:$artifactId")) {
             dependency.appendElement("type", "aar")
         }
     }
 }
 
-fun insertDefaultMultiplatformDependencies(
-    xml: XmlProvider,
-    platformId: String
-) {
+fun insertDefaultMultiplatformDependencies(xml: XmlProvider, platformId: String) {
     val xmlElement = xml.asElement()
-    val groupId = xmlElement.find { it.nodeName == "groupId" }?.textContent
-        ?: throw IllegalArgumentException("Failed to locate groupId node")
-    val artifactId = xmlElement.find { it.nodeName == "artifactId" }?.textContent
-        ?: throw IllegalArgumentException("Failed to locate artifactId node")
-    val version = xmlElement.find { it.nodeName == "version" }?.textContent
-        ?: throw IllegalArgumentException("Failed to locate version node")
+    val groupId =
+        xmlElement.find { it.nodeName == "groupId" }?.textContent
+            ?: throw IllegalArgumentException("Failed to locate groupId node")
+    val artifactId =
+        xmlElement.find { it.nodeName == "artifactId" }?.textContent
+            ?: throw IllegalArgumentException("Failed to locate artifactId node")
+    val version =
+        xmlElement.find { it.nodeName == "version" }?.textContent
+            ?: throw IllegalArgumentException("Failed to locate version node")
 
     // Find the top-level <dependencies> element or add one if there are no other dependencies.
-    val dependencies = xmlElement.find {
-        it.nodeName == "dependencies"
-    } ?: xmlElement.appendElement("dependencies")
+    val dependencies =
+        xmlElement.find { it.nodeName == "dependencies" }
+            ?: xmlElement.appendElement("dependencies")
     dependencies.appendElement("dependency").apply {
         appendElement("groupId", groupId)
         appendElement("artifactId", "$artifactId-$platformId")
@@ -662,10 +676,7 @@ fun insertDefaultMultiplatformDependencies(
     }
 }
 
-private fun Node.appendElement(
-    tagName: String,
-    textValue: String? = null
-): org.w3c.dom.Element {
+private fun Node.appendElement(tagName: String, textValue: String? = null): org.w3c.dom.Element {
     val element = ownerDocument.createElement(tagName)
     appendChild(element)
 
@@ -677,9 +688,7 @@ private fun Node.appendElement(
     return element
 }
 
-private fun Node.find(
-    predicate: (Node) -> Boolean
-): Node? {
+private fun Node.find(predicate: (Node) -> Boolean): Node? {
     val iterator = childrenIterator()
     while (iterator.hasNext()) {
         val node = iterator.next()
@@ -691,19 +700,17 @@ private fun Node.find(
 }
 
 /**
- * Ensures that artifactIds are consistent when using configuration caching.
- * A workaround for https://github.com/gradle/gradle/issues/18369
+ * Ensures that artifactIds are consistent when using configuration caching. A workaround for
+ * https://github.com/gradle/gradle/issues/18369
  */
-fun ensureConsistentJvmSuffix(
-    xml: XmlProvider
-) {
-    val dependencies = xml.asElement().find {
-        it.nodeName == "dependencies"
-    } as? org.w3c.dom.Element ?: return
+fun ensureConsistentJvmSuffix(xml: XmlProvider) {
+    val dependencies =
+        xml.asElement().find { it.nodeName == "dependencies" } as? org.w3c.dom.Element ?: return
 
     dependencies.getElementsByTagName("dependency").forEach { dependency ->
-        val artifactId = dependency.find { it.nodeName == "artifactId" }
-            ?: throw IllegalArgumentException("Failed to locate artifactId node")
+        val artifactId =
+            dependency.find { it.nodeName == "artifactId" }
+                ?: throw IllegalArgumentException("Failed to locate artifactId node")
         // kotlinx-coroutines-core is only a .pom and only depends on kotlinx-coroutines-core-jvm,
         // so the two artifacts should be approximately equivalent. However,
         // when loading from configuration cache, Gradle often returns a different resolution.

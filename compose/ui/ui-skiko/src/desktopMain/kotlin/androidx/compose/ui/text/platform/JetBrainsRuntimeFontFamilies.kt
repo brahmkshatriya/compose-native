@@ -30,11 +30,10 @@ import org.jetbrains.skia.FontSlant
 internal object JetBrainsRuntimeFontFamilies {
 
     /**
-     * A map of known embedded font family names to the actual
-     * [families][FontFamily].
+     * A map of known embedded font family names to the actual [families][FontFamily].
      *
-     * Will be empty if not running on the JetBrains Runtime, and/or if the
-     * current module cannot access the `sun.font` module.
+     * Will be empty if not running on the JetBrains Runtime, and/or if the current module cannot
+     * access the `sun.font` module.
      */
     val embeddedFamilies: MutableMap<String, FontFamily> = HashMap()
 
@@ -44,22 +43,30 @@ internal object JetBrainsRuntimeFontFamilies {
 
     // FontManagerFactory methods
     private val FontManagerFactory_getInstanceMethod =
-        FontManagerFactoryClass.declaredMethods.find { it.name == "getInstance" }
+        FontManagerFactoryClass.declaredMethods
+            .find { it.name == "getInstance" }
             ?.let { method ->
-                kotlin.runCatching { method.isAccessible = true }
+                kotlin
+                    .runCatching { method.isAccessible = true }
                     .fold(
-                        onSuccess = { return@fold method },
+                        onSuccess = {
+                            return@fold method
+                        },
                         onFailure = { null },
                     )
             }
 
     // SunFontManagerFactory fields
     private val SunFontManager_jreBundledFontFiles =
-        SunFontManagerClass.declaredFields.find { it.name == "jreBundledFontFiles" }
+        SunFontManagerClass.declaredFields
+            .find { it.name == "jreBundledFontFiles" }
             ?.let { field ->
-                kotlin.runCatching { field.isAccessible = true }
+                kotlin
+                    .runCatching { field.isAccessible = true }
                     .fold(
-                        onSuccess = { return@fold field },
+                        onSuccess = {
+                            return@fold field
+                        },
                         onFailure = { null },
                     )
             }
@@ -73,7 +80,7 @@ internal object JetBrainsRuntimeFontFamilies {
     init {
         if (
             InternalFontApiChecker.isRunningOnJetBrainsRuntime() &&
-            SunFontManager_jreBundledFontFiles != null
+                SunFontManager_jreBundledFontFiles != null
         ) {
             cacheJetBrainsRuntimeEmbeddedFonts()
         }
@@ -89,22 +96,28 @@ internal object JetBrainsRuntimeFontFamilies {
 
             @Suppress("UNCHECKED_CAST")
             val embeddedFontFileNames = field.get(fontManager) as HashSet<String>
-            val embeddedFontPaths = embeddedFontFileNames.map { jbrEmbeddedFontsPath.resolve(it) }
-                .sortedBy { it.absolutePathString() }
-                .fastDistinctBy { it.absolutePathString() }
+            val embeddedFontPaths =
+                embeddedFontFileNames
+                    .map { jbrEmbeddedFontsPath.resolve(it) }
+                    .sortedBy { it.absolutePathString() }
+                    .fastDistinctBy { it.absolutePathString() }
 
-            embeddedFontPaths.asSequence()
+            embeddedFontPaths
+                .asSequence()
                 .map { path ->
                     val absolutePath = path.absolutePathString()
 
                     // We need to parse the typeface to extract its weight and style
-                    val typeface = FontMgr.default.makeFromFile(absolutePath)
-                        ?: error("makeFromFile $absolutePath failed")
-                    val weight = FontWeight(typeface.fontStyle.weight.value)
-                    val style = when (typeface.fontStyle.slant) {
-                        FontSlant.UPRIGHT -> FontStyle.Normal
-                        FontSlant.ITALIC, FontSlant.OBLIQUE -> FontStyle.Italic
-                    }
+                    val typeface =
+                        FontMgr.default.makeFromFile(absolutePath)
+                            ?: error("makeFromFile $absolutePath failed")
+                    val weight = FontWeight(typeface.fontStyle.weight)
+                    val style =
+                        when (typeface.fontStyle.slant) {
+                            FontSlant.UPRIGHT -> FontStyle.Normal
+                            FontSlant.ITALIC,
+                            FontSlant.OBLIQUE -> FontStyle.Italic
+                        }
 
                     typeface.familyName to FileFont(File(absolutePath), weight, style)
                 }
@@ -119,6 +132,5 @@ internal object JetBrainsRuntimeFontFamilies {
         }
     }
 
-    private fun getSunFontManagerInstance() =
-        FontManagerFactory_getInstanceMethod?.invoke(null)
+    private fun getSunFontManagerInstance() = FontManagerFactory_getInstanceMethod?.invoke(null)
 }

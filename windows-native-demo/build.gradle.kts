@@ -20,7 +20,7 @@ compose.resources {
 val windowsSdlDirectory =
     (rootProject.extra["outDir"] as File)
         .resolve(rootProject.name)
-        .resolve("compose/ui/ui-sdl3/build/windows-sdl/SDL3-3.4.10/x86_64-w64-mingw32")
+        .resolve("compose/desktop/desktop-native/build/windows-sdl/SDL3-3.4.10/x86_64-w64-mingw32")
 val windowsMingwSysroot =
     providers.gradleProperty("compose.windows.mingwSysroot").orElse(
         providers.environmentVariable("KONAN_DATA_DIR").map {
@@ -81,7 +81,7 @@ kotlin.sourceSets {
             implementation(project(":compose:foundation:foundation"))
             implementation(project(":compose:material3:material3"))
             implementation(project(":compose:ui:ui-backhandler"))
-            implementation(project(":compose:ui:ui-sdl3"))
+            implementation(project(":compose:desktop:desktop-native"))
         }
     }
 }
@@ -216,7 +216,7 @@ val prepareWindowsMpv by tasks.registering(Exec::class) {
 
 val compileWindowsMpv by tasks.registering(Exec::class) {
     dependsOn(prepareWindowsMpv)
-    dependsOn(":compose:ui:ui-sdl3:prepareWindowsSdl")
+    dependsOn(":compose:desktop:desktop-native:prepareWindowsSdl")
     val source = rootProject.file("demo/src/nativeInterop/cinterop/app_mpv.cpp")
     val output = layout.buildDirectory.file("mpv/obj/app-mpv-windows.o")
     inputs.file(source)
@@ -267,7 +267,7 @@ windowsTarget.compilations.getByName("main").compileTaskProvider.configure {
 }
 
 releaseExecutable.linkTaskProvider.configure {
-    dependsOn(":compose:ui:ui-sdl3:prepareWindowsSdl")
+    dependsOn(":compose:desktop:desktop-native:prepareWindowsSdl")
     dependsOn(prepareWindowsMpv)
 }
 
@@ -275,7 +275,7 @@ tasks.register<Sync>("packageWindowsRelease") {
     group = "distribution"
     description = "Builds a self-contained Windows catalogue distribution."
     dependsOn(releaseExecutable.linkTaskProvider)
-    dependsOn(":compose:ui:ui-sdl3:prepareWindowsSdl")
+    dependsOn(":compose:desktop:desktop-native:prepareWindowsSdl")
     dependsOn(prepareWindowsWebView2)
     dependsOn(prepareWindowsMpv)
     dependsOn("prepareComposeResourcesTaskForCommonMain")

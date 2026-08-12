@@ -1,0 +1,346 @@
+name: Publish Compose Native to Maven Central
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+      - '[0-9]*'
+
+concurrency:
+  group: publish-compose-native-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Validate release tag
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Match tag to the publication contract
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "Tag must be a Maven version such as 1.12.10-alpha01 or v1.12.10-alpha01" >&2
+            exit 1
+          fi
+          contract_version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
+          plugin_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' gradle-plugin/build.gradle.kts | head -n1)"
+          if [[ "$version" != "$contract_version" ]]; then
+            echo "Tag $version does not match Compose $contract_version and plugin $plugin_version" >&2
+            exit 1
+          fi
+          if [[ "$version" != "$plugin_version" ]]; then
+            echo "Tag $version does not match Compose $contract_version and plugin $plugin_version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  native:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            id: linux-x64
+            runner: ubuntu-24.04
+            platform: LinuxX64
+          - name: Linux arm64
+            id: linux-arm64
+            runner: ubuntu-24.04-arm
+            platform: LinuxArm64
+          - name: Windows x64
+            id: windows-x64
+            runner: windows-2022
+            platform: MingwX64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        name: Set up JDK 21
+        with:
+          distribution: corretto
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+        name: Set up Android SDK
+
+      - name: Install Android platform
+        shell: bash
+        run: sdkmanager 'platforms;android-34' 'build-tools;36.0.0'
+
+      - name: Export AndroidX JDK location
+        shell: bash
+        run: echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Install Linux native headers
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes \
+            build-essential \
+            libdbus-1-dev \
+            libfontconfig1-dev \
+            libfreetype-dev \
+            libgl-dev \
+            libpng-dev \
+            libwayland-dev \
+            libx11-dev \
+            pkg-config \
+            zlib1g-dev
+          sdl_archive="$RUNNER_TEMP/SDL3-3.4.10.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "$sdl_archive" \
+            https://github.com/libsdl-org/SDL/releases/download/release-3.4.10/SDL3-3.4.10.tar.gz
+          echo '12b34280415ec8418c864408b93d008a20a6530687ee613d60bfbd20411f2785  '"$sdl_archive" | sha256sum --check
+          tar --extract --gzip --file "$sdl_archive" --directory "$RUNNER_TEMP"
+          sudo cp --recursive "$RUNNER_TEMP/SDL3-3.4.10/include/SDL3" /usr/include/
+          dbus_arch_include="$(pkg-config --variable=libdir dbus-1)/dbus-1.0/include"
+          sudo mkdir --parents /usr/lib/dbus-1.0
+          if [[ ! -e /usr/lib/dbus-1.0/include ]]; then
+            sudo ln --symbolic "$dbus_arch_include" /usr/lib/dbus-1.0/include
+          fi
+
+      - name: Publish target to an isolated Maven repository
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          COMPOSE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          repository="$GITHUB_WORKSPACE/release/maven-local"
+          gradle_command='./gradlew'
+          if [[ "$RUNNER_OS" == 'Windows' ]]; then
+            gradle_command='./gradlew.bat'
+          fi
+          "$gradle_command" \
+            --no-daemon \
+            --stacktrace \
+            --no-configuration-cache \
+            "-Dmaven.repo.local=$repository" \
+            "-Pcompose.platforms=$COMPOSE_PLATFORM" \
+            -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
+            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            :mpp:publishComposeNativeToMavenLocal
+
+      - name: Export only fork publications
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="$GITHUB_WORKSPACE/release/maven-local/dev/brahmkshatriya"
+          export_root="$GITHUB_WORKSPACE/release/export/dev/brahmkshatriya"
+          mkdir -p "$export_root"
+          for namespace in compose androidx; do
+            if [[ -d "$repository/$namespace" ]]; then
+              cp -R "$repository/$namespace" "$export_root/"
+            fi
+          done
+          test -d "$export_root/compose"
+
+      - uses: actions/upload-artifact@v4
+        name: Upload ${{ matrix.name }} repository
+        with:
+          name: compose-native-repo-${{ matrix.id }}-${{ needs.prepare.outputs.version }}
+          path: release/export
+          if-no-files-found: error
+          retention-days: 5
+
+  android-web:
+    name: Build Android, JS, and Wasm
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        name: Set up JDK 21
+        with:
+          distribution: corretto
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+        name: Set up Android SDK
+
+      - name: Install Android platform and export JDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager 'platforms;android-34' 'build-tools;36.0.0'
+          echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Publish fork platforms to an isolated Maven repository
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          repository="$GITHUB_WORKSPACE/release/maven-local"
+          ./gradlew \
+            --no-daemon \
+            --stacktrace \
+            --no-configuration-cache \
+            "-Dmaven.repo.local=$repository" \
+            -Pcompose.platforms=Android,Js,WasmJs \
+            -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
+            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
+            :mpp:publishComposeForkPlatformsToMavenLocal
+
+      - name: Export only fork publications
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="$GITHUB_WORKSPACE/release/maven-local/dev/brahmkshatriya"
+          export_root="$GITHUB_WORKSPACE/release/export/dev/brahmkshatriya"
+          mkdir -p "$export_root"
+          for namespace in compose androidx; do
+            if [[ -d "$repository/$namespace" ]]; then
+              cp -R "$repository/$namespace" "$export_root/"
+            fi
+          done
+          test -d "$export_root/compose"
+
+      - uses: actions/upload-artifact@v4
+        name: Upload Android and web repository
+        with:
+          name: compose-native-repo-android-web-${{ needs.prepare.outputs.version }}
+          path: release/export
+          if-no-files-found: error
+          retention-days: 5
+
+  publish:
+    name: Sign and publish one Central deployment
+    needs:
+      - prepare
+      - native
+      - android-web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        name: Set up JDK 21
+        with:
+          distribution: corretto
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: actions/download-artifact@v4
+        name: Merge platform Maven repositories
+        with:
+          pattern: compose-native-repo-*-${{ needs.prepare.outputs.version }}
+          path: release/merged-repository
+          merge-multiple: true
+
+      - name: Restore Gradle properties and signing key
+        shell: bash
+        env:
+          GRADLE_PROPERTIES_CONTENT: ${{ secrets.GRADLE_PROPERTIES }}
+          GPG_SECRET_KEY_RING_BASE64: ${{ secrets.GPG_SECRET_KEY_RING_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$GRADLE_PROPERTIES_CONTENT"
+          test -n "$GPG_SECRET_KEY_RING_BASE64"
+          gradle_dir="$HOME/.gradle"
+          properties_file="$gradle_dir/gradle.properties"
+          keyring="$gradle_dir/compose-native-secret-key.gpg"
+          mkdir -p "$gradle_dir"
+          printf '%s' "$GRADLE_PROPERTIES_CONTENT" > "$properties_file"
+          printf '%s' "$GPG_SECRET_KEY_RING_BASE64" | tr -d '\r\n ' | base64 --decode > "$keyring"
+          test -s "$keyring"
+          awk '!/^signing.secretKeyRingFile=/' "$properties_file" > "$properties_file.tmp"
+          mv "$properties_file.tmp" "$properties_file"
+          printf '\nsigning.secretKeyRingFile=%s\n' "$keyring" >> "$properties_file"
+          chmod 600 "$properties_file" "$keyring"
+
+      - name: Generate aggregate KMP roots
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          python3 scripts/write-linux-native-root-metadata.py \
+            --repository release/merged-repository \
+            --version "$RELEASE_VERSION" \
+            --group-prefix dev.brahmkshatriya \
+            --all-platforms
+
+      - name: Publish Gradle plugin into the merged repository
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
+          ./gradlew \
+            -p gradle-plugin \
+            --no-daemon \
+            --stacktrace \
+            --no-configuration-cache \
+            "-Dmaven.repo.local=$GITHUB_WORKSPACE/release/merged-repository" \
+            publishToMavenLocal
+
+      - name: Verify merged platform set
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          group_root='release/merged-repository/dev/brahmkshatriya'
+          ui_root="$group_root/compose/ui/ui/$RELEASE_VERSION/ui-$RELEASE_VERSION.module"
+          test -s "$ui_root"
+          expected_targets=$'linux_arm64\nlinux_x64\nmingw_x64'
+          actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$ui_root" | sort -u)"
+          test "$actual_targets" = "$expected_targets"
+          for module in ui-linuxx64 ui-linuxarm64 ui-mingwx64 ui-android ui-js ui-wasm-js; do
+            test -d "$group_root/compose/ui/$module/$RELEASE_VERSION"
+          done
+          plugin_dir="$group_root/compose/compose-gradle-plugin/$RELEASE_VERSION"
+          marker_dir="$group_root/compose/dev.brahmkshatriya.compose.gradle.plugin/$RELEASE_VERSION"
+          test -s "$plugin_dir/compose-gradle-plugin-$RELEASE_VERSION.jar"
+          test -s "$marker_dir/dev.brahmkshatriya.compose.gradle.plugin-$RELEASE_VERSION.pom"
+
+      - name: Upload, validate, and automatically publish Central bundle
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          bash scripts/publish-maven-central-bundle.sh \
+            "$GITHUB_WORKSPACE/release/merged-repository" \
+            "$RELEASE_VERSION" \
+            "$GITHUB_WORKSPACE/release/compose-native-$RELEASE_VERSION.zip"
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        name: Preserve failed Central bundle
+        with:
+          name: failed-compose-native-central-bundle-${{ needs.prepare.outputs.version }}
+          path: release/compose-native-${{ needs.prepare.outputs.version }}.zip
+          if-no-files-found: ignore
+          retention-days: 5

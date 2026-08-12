@@ -240,7 +240,8 @@ placeholders. Skia performs compositing, raster effects, and path rendering; Fon
 system fonts, while SkParagraph handles shaping, line layout, span attributes, and glyph masks for
 brushes and shadows.
 
-The platform host is packaged as the Compose-owned `:compose:ui:ui-sdl3` module. Its KLIB embeds
+The platform host is packaged as the Compose-owned `:compose:desktop:desktop-native` module. Its
+KLIB embeds
 the small C++ graphics support archive and exposes the native application, window/dialog state,
 input, clipboard, URI, `WindowDraggableArea`, and native CPU/GPU interop APIs. GPU native views
 render into host-owned OpenGL FBOs. The module deliberately provides only generic native-view
@@ -274,6 +275,6 @@ still be loaded transitively by the system mpv/FFmpeg stack, but Compose does no
 - `scripts/` — checkout verification, build, and run commands
 - `build/bin/compose-wayland` — final executable produced by the wrapper
 - `build/bin/compose-resources/` — executable-relative Compose resource bundle
-- `../compose/ui/ui-sdl3/` — shared SDL3 native desktop
+- `:compose:desktop:desktop-native` — shared native desktop application host
   host, Skia backend, cinterops, and embedded native support archive
 - `../navigation3/navigation3-ui/` — optional Navigation 3 UI port with a Linux native target

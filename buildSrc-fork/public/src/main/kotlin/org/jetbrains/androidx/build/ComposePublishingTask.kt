@@ -11,15 +11,11 @@ import org.gradle.api.tasks.Internal
 
 @CacheableTask
 open class ComposePublishingTask : DefaultTask() {
-    @get:Internal
-    lateinit var repository: String
+    @get:Internal lateinit var repository: String
 
-    @get:Internal
-    lateinit var composeProperties: ComposeProperties
+    @get:Internal lateinit var composeProperties: ComposeProperties
 
-    private val targetPlatforms: Set<ComposePlatforms> by lazy {
-        composeProperties.targetPlatforms
-    }
+    private val targetPlatforms: Set<ComposePlatforms> by lazy { composeProperties.targetPlatforms }
 
     fun dependsOnComposeTask(task: String) {
         dependsOn(task)
@@ -30,17 +26,33 @@ open class ComposePublishingTask : DefaultTask() {
             publish(
                 component.path,
                 onlyWithPlatforms = component.supportedPlatforms,
-                publications = component.customTasks
+                publications = component.customTasks,
             )
         } else {
             publishMultiplatform(rootProject, component)
         }
     }
 
-    private fun publish(
-        project: String,
-        publications: Collection<String>
-    ) {
+    /**
+     * Publishes target modules only; native-only root metadata is assembled after all targets
+     * exist.
+     */
+    fun publishPlatformsOnly(rootProject: Project, component: ComposeComponent) {
+        val project =
+            rootProject.findProject(component.path)
+                ?: throw IllegalArgumentException("Cannot find project ${component.path}")
+
+        for (platform in component.supportedPlatforms) {
+            if (platform !in targetPlatforms) continue
+
+            val publicationName = resolvePublicationName(project, platform, repository)
+            dependsOnComposeTask(
+                "${component.path}:publish${publicationName}PublicationTo$repository"
+            )
+        }
+    }
+
+    private fun publish(project: String, publications: Collection<String>) {
         for (publication in publications) {
             dependsOnComposeTask("$project:publish${publication}PublicationTo$repository")
         }
@@ -50,18 +62,21 @@ open class ComposePublishingTask : DefaultTask() {
     private fun publish(
         project: String,
         publications: Collection<String>,
-        onlyWithPlatforms: Set<ComposePlatforms>
+        onlyWithPlatforms: Set<ComposePlatforms>,
     ) {
         if (onlyWithPlatforms.any { it in targetPlatforms }) {
-            publish( project, publications)
+            publish(project, publications)
         }
     }
 
     private fun publishMultiplatform(rootProject: Project, component: ComposeComponent) {
-        val project = rootProject.findProject(component.path) ?:
-            throw IllegalArgumentException("Cannot find project ${component.path}")
+        val project =
+            rootProject.findProject(component.path)
+                ?: throw IllegalArgumentException("Cannot find project ${component.path}")
 
-        dependsOnComposeTask("${component.path}:publish${ComposePlatforms.KotlinMultiplatform.name}PublicationTo$repository")
+        dependsOnComposeTask(
+            "${component.path}:publish${ComposePlatforms.KotlinMultiplatform.name}PublicationTo$repository"
+        )
 
         for (platform in component.supportedPlatforms) {
             if (platform !in targetPlatforms) continue
@@ -71,7 +86,9 @@ open class ComposePublishingTask : DefaultTask() {
             // collection, lifecycle-common); their publish task is then
             // `publishJvmPublicationToMavenLocal`, not `publishDesktopPublicationToMavenLocal`.
             val publicationName = resolvePublicationName(project, platform, repository)
-            dependsOnComposeTask("${component.path}:publish${publicationName}PublicationTo$repository")
+            dependsOnComposeTask(
+                "${component.path}:publish${publicationName}PublicationTo$repository"
+            )
         }
         dependsOnComposeTask("${component.path}:jbVerifyDependencyVersions")
     }

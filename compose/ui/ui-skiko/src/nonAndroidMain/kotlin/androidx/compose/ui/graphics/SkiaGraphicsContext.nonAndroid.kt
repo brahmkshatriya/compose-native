@@ -25,15 +25,13 @@ import org.jetbrains.skiko.node.RenderNode
 import org.jetbrains.skiko.node.RenderNodeContext
 
 @InternalComposeUiApi
-class SkiaGraphicsContext(
-    measureDrawBounds: Boolean = false,
-    snapshotCache: Boolean = true,
-) : PlatformGraphicsContext() {
+class SkiaGraphicsContext(measureDrawBounds: Boolean = false, snapshotCache: Boolean = true) :
+    PlatformGraphicsContext() {
     init {
         PlatformGraphicsRegistry.checkIfRegistered(SkikoGraphics)
     }
 
-    private val renderNodeContext = RenderNodeContext(measureDrawBounds, snapshotCache)
+    private val renderNodeContext = createRenderNodeContext(measureDrawBounds, snapshotCache)
 
     override fun close() {
         super.close()
@@ -48,7 +46,14 @@ class SkiaGraphicsContext(
         ambientShadowAlpha: Float,
         spotShadowAlpha: Float,
     ) {
-        super.setLightingInfo(centerX, centerY, centerZ, radius, ambientShadowAlpha, spotShadowAlpha)
+        super.setLightingInfo(
+            centerX,
+            centerY,
+            centerZ,
+            radius,
+            ambientShadowAlpha,
+            spotShadowAlpha,
+        )
         renderNodeContext.setLightingInfo(
             centerX,
             centerY,
@@ -64,3 +69,8 @@ class SkiaGraphicsContext(
         return SkikoGraphicsLayer(renderNode)
     }
 }
+
+internal expect fun createRenderNodeContext(
+    measureDrawBounds: Boolean,
+    snapshotCache: Boolean,
+): RenderNodeContext

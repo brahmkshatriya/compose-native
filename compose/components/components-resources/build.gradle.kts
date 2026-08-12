@@ -1,13 +1,14 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
 
+import androidx.build.SoftwareType
+
 plugins {
+    id("AndroidXPlugin")
     id("org.jetbrains.kotlin.multiplatform")
     id("AndroidXComposePlugin")
+    id("JetBrainsAndroidXPlugin")
     id("maven-publish")
 }
-
-group = "org.jetbrains.compose.components"
-version = "9999.0.0-SNAPSHOT"
 
 kotlin {
     applyHierarchyTemplate {
@@ -54,8 +55,16 @@ kotlin {
 
         val desktopNativeMain by getting {
             dependencies {
-                implementation(project(":compose:ui:ui-sdl3"))
+                implementation(project(":compose:desktop:desktop-native"))
             }
         }
     }
+}
+
+androidx {
+    name = "Compose Components Resources"
+    type = SoftwareType.PUBLISHED_LIBRARY_ONLY_USED_BY_KOTLIN_CONSUMERS
+    inceptionYear = "2026"
+    description = "Resource APIs and runtime support for Compose Multiplatform"
+    legacyDisableKotlinStrictApiMode = true
 }

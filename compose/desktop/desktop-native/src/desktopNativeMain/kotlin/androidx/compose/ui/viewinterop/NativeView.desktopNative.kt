@@ -245,7 +245,9 @@ fun NativeView(
     val gpuLayer =
         remember(view, gpuRegistry) {
             if (view.backend == InteropRenderBackend.OpenGl) {
-                requireNotNull(gpuRegistry) { "OpenGL interop requires the ui-sdl3 window host" }
+                requireNotNull(gpuRegistry) {
+                        "OpenGL interop requires the Compose Native desktop host"
+                    }
                     .create(view)
             } else {
                 null

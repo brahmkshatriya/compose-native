@@ -18,11 +18,6 @@
 
 package org.jetbrains.androidx.build
 
-import androidx.build.AndroidXExtension
-import androidx.build.ProjectLayoutType.Companion.isJetBrainsFork
-import androidx.build.Publish
-import androidx.build.RunApiTasks
-import androidx.build.SoftwareType.ConfigurableSoftwareType
 import javax.inject.Inject
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -30,13 +25,17 @@ import org.gradle.api.component.SoftwareComponentFactory
 import org.gradle.api.tasks.testing.AbstractTestTask
 import org.gradle.kotlin.dsl.withType
 
-class JetBrainsAndroidXRootImplPlugin @Inject constructor(
-    val componentFactory: SoftwareComponentFactory
-) : Plugin<Project> {
+class JetBrainsAndroidXRootImplPlugin
+@Inject
+constructor(val componentFactory: SoftwareComponentFactory) : Plugin<Project> {
     override fun apply(project: Project) {
+        JetBrainsPublication.configureGroupPrefix(project)
+
         project.allprojects { subproject ->
-            // Apply capability rule to resolve conflicts between org.jetbrains.androidx.* and androidx.*
+            // Apply capability rule to resolve conflicts between org.jetbrains.androidx.* and
+            // androidx.*
             subproject.configureJetBrainsCapabilityResolution()
+            subproject.configureComposeNativeSkikoResolution()
 
             subproject.tasks.configureEach {
                 if (it.name == "kotlinStoreYarnLock") it.enabled = false
@@ -50,8 +49,11 @@ class JetBrainsAndroidXRootImplPlugin @Inject constructor(
         }
 
         project.rootProject.plugins.withId("org.jetbrains.kotlin.multiplatform") {
-            project.rootProject.extensions.configure(org.jetbrains.kotlin.gradle.targets.js.yarn.YarnRootExtension::class.java) {
-                // Manually fixing the version. It's a transitive dependency of karma (web test runner).
+            project.rootProject.extensions.configure(
+                org.jetbrains.kotlin.gradle.targets.js.yarn.YarnRootExtension::class.java
+            ) {
+                // Manually fixing the version. It's a transitive dependency of karma (web test
+                // runner).
                 // It got updated automatically to 4.8.2, and k/js tests started to fail:
                 // Error [ERR_SERVER_NOT_RUNNING]: Server is not running.
                 //   at Server.close (node:net:2261:12)
@@ -60,8 +62,33 @@ class JetBrainsAndroidXRootImplPlugin @Inject constructor(
                 //    at emitCloseNT (node:net:2321:8)
                 //    at process.processTicksAndRejections (node:internal/process/task_queues:81:21)
                 it.resolution("socket.io", "4.8.1")
-                // TODO: https://youtrack.jetbrains.com/issue/CMP-9479 - Consider using the newer version, since it has this fix - https://github.com/socketio/socket.io/pull/5344
-                // Then remove the workarounds (delays) in our karma configs. Search in the config.js files for 3413540
+                // TODO: https://youtrack.jetbrains.com/issue/CMP-9479 - Consider using the newer
+                // version, since it has this fix - https://github.com/socketio/socket.io/pull/5344
+                // Then remove the workarounds (delays) in our karma configs. Search in the
+                // config.js files for 3413540
+            }
+        }
+    }
+}
+
+private fun Project.configureComposeNativeSkikoResolution() {
+    val nativeSkikoGroup =
+        providers.gradleProperty("compose.native.skiko.group").orElse("dev.brahmkshatriya.skiko")
+    val nativeSkikoVersion =
+        providers.gradleProperty("compose.native.skiko.version").orElse("0.151.3")
+
+    configurations.configureEach { configuration ->
+        val lowerName = configuration.name.lowercase()
+        if ("linuxx64" !in lowerName && "linuxarm64" !in lowerName && "mingwx64" !in lowerName) {
+            return@configureEach
+        }
+        configuration.resolutionStrategy.eachDependency { details ->
+            if (
+                details.requested.group == "org.jetbrains.skiko" &&
+                    details.requested.name == "skiko"
+            ) {
+                details.useTarget("${nativeSkikoGroup.get()}:skiko:${nativeSkikoVersion.get()}")
+                details.because("Use Compose Native Skiko only for desktop Kotlin/Native")
             }
         }
     }

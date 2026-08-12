@@ -33,6 +33,28 @@ tasks.register("publishComposeJbToMavenLocal", ComposePublishingTask::class) {
     }
 }
 
+tasks.register("publishComposeNativeToMavenLocal", ComposePublishingTask::class) {
+    group = "Compose Multiplatform"
+    description = "Publishes the complete desktop-native target graph to Maven Local"
+    repository = "MavenLocal"
+    composeProperties = parsedComposeProperties
+
+    JetBrainsPublication.nativeComponents.forEach {
+        publishPlatformsOnly(rootProject, it)
+    }
+}
+
+tasks.register("publishComposeForkPlatformsToMavenLocal", ComposePublishingTask::class) {
+    group = "Compose Multiplatform"
+    description = "Publishes forked Compose target modules without incomplete KMP roots"
+    repository = "MavenLocal"
+    composeProperties = parsedComposeProperties
+
+    JetBrainsPublication.forkComposeComponents.forEach {
+        publishPlatformsOnly(rootProject, it)
+    }
+}
+
 val libraries = project.findProperty("jetbrains.publication.libraries")
     ?.toString()?.split(",")
     ?: libraryToComponents.keys
@@ -157,4 +179,3 @@ fun allTasksForPublishingProjectsWith(name: String): List<Task> =
              null
          }
     }
-

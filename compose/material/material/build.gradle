@@ -45,6 +45,7 @@ androidXMultiplatform {
     desktop()
     mac()
     ios()
+    linux()
     js()
     wasmJs()
 
