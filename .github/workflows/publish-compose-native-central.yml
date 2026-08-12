@@ -59,7 +59,7 @@ jobs:
             platform: LinuxX64
           - name: Linux arm64
             id: linux-arm64
-            runner: ubuntu-24.04-arm
+            runner: ubuntu-24.04
             platform: LinuxArm64
           - name: Windows x64
             id: windows-x64
