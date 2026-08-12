@@ -21,4 +21,4 @@ import org.jetbrains.skiko.node.RenderNodeContext
 internal actual fun createRenderNodeContext(
     measureDrawBounds: Boolean,
     snapshotCache: Boolean,
-): RenderNodeContext = RenderNodeContext(measureDrawBounds, snapshotCache)
+): RenderNodeContext = RenderNodeContext(measureDrawBounds)

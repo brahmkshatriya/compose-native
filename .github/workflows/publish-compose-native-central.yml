@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
-            echo "Tag must be a Maven version such as 1.12.10-alpha01 or v1.12.10-alpha01" >&2
+            echo "Tag must be a Maven version such as 1.12.10-alpha02 or v1.12.10-alpha02" >&2
             exit 1
           fi
           contract_version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
@@ -200,7 +200,8 @@ jobs:
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
             "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            :mpp:publishComposeForkPlatformsToMavenLocal
+            :mpp:publishComposeForkPlatformsToMavenLocal \
+            :mpp:publishComposeForkRootsToMavenLocal
 
       - name: Export only fork publications
         shell: bash
@@ -307,6 +308,8 @@ jobs:
           group_root='release/merged-repository/dev/brahmkshatriya'
           ui_root="$group_root/compose/ui/ui/$RELEASE_VERSION/ui-$RELEASE_VERSION.module"
           test -s "$ui_root"
+          test -s "$group_root/compose/ui/ui/$RELEASE_VERSION/ui-$RELEASE_VERSION.jar"
+          jq -e '.variants[] | select(.name == "metadataApiElements")' "$ui_root" >/dev/null
           expected_targets=$'linux_arm64\nlinux_x64\nmingw_x64'
           actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$ui_root" | sort -u)"
           test "$actual_targets" = "$expected_targets"
@@ -318,7 +321,7 @@ jobs:
           test -s "$plugin_dir/compose-gradle-plugin-$RELEASE_VERSION.jar"
           test -s "$marker_dir/dev.brahmkshatriya.compose.gradle.plugin-$RELEASE_VERSION.pom"
 
-      - name: Upload, validate, and automatically publish Central bundle
+      - name: Upload Central bundle for automatic publication
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}

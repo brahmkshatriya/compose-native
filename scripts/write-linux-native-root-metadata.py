@@ -17,6 +17,31 @@ NATIVE_TARGETS = {
 }
 
 
+def is_publishable_root_variant(variant: dict[str, object]) -> bool:
+    """Keep shared metadata; platform variants are rebuilt from collected publications."""
+    return str(variant.get("name", "")).startswith("metadata")
+
+
+def remove_unpublished_stub_dependencies(variant: dict[str, object]) -> None:
+    dependencies = variant.get("dependencies")
+    if not isinstance(dependencies, list):
+        return
+    variant["dependencies"] = [
+        dependency
+        for dependency in dependencies
+        if not (
+            isinstance(dependency, dict)
+            and str(dependency.get("group", "")).startswith(
+                "compose-multiplatform-core."
+            )
+            and (
+                dependency.get("version") == {"requires": "unspecified"}
+                or dependency.get("version") == {"strictly": "unspecified"}
+            )
+        )
+    ]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Create Gradle module metadata roots for local KMP publications."
@@ -119,6 +144,17 @@ def main() -> None:
     created: list[str] = []
     for (root_group, root_module), variants in sorted(roots.items()):
         variants_by_name: dict[str, dict[str, object]] = {}
+        root_directory = repository.joinpath(*root_group.split("."), root_module, version)
+        root_module_file = root_directory / f"{root_module}-{version}.module"
+        if root_module_file.is_file():
+            local_root_metadata = json.loads(
+                root_module_file.read_text(encoding="utf-8")
+            )
+            variants_by_name.update(
+                (variant["name"], variant)
+                for variant in local_root_metadata.get("variants", [])
+                if is_publishable_root_variant(variant)
+            )
         if args.upstream_repository:
             encoded_version = quote(args.upstream_version, safe="")
             upstream_url = (
@@ -138,7 +174,8 @@ def main() -> None:
                     raise
 
         variants_by_name.update((variant["name"], variant) for variant in variants)
-        root_directory = repository.joinpath(*root_group.split("."), root_module, version)
+        for variant in variants_by_name.values():
+            remove_unpublished_stub_dependencies(variant)
         root_directory.mkdir(parents=True, exist_ok=True)
         pom_name = escape(f"{root_group}:{root_module}")
         pom_description = escape(

@@ -109,35 +109,4 @@ if [[ ! "$deployment_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
     exit 1
 fi
 echo "Uploaded Central deployment $deployment_id"
-
-for _ in $(seq 1 360); do
-    status_json="$(
-        curl --fail-with-body --silent --show-error \
-            --request POST \
-            --header "Authorization: Bearer $authorization" \
-            "https://central.sonatype.com/api/v1/publisher/status?id=$deployment_id"
-    )"
-    state="$(jq -r '.deploymentState // empty' <<< "$status_json")"
-    case "$state" in
-        PUBLISHED)
-            echo "Central deployment $deployment_id is published"
-            exit 0
-            ;;
-        FAILED)
-            echo "$status_json" | jq >&2
-            exit 1
-            ;;
-        PENDING|VALIDATING|VALIDATED|PUBLISHING)
-            echo "Central deployment state: $state"
-            ;;
-        *)
-            echo "Unexpected Central deployment response" >&2
-            echo "$status_json" | jq >&2
-            exit 1
-            ;;
-    esac
-    sleep 5
-done
-
-echo "Timed out waiting for Central deployment $deployment_id" >&2
-exit 1
+echo "Central will validate and automatically publish this deployment asynchronously."

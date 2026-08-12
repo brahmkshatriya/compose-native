@@ -5,9 +5,9 @@ native executables with no JVM requirement while allowing the same project to ke
 JetBrains Compose on Android, JVM, Apple, JS, and Wasm.
 
 The Gradle plugin works alongside `org.jetbrains.compose`: the official plugin continues to provide
-Compose resources and application tasks, while Compose Native adds only the desktop-native target
-DSL. You explicitly declare every Compose artifact and version that your project uses; the plugin
-does not add, replace, or select dependencies.
+Compose resources and application tasks, while Compose Native adds the desktop-native target DSL
+and supports a dependency overlay for those targets. It never adds a Compose dependency or chooses
+a version; every official and fork version remains explicit in the consumer's dependency block.
 
 > Compose Native is experimental. Pin its version and test upgrades before shipping them.
 
@@ -22,9 +22,9 @@ does not add, replace, or select dependencies.
 
 ## Fork-specific Compose changes
 
-These changes are included whenever you declare the corresponding fork artifacts. If an Android
-dependency brings the original AndroidX artifact into the same graph, use the explicit consumer-side
-substitution shown below.
+These changes are included whenever you declare the corresponding fork artifacts. When those
+artifacts are declared in `commonMain`, the plugin also keeps matching transitive JetBrains Compose
+and AndroidX Android requests on the fork.
 
 ### Foundation: stackable sticky headers
 
@@ -95,11 +95,11 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.12.0-rc01"
-    id("dev.brahmkshatriya.compose") version "1.12.10-alpha01"
+    id("dev.brahmkshatriya.compose") version "1.12.10-alpha02"
 }
 ```
 
-### Only Native
+### Fork only on desktop native
 
 ```kotlin
 kotlin {
@@ -110,73 +110,73 @@ kotlin {
     }
 
     sourceSets {
+        commonMain.dependencies {
+            implementation("org.jetbrains.compose.ui:ui:1.12.0-rc01")
+            implementation("org.jetbrains.compose.foundation:foundation:1.12.0-rc01")
+            implementation("org.jetbrains.compose.material3:material3:1.12.0-alpha03")
+        }
+
         desktopNativeMain.dependencies {
-            implementation(
-                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha01"
-            )
+            implementation("dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha02")
+            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha02")
+            implementation("dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha02")
+            implementation("dev.brahmkshatriya.skiko:skiko:0.151.3")
         }
     }
 }
 ```
 
-### Use fork-specific changes
+The dependencies in `commonMain` remain official on Android, JVM, Apple, JS, and Wasm. For Linux
+and Windows configurations, the plugin sees the explicitly versioned fork modules in
+`desktopNativeMain` and replaces the matching official module coordinates with those fork
+coordinates. The same scoped rule selects the explicitly declared Skiko fork. No version comes
+from plugin configuration.
 
-Declare the forked Foundation and Material 3 modules directly. This makes the selected fork version
-part of the build instead of plugin configuration:
+Add `dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha02` to
+`desktopNativeMain` as well when the project needs the native application/window APIs.
+
+### Fork changes on every target
+
+Put the fork coordinates in `commonMain` instead. Their Gradle metadata selects the matching fork
+variant for every published target, and the plugin aligns matching transitive Compose requests:
 
 ```kotlin
-val composeForkVersion = "1.12.10-alpha01"
-
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation(
-                "dev.brahmkshatriya.compose.foundation:" +
-                    "foundation:$composeForkVersion"
-            )
-            implementation(
-                "dev.brahmkshatriya.compose.material3:" +
-                    "material3:$composeForkVersion"
-            )
+            implementation("dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha02")
+            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha02")
+            implementation("dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha02")
         }
     }
 }
 ```
 
-Libraries in the same application may still request the original JetBrains Compose coordinates.
-Android dependencies may additionally request the underlying `androidx.compose.*-android`
-artifacts. Substitute only the modules whose fork-specific behavior you want:
+This applies the fork-specific UI, Foundation, and Material 3 changes to Android, JS, Wasm, Linux,
+and Windows. Only targets with published fork variants can use this form in the current release;
+JVM desktop and Apple must stay on official Compose until those fork variants are published.
 
-```kotlin
-val forkSubstitutions = mapOf(
-    "org.jetbrains.compose.foundation:foundation" to
-        "dev.brahmkshatriya.compose.foundation:foundation:$composeForkVersion",
-    "org.jetbrains.compose.material3:material3" to
-        "dev.brahmkshatriya.compose.material3:material3:$composeForkVersion",
-    "androidx.compose.foundation:foundation-android" to
-        "dev.brahmkshatriya.compose.foundation:foundation-android:$composeForkVersion",
-    "androidx.compose.material3:material3-android" to
-        "dev.brahmkshatriya.compose.material3:material3-android:$composeForkVersion",
-)
+### Transitive Compose dependencies
 
-configurations.configureEach {
-    resolutionStrategy.dependencySubstitution {
-        forkSubstitutions.forEach { (original, fork) ->
-            substitute(module(original)).using(module(fork))
-        }
-    }
-}
-```
+No manual substitution block is needed for full-fork modules. For every explicitly versioned fork
+module in `commonMain`, the plugin substitutes the matching transitive
+`org.jetbrains.compose.<family>:<module>` request throughout that project. On Android it also
+substitutes `androidx.compose.<family>:<module>-android` with the fork's Android artifact.
 
-The `org.jetbrains.compose.*` rules keep transitive multiplatform dependencies aligned with the
-declared fork. The `androidx.compose.*-android` rules ensure Android uses the fork AARs instead of
-pulling the original AndroidX implementations back into the graph. This is consumer configuration,
-not plugin behavior, so every substituted coordinate and version remains visible.
+For example, declaring
+`dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha02` makes both
+`org.jetbrains.compose.foundation:foundation` and
+`androidx.compose.foundation:foundation-android` resolve to Foundation `1.12.10-alpha02` from the
+fork. The same applies independently to each Runtime, UI, Animation, Foundation, Material, or
+Material 3 module explicitly declared in `commonMain`.
 
-This example assumes every target uses a published fork variant: Android, JS, Wasm JS, Linux x64,
-Linux arm64, or Windows x64. In a project that also targets JVM desktop or Apple platforms, put the
-fork dependencies in a target-specific or custom intermediate source set and scope the rules with
-`configurations.matching { ... }.configureEach`; those platforms must retain official Compose.
+The plugin does not infer a fork version or enable unlisted modules. The declaration remains the
+single visible source of the selected version. Substitution affects configurations in the project
+where the plugin is applied; apply the plugin and declare the required fork modules in each
+independently resolving subproject that should use the full fork.
+
+JVM desktop and Apple variants are not published in this release, so projects containing those
+targets cannot put these fork coordinates in `commonMain` yet.
 
 ## Native system requirements
 
@@ -230,7 +230,7 @@ Linux supports `OPENGL`, `SOFTWARE_FAST`, and `SOFTWARE_COMPAT`. Windows support
 
 | Component | Version |
 | --- | --- |
-| Compose Native plugin and fork artifacts | `1.12.10-alpha01` |
+| Compose Native plugin and fork artifacts | `1.12.10-alpha02` |
 | JetBrains Compose plugin | `1.12.0-rc01` |
 | Kotlin and Compose compiler plugin | `2.3.20` |
 | Native Skiko fork | `0.151.3` |

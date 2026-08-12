@@ -79,6 +79,9 @@ def addMavenRepositories(RepositoryHandler handler) {
             url = "https://packages.jetbrains.team/maven/p/cmp/dev"
         }
         handler.maven {
+            url = "https://packages.jetbrains.team/maven/p/ij/intellij-dependencies"
+        }
+        handler.maven {
             url = "https://packages.jetbrains.team/maven/p/kt/dev"
             content {
                 includeGroupByRegex("org\\.jetbrains\\.kotlin.*")

@@ -79,17 +79,22 @@ private fun Project.configureComposeNativeSkikoResolution() {
 
     configurations.configureEach { configuration ->
         val lowerName = configuration.name.lowercase()
-        if ("linuxx64" !in lowerName && "linuxarm64" !in lowerName && "mingwx64" !in lowerName) {
+        if (
+            "linuxx64" !in lowerName &&
+                "linuxarm64" !in lowerName &&
+                "mingwx64" !in lowerName &&
+                "metadatanativemain" !in lowerName
+        ) {
             return@configureEach
         }
-        configuration.resolutionStrategy.eachDependency { details ->
-            if (
-                details.requested.group == "org.jetbrains.skiko" &&
-                    details.requested.name == "skiko"
-            ) {
-                details.useTarget("${nativeSkikoGroup.get()}:skiko:${nativeSkikoVersion.get()}")
-                details.because("Use Compose Native Skiko only for desktop Kotlin/Native")
-            }
+        configuration.resolutionStrategy.dependencySubstitution { substitutions ->
+            substitutions.substitute(substitutions.module("org.jetbrains.skiko:skiko"))
+                .using(
+                    substitutions.module(
+                        "${nativeSkikoGroup.get()}:skiko:${nativeSkikoVersion.get()}"
+                    )
+                )
+                .because("Use Compose Native Skiko only for desktop Kotlin/Native")
         }
     }
 }

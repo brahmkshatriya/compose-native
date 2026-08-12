@@ -116,6 +116,11 @@ androidXMultiplatform {
         // neutral actuals in linuxMain and therefore must not inherit this source set.
         skikoMain {
             dependsOn(nonAndroidMain)
+            dependencies {
+                // Needed to compile the shared Skiko metadata. Native configurations replace
+                // this coordinate with skikoNative in the root build and consumer plugin.
+                implementation(libs.skiko)
+            }
         }
 
         nonAndroidExcludingWebMain {
@@ -161,9 +166,6 @@ androidXMultiplatform {
         nativeMain {
             dependsOn(nonJvmMain)
             dependsOn(nonAndroidExcludingWebMain)
-            dependencies {
-                api(libs.skikoNative)
-            }
         }
 
         nativeTest {

@@ -54,6 +54,10 @@ androidXMultiplatform {
             dependsOn(commonMain)
             dependencies {
                 implementation(libs.atomicFu)
+                // Shared non-Android sources expose Skiko types. Native configurations replace
+                // this coordinate with skikoNative; the native publication also records that
+                // fork explicitly so consumers can make the same scoped replacement.
+                api(libs.skiko)
             }
         }
 
@@ -73,7 +77,6 @@ androidXMultiplatform {
             dependsOn(nonAndroidMain)
             dependsOn(nonAndroidExcludingWebMain)
             dependencies {
-                api(libs.skiko)
                 runtimeOnly(libs.skikoAwtRuntime)
             }
         }
@@ -101,13 +104,6 @@ androidXMultiplatform {
         nativeMain {
             dependsOn(nonJvmMain)
             dependsOn(nonAndroidExcludingWebMain)
-            dependencies {
-                api(libs.skikoNative)
-            }
-        }
-
-        webMain.dependencies {
-            api(libs.skiko)
         }
 
         nativeTest {

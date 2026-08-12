@@ -167,6 +167,7 @@ import sdl3.SDL_EVENT_WINDOW_RESTORED
 import sdl3.SDL_EVENT_WINDOW_SHOWN
 import sdl3.SDL_Event
 import sdl3.SDL_GetError
+import sdl3.SDL_GetModState
 import sdl3.SDL_GetMouseState
 import sdl3.SDL_GetPerformanceCounter
 import sdl3.SDL_GetPerformanceFrequency
@@ -2078,14 +2079,20 @@ internal class NativeWindowHost(
                         1f
                     } else {
                         -1f
-                    }
+                }
                 val step = 40f * (metrics?.density ?: 1f)
+                val modifiers = SDL_GetModState().toInt()
+                val scrollDelta =
+                    nativeMouseWheelScrollDelta(
+                        x = event.wheel.x * step * direction,
+                        y = event.wheel.y * step * direction,
+                        isShiftPressed = modifiers and SdlShiftMask != 0,
+                    )
                 pointer(
                     PointerEventType.Scroll,
                     pointerX,
                     pointerY,
-                    scrollDelta =
-                        Offset(event.wheel.x * step * direction, event.wheel.y * step * direction),
+                    scrollDelta = scrollDelta,
                 )
             }
             SDL_EVENT_MOUSE_BUTTON_DOWN.toUInt(),
@@ -2596,6 +2603,18 @@ private fun pointerKeyboardModifiers(modifiers: Int) =
         isScrollLockOn = modifiers and SdlScrollLockMask != 0,
         isNumLockOn = modifiers and SdlNumLockMask != 0,
     )
+
+/** Converts Shift + a vertical mouse-wheel tick into horizontal scrolling. */
+internal fun nativeMouseWheelScrollDelta(
+    x: Float,
+    y: Float,
+    isShiftPressed: Boolean,
+): Offset =
+    if (isShiftPressed && x == 0f) {
+        Offset(x = y, y = 0f)
+    } else {
+        Offset(x = x, y = y)
+    }
 
 /** Maps SDL's USB/HID scancode values to Compose's platform-independent key identities. */
 internal fun composeKeyForSdlScancode(scancode: Int): Key =

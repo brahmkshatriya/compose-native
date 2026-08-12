@@ -23,6 +23,7 @@ import androidx.build.uptodatedness.cacheEvenIfNoOutputs
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.Project
+import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.provider.Property
 import org.gradle.api.provider.SetProperty
 import org.gradle.api.tasks.CacheableTask
@@ -67,7 +68,15 @@ abstract class JetBrainsVerifyDependencyVersionsTask : DefaultTask() {
         if (projectReleasePhase < 0) {
             throw GradleException("Project has unexpected release phase $projectVersion")
         }
-        val dependencyReleasePhase = releasePhase(dependencyVersion)
+        val dependencyReleasePhase = try {
+            releasePhase(dependencyVersion)
+        } catch (exception: IllegalArgumentException) {
+            throw GradleException(
+                "Cannot parse version of dependency ${dependency.group}:${dependency.name}:" +
+                    "${dependency.version} for configuration ${dependency.configurationName}",
+                exception,
+            )
+        }
         if (dependencyReleasePhase < 0) {
             throw GradleException(
                 "Dependency ${dependency.group}:${dependency.name}" +
@@ -132,11 +141,30 @@ internal fun Project.configureDependencyVerification() {
                     .flatMap { configuration ->
                         configuration.allDependencies
                             .filter { it.group != null && it.version != null }
-                            .map { dependency ->
+                            .mapNotNull { dependency ->
+                                val dependencyGroup: String
+                                val dependencyName: String
+                                val dependencyVersion: String
+                                if (dependency is ProjectDependency) {
+                                    val dependencyProject = project.project(dependency.path)
+                                    // Host-incompatible projects are represented by unpublished
+                                    // `mpp/stub-project` projects. Their platform is not published
+                                    // by this host and there is no version to verify here.
+                                    if (dependencyProject.version.toString() == "unspecified") {
+                                        return@mapNotNull null
+                                    }
+                                    dependencyGroup = dependencyProject.group.toString()
+                                    dependencyName = dependencyProject.name
+                                    dependencyVersion = dependencyProject.version.toString()
+                                } else {
+                                    dependencyGroup = dependency.group!!
+                                    dependencyName = dependency.name
+                                    dependencyVersion = dependency.version!!
+                                }
                                 AndroidXDependency(
-                                    dependency.group!!,
-                                    dependency.name,
-                                    dependency.version!!,
+                                    dependencyGroup,
+                                    dependencyName,
+                                    dependencyVersion,
                                     configuration.name,
                                 )
                             }

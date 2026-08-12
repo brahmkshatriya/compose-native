@@ -55,6 +55,34 @@ tasks.register("publishComposeForkPlatformsToMavenLocal", ComposePublishingTask:
     }
 }
 
+tasks.register("publishComposeForkRootsToMavenLocal") {
+    group = "Compose Multiplatform"
+    description = "Publishes fork KMP roots, including their common metadata artifacts"
+
+    JetBrainsPublication.nativeComponents
+        .filterNot {
+            it.path == ":compose:desktop:desktop-native" ||
+                it.path == ":compose:components:components-resources"
+        }
+        .forEach { component ->
+            rootProject.findProject(component.path)
+                ?.tasks
+                ?.findByName("publishKotlinMultiplatformPublicationToMavenLocal")
+                ?.let { dependsOn(it) }
+        }
+}
+
+tasks.register("publishCompleteComposeForkToMavenLocal", ComposePublishingTask::class) {
+    group = "Compose Multiplatform"
+    description = "Publishes complete fork KMP roots and every requested target to Maven Local"
+    repository = "MavenLocal"
+    composeProperties = parsedComposeProperties
+
+    JetBrainsPublication.forkComposeComponents.forEach {
+        publishAvailablePlatforms(rootProject, it)
+    }
+}
+
 val libraries = project.findProperty("jetbrains.publication.libraries")
     ?.toString()?.split(",")
     ?: libraryToComponents.keys

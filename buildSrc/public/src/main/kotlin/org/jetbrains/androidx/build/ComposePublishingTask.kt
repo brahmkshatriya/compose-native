@@ -52,6 +52,32 @@ open class ComposePublishingTask : DefaultTask() {
         }
     }
 
+    /** Publishes a KMP root and every requested target publication that the project declares. */
+    fun publishAvailablePlatforms(rootProject: Project, component: ComposeComponent) {
+        val project =
+            rootProject.findProject(component.path)
+                ?: throw IllegalArgumentException("Cannot find project ${component.path}")
+
+        project.tasks
+            .findByName(
+                "publish${ComposePlatforms.KotlinMultiplatform.name}PublicationTo$repository"
+            )
+            ?.path
+            ?.let(::dependsOnComposeTask)
+
+        for (platform in component.supportedPlatforms) {
+            if (platform !in targetPlatforms) continue
+            resolvePublicationNameOrNull(project, platform, repository)?.let { publicationName ->
+                dependsOnComposeTask(
+                    "${component.path}:publish${publicationName}PublicationTo$repository"
+                )
+            }
+        }
+        project.tasks.findByName("jbVerifyDependencyVersions")?.let { verificationTask ->
+            dependsOn(verificationTask)
+        }
+    }
+
     private fun publish(project: String, publications: Collection<String>) {
         for (publication in publications) {
             dependsOnComposeTask("$project:publish${publication}PublicationTo$repository")
@@ -105,5 +131,16 @@ open class ComposePublishingTask : DefaultTask() {
             }
         }
         return platform.name
+    }
+
+    private fun resolvePublicationNameOrNull(
+        project: Project,
+        platform: ComposePlatforms,
+        repository: String,
+    ): String? {
+        val candidates = listOf(platform.name) + platform.alternativeNames
+        return candidates.firstOrNull { name ->
+            project.tasks.findByName("publish${name}PublicationTo$repository") != null
+        }
     }
 }

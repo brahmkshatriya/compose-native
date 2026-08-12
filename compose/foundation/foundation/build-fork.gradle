@@ -130,6 +130,7 @@ androidXMultiplatform {
             dependsOn(skikoMain)
             dependencies {
                 api(project(":compose:ui:ui-skiko"))
+                api(libs.skiko)
             }
         }
 

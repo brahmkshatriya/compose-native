@@ -7,7 +7,7 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 
 | Role | Version |
 | --- | --- |
-| Fork artifacts | `1.12.10-alpha01` |
+| Fork artifacts | `1.12.10-alpha02` |
 | JetBrains Compose upstream | `1.12.0-rc01` |
 | Maven Central Material 3 upstream | `1.12.0-alpha03` |
 | Official Skiko (desktop/web) | `0.150.1` |
@@ -79,7 +79,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.12.0-rc01"
-    id("dev.brahmkshatriya.compose") version "1.12.10-alpha01"
+    id("dev.brahmkshatriya.compose") version "1.12.10-alpha02"
 }
 ```
 
@@ -91,15 +91,15 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha01"
+                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha02"
             )
             implementation(
-                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha01"
+                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha02"
             )
         }
         desktopNativeMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha01"
+                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha02"
             )
         }
     }
@@ -124,8 +124,9 @@ The tag workflow `.github/workflows/publish-compose-native-central.yml` builds a
 - the Gradle plugin implementation and plugin marker
 
 It signs and uploads the complete set as one automatically released Central Portal deployment.
-The platform build jobs do not receive publication secrets; only the final merge job can sign and
-upload the bundle.
+The workflow finishes after Central accepts the upload; validation and automatic publication then
+continue asynchronously in Central Portal. The platform build jobs do not receive publication
+secrets; only the final merge job can sign and upload the bundle.
 
 Configure these GitHub Actions repository secrets:
 
@@ -139,12 +140,12 @@ Create and push a version tag that exactly matches both
 `jetbrains.publication.version.COMPOSE` and the Gradle plugin version:
 
 ```bash
-git tag 1.12.10-alpha01
-git push origin 1.12.10-alpha01
+git tag 1.12.10-alpha02
+git push origin 1.12.10-alpha02
 ```
 
 The deployment includes both the implementation artifact
-`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha01` and the marker
-`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha01`.
+`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha02` and the marker
+`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha02`.
 Native Skiko `0.151.3` must already be available from Maven Central. Do not reuse a published tag
 version: Central releases are immutable.

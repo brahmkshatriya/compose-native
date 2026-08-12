@@ -15,6 +15,7 @@
  */
 
 import androidx.build.KotlinTarget
+import androidx.build.SoftwareType
 import org.jetbrains.androidx.build.XcodeBuildLock
 
 plugins {
@@ -304,6 +305,7 @@ private def configureSwiftUtils(target, xcodeProjectDir, sdkName, destination, a
 
 androidx {
     name = "Compose UIKit"
+    type = SoftwareType.PUBLISHED_LIBRARY_ONLY_USED_BY_KOTLIN_CONSUMERS
     inceptionYear = "2023"
     description = "Internal iOS UIKit utilities including Objective-C library."
     legacyDisableKotlinStrictApiMode = true
