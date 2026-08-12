@@ -122,6 +122,10 @@ jobs:
           if [[ "$RUNNER_OS" == 'Windows' ]]; then
             gradle_command='./gradlew.bat'
           fi
+          publication_tasks=(':mpp:publishComposeNativeToMavenLocal')
+          if [[ "$COMPOSE_PLATFORM" == 'LinuxX64' ]]; then
+            publication_tasks+=(':mpp:publishComposeForkRootsToMavenLocal')
+          fi
           "$gradle_command" \
             --no-daemon \
             --stacktrace \
@@ -134,7 +138,7 @@ jobs:
             "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
-            :mpp:publishComposeNativeToMavenLocal
+            "${publication_tasks[@]}"
 
       - name: Export only fork publications
         shell: bash
@@ -200,8 +204,7 @@ jobs:
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
             "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            :mpp:publishComposeForkPlatformsToMavenLocal \
-            :mpp:publishComposeForkRootsToMavenLocal
+            :mpp:publishComposeForkPlatformsToMavenLocal
 
       - name: Export only fork publications
         shell: bash

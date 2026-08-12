@@ -83,7 +83,7 @@ private fun Project.configureComposeNativeSkikoResolution() {
             "linuxx64" !in lowerName &&
                 "linuxarm64" !in lowerName &&
                 "mingwx64" !in lowerName &&
-                "metadatanativemain" !in lowerName
+                "nativemain" !in lowerName
         ) {
             return@configureEach
         }
