@@ -84,6 +84,7 @@ private fun Project.configureDependencySubstitutions() {
 
         configurations
             .configureEach { configuration ->
+                val isAndroidConfiguration = configuration.name.isAndroidConfiguration()
                 val substitutions =
                     if (configuration.name.isDesktopNativeConfiguration()) {
                         fullForkSubstitutions + nativeOverlaySubstitutions
@@ -104,7 +105,13 @@ private fun Project.configureDependencySubstitutions() {
                             details.requested as? ModuleComponentSelector ?: return@all
                         val substitution =
                             substitutions["${selector.group}:${selector.module}"]
-                        if (substitution != null) {
+                        if (
+                            substitution != null &&
+                                (
+                                    !selector.group.startsWith(ANDROIDX_COMPOSE_GROUP_PREFIX) ||
+                                        isAndroidConfiguration
+                                )
+                        ) {
                             details.useTarget(substitution.forkCoordinate)
                             return@all
                         }
@@ -114,7 +121,10 @@ private fun Project.configureDependencySubstitutions() {
                                     selector.group,
                                     selector.module,
                                     it,
-                                    includeAndroidx = fullForkComposeVersion != null,
+                                    includeJetBrainsAndroidx =
+                                        configuration.name.isDesktopNativeConfiguration(),
+                                    includeAndroidx =
+                                        fullForkComposeVersion != null && isAndroidConfiguration,
                                 )
                             } ?: return@all
                         details.useTarget(composeTarget)
@@ -138,6 +148,7 @@ internal fun composeForkCoordinateFor(
     group: String,
     module: String,
     version: String,
+    includeJetBrainsAndroidx: Boolean = true,
     includeAndroidx: Boolean,
 ): String? {
     if (group.startsWith(OFFICIAL_COMPOSE_GROUP_PREFIX)) {
@@ -146,7 +157,7 @@ internal fun composeForkCoordinateFor(
             return "$FORK_COMPOSE_GROUP_PREFIX$family:$module:$version"
         }
     }
-    if (group.startsWith(OFFICIAL_ANDROIDX_GROUP_PREFIX)) {
+    if (includeJetBrainsAndroidx && group.startsWith(OFFICIAL_ANDROIDX_GROUP_PREFIX)) {
         val family = group.removePrefix(OFFICIAL_ANDROIDX_GROUP_PREFIX)
         if (family in FORK_ANDROIDX_FAMILIES) {
             return "$FORK_ANDROIDX_GROUP_PREFIX$family:$module:$version"
@@ -154,7 +165,10 @@ internal fun composeForkCoordinateFor(
     }
     if (includeAndroidx && group.startsWith(ANDROIDX_COMPOSE_GROUP_PREFIX)) {
         val family = group.removePrefix(ANDROIDX_COMPOSE_GROUP_PREFIX)
-        if (family in ANDROIDX_COMPOSE_FAMILIES) {
+        if (
+            family in ANDROIDX_COMPOSE_FAMILIES &&
+                module.removeSuffix("-android") in ANDROIDX_COMPOSE_FORK_MODULES
+        ) {
             return "$FORK_COMPOSE_GROUP_PREFIX$family:$module:$version"
         }
     }
@@ -212,6 +226,8 @@ private fun String.isDesktopNativeConfiguration(): Boolean {
     val normalized = lowercase()
     return DESKTOP_NATIVE_CONFIGURATION_MARKERS.any(normalized::contains)
 }
+
+private fun String.isAndroidConfiguration(): Boolean = contains("android", ignoreCase = true)
 
 internal fun Project.configureDesktopNativeExecutable(executableSpec: DesktopNativeExecutable) {
     val entryPoint = executableSpec.requiredEntryPoint()
@@ -340,6 +356,27 @@ private const val OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 private const val FORK_SKIKO_GROUP = "dev.brahmkshatriya.skiko"
 private val ANDROIDX_COMPOSE_FAMILIES =
     setOf("animation", "foundation", "material", "material3", "runtime", "ui")
+private val ANDROIDX_COMPOSE_FORK_MODULES =
+    setOf(
+        "animation",
+        "animation-core",
+        "animation-graphics",
+        "foundation",
+        "foundation-layout",
+        "material",
+        "material-ripple",
+        "material3",
+        "runtime",
+        "runtime-saveable",
+        "ui",
+        "ui-backhandler",
+        "ui-geometry",
+        "ui-graphics",
+        "ui-skiko",
+        "ui-text",
+        "ui-unit",
+        "ui-util",
+    )
 private val COMPOSE_FAMILIES =
     ANDROIDX_COMPOSE_FAMILIES + setOf("components", "desktop")
 private val FORK_ANDROIDX_FAMILIES =

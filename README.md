@@ -95,7 +95,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.12.0-rc01"
-    id("dev.brahmkshatriya.compose") version "1.12.10-alpha03"
+    id("dev.brahmkshatriya.compose") version "1.12.10-alpha04"
 }
 ```
 
@@ -117,9 +117,9 @@ kotlin {
         }
 
         desktopNativeMain.dependencies {
-            implementation("dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha03")
-            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha03")
-            implementation("dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha03")
+            implementation("dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha04")
+            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha04")
+            implementation("dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha04")
             implementation("dev.brahmkshatriya.skiko:skiko:0.151.3")
         }
     }
@@ -132,7 +132,7 @@ and Windows configurations, the plugin sees the explicitly versioned fork module
 coordinates. The same scoped rule selects the explicitly declared Skiko fork. No version comes
 from plugin configuration.
 
-Add `dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha03` to
+Add `dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha04` to
 `desktopNativeMain` as well when the project needs the native application/window APIs.
 
 ### Fork changes on every target
@@ -144,9 +144,9 @@ variant for every published target, and the plugin aligns matching transitive Co
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha03")
-            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha03")
-            implementation("dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha03")
+            implementation("dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha04")
+            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha04")
+            implementation("dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha04")
         }
     }
 }
@@ -164,11 +164,15 @@ module in `commonMain`, the plugin substitutes the matching transitive
 substitutes `androidx.compose.<family>:<module>-android` with the fork's Android artifact.
 
 For example, declaring
-`dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha03` makes both
+`dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha04` makes both
 `org.jetbrains.compose.foundation:foundation` and
-`androidx.compose.foundation:foundation-android` resolve to Foundation `1.12.10-alpha03` from the
+`androidx.compose.foundation:foundation-android` resolve to Foundation `1.12.10-alpha04` from the
 fork. The same applies independently to each Runtime, UI, Animation, Foundation, Material, or
 Material 3 module explicitly declared in `commonMain`.
+
+AndroidX Compose coordinates are substituted only in Android configurations and only when the
+corresponding fork module is published. JetBrains AndroidX support modules use fork artifacts on
+Linux and Windows, while Android, JS, and Wasm retain their official platform artifacts.
 
 The plugin does not infer a fork version or enable unlisted modules. The declaration remains the
 single visible source of the selected version. Substitution affects configurations in the project
@@ -230,7 +234,7 @@ Linux supports `OPENGL`, `SOFTWARE_FAST`, and `SOFTWARE_COMPAT`. Windows support
 
 | Component | Version |
 | --- | --- |
-| Compose Native plugin and fork artifacts | `1.12.10-alpha03` |
+| Compose Native plugin and fork artifacts | `1.12.10-alpha04` |
 | JetBrains Compose plugin | `1.12.0-rc01` |
 | Kotlin and Compose compiler plugin | `2.3.20` |
 | Native Skiko fork | `0.151.3` |

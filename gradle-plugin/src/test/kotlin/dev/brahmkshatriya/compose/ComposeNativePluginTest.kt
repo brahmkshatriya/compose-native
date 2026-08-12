@@ -163,10 +163,44 @@ class ComposeNativePluginTest {
         )
         assertNull(
             composeForkCoordinateFor(
+                "org.jetbrains.androidx.lifecycle",
+                "lifecycle-runtime",
+                "1.12.10-alpha02",
+                includeJetBrainsAndroidx = false,
+                includeAndroidx = false,
+            )
+        )
+        assertNull(
+            composeForkCoordinateFor(
                 "androidx.compose.runtime",
                 "runtime",
                 "1.12.10-alpha02",
                 includeAndroidx = false,
+            )
+        )
+        assertEquals(
+            "dev.brahmkshatriya.compose.runtime:runtime-android:1.12.10-alpha02",
+            composeForkCoordinateFor(
+                "androidx.compose.runtime",
+                "runtime-android",
+                "1.12.10-alpha02",
+                includeAndroidx = true,
+            ),
+        )
+        assertNull(
+            composeForkCoordinateFor(
+                "androidx.compose.runtime",
+                "runtime-retain",
+                "1.12.10-alpha02",
+                includeAndroidx = true,
+            )
+        )
+        assertNull(
+            composeForkCoordinateFor(
+                "androidx.compose.runtime",
+                "runtime-annotation",
+                "1.12.10-alpha02",
+                includeAndroidx = true,
             )
         )
     }

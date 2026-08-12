@@ -7,7 +7,7 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 
 | Role | Version |
 | --- | --- |
-| Fork artifacts | `1.12.10-alpha03` |
+| Fork artifacts | `1.12.10-alpha04` |
 | JetBrains Compose upstream | `1.12.0-rc01` |
 | Maven Central Material 3 upstream | `1.12.0-alpha03` |
 | Official Skiko (desktop/web) | `0.150.1` |
@@ -79,7 +79,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.12.0-rc01"
-    id("dev.brahmkshatriya.compose") version "1.12.10-alpha03"
+    id("dev.brahmkshatriya.compose") version "1.12.10-alpha04"
 }
 ```
 
@@ -91,25 +91,27 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha03"
+                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha04"
             )
             implementation(
-                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha03"
+                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha04"
             )
         }
         desktopNativeMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha03"
+                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha04"
             )
         }
     }
 }
 ```
 
-The plugin has no project-level configuration extension and performs no dependency substitution. It
-never adds Compose dependencies or chooses Compose or Skiko versions. Consumers that need to replace
-transitive JetBrains Compose or AndroidX modules configure Gradle's standard dependency-substitution
-API directly, as documented in the root README.
+The plugin has no project-level configuration extension, never adds Compose dependencies, and never
+chooses Compose or Skiko versions. Explicit fork dependencies drive scoped substitution: declarations
+in `desktopNativeMain` overlay Linux and Windows, while declarations in `commonMain` select the full
+fork on every published platform. AndroidX Compose substitutions are restricted to Android and to
+modules actually published by the fork; JetBrains AndroidX support substitutions are restricted to
+desktop native.
 
 The selector recognizes `linux_x64`, `linux_arm64`, and `mingw_x64`. Their matching Skiko artifacts
 are available from Maven Central; the matching Compose artifacts must also be published before use.
@@ -140,12 +142,12 @@ Create and push a version tag that exactly matches both
 `jetbrains.publication.version.COMPOSE` and the Gradle plugin version:
 
 ```bash
-git tag 1.12.10-alpha03
-git push origin 1.12.10-alpha03
+git tag 1.12.10-alpha04
+git push origin 1.12.10-alpha04
 ```
 
 The deployment includes both the implementation artifact
-`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha03` and the marker
-`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha03`.
+`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha04` and the marker
+`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha04`.
 Native Skiko `0.151.3` must already be available from Maven Central. Do not reuse a published tag
 version: Central releases are immutable.

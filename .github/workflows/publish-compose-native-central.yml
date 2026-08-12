@@ -29,7 +29,7 @@ jobs:
           set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
-            echo "Tag must be a Maven version such as 1.12.10-alpha03 or v1.12.10-alpha03" >&2
+            echo "Tag must be a Maven version such as 1.12.10-alpha04 or v1.12.10-alpha04" >&2
             exit 1
           fi
           contract_version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
