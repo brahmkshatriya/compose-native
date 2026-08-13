@@ -103,6 +103,8 @@ metadata_args=(
     --upstream-lifecycle-version "$(read_compose_property 'compose.native.upstream.version.LIFECYCLE')"
     --upstream-navigationevent-version "$(read_compose_property 'compose.native.upstream.version.NAVIGATION_EVENT')"
     --upstream-savedstate-version "$(read_compose_property 'compose.native.upstream.version.SAVEDSTATE')"
+    --native-skiko-group "$(read_compose_property 'compose.native.skiko.group')"
+    --native-skiko-version "$(read_compose_property 'compose.native.skiko.version')"
 )
 "$compose_root/scripts/write-linux-native-root-metadata.py" "${metadata_args[@]}"
 

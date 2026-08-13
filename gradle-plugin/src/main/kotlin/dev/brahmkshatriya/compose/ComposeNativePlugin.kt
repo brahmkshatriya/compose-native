@@ -11,10 +11,18 @@ import org.gradle.api.plugins.ExtensionAware
 
 class ComposeNativePlugin : Plugin<Project> {
     override fun apply(project: Project) {
+        project.enableRequestedCoordinateMatching()
         project.addDesktopNativeSourceSets()
         project.configureSkikoCapabilityResolution()
         project.configureDependencySubstitutions()
     }
+}
+
+private fun Project.enableRequestedCoordinateMatching() {
+    extensions.extraProperties.set(
+        KMP_MATCH_REQUESTED_COORDINATES_PROPERTY,
+        true,
+    )
 }
 
 private fun Project.configureSkikoCapabilityResolution() {
@@ -343,6 +351,8 @@ private fun Any.dependsOnSourceSet(sourceSet: Any) {
 }
 
 private const val KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multiplatform"
+private const val KMP_MATCH_REQUESTED_COORDINATES_PROPERTY =
+    "kotlin.internal.kmp.allowMatchingByRequestedCoordinatesInMetadataTransformations"
 private const val KOTLIN_NATIVE_BINARY_CONTAINER_CLASS =
     "org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer"
 private const val COMMON_MAIN_CONFIGURATION_PREFIX = "commonMain"

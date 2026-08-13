@@ -16,6 +16,8 @@ NATIVE_TARGETS = {
     "linuxarm64": "linux_arm64",
     "mingwx64": "mingw_x64",
 }
+OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
+SKIKO_MODULE = "skiko"
 
 
 def upstream_group_for_fork_dependency(group: str, group_prefix: str) -> str | None:
@@ -49,14 +51,34 @@ def rewrite_module_dependency_groups(
     group_prefix: str,
     publication_version: str,
     upstream_versions: dict[str, str],
+    native_skiko_group: str,
+    native_skiko_version: str,
 ) -> int:
     metadata = json.loads(module_file.read_text(encoding="utf-8"))
     rewritten = 0
     for variant in metadata.get("variants", []):
+        is_desktop_native = (
+            variant.get("attributes", {}).get("org.jetbrains.kotlin.native.target")
+            in NATIVE_TARGETS.values()
+        )
         for dependency_section in ("dependencies", "dependencyConstraints"):
             for dependency in variant.get(dependency_section, []):
                 group = dependency.get("group")
                 if not isinstance(group, str):
+                    continue
+                if (
+                    is_desktop_native
+                    and group == OFFICIAL_SKIKO_GROUP
+                    and dependency.get("module") == SKIKO_MODULE
+                ):
+                    dependency["group"] = native_skiko_group
+                    rewritten += 1
+                    version = dependency.get("version")
+                    if isinstance(version, dict):
+                        for key in ("requires", "strictly", "prefers"):
+                            if key in version and version[key] != native_skiko_version:
+                                version[key] = native_skiko_version
+                                rewritten += 1
                     continue
                 upstream_group = upstream_group_for_fork_dependency(
                     group, group_prefix
@@ -89,9 +111,16 @@ def rewrite_pom_dependency_groups(
     group_prefix: str,
     publication_version: str,
     upstream_versions: dict[str, str],
+    native_skiko_group: str,
+    native_skiko_version: str,
 ) -> int:
     pom = pom_file.read_text(encoding="utf-8")
     rewritten = 0
+    artifact = pom_file.parent.parent.name
+    is_desktop_native = any(
+        artifact.endswith(f"-{platform_suffix}")
+        for platform_suffix in NATIVE_TARGETS
+    )
 
     def rewrite_dependency(match: re.Match[str]) -> str:
         nonlocal rewritten
@@ -101,6 +130,25 @@ def rewrite_pom_dependency_groups(
         if group_match is None:
             return dependency
         group = group_match.group(1)
+        artifact_match = re.search(r"<artifactId>([^<]+)</artifactId>", dependency)
+        if (
+            is_desktop_native
+            and group == OFFICIAL_SKIKO_GROUP
+            and artifact_match is not None
+            and artifact_match.group(1) == SKIKO_MODULE
+        ):
+            dependency = dependency.replace(
+                f"<groupId>{group}</groupId>",
+                f"<groupId>{native_skiko_group}</groupId>",
+                1,
+            )
+            rewritten += 1
+            version_pattern = re.compile(r"(<version>)([^<]+)(</version>)")
+            dependency, version_rewrites = version_pattern.subn(
+                rf"\g<1>{native_skiko_version}\g<3>", dependency, count=1
+            )
+            rewritten += version_rewrites
+            return dependency
         upstream_group = upstream_group_for_fork_dependency(group, group_prefix)
         if upstream_group is not None:
             dependency = dependency.replace(
@@ -141,16 +189,28 @@ def rewrite_repository_dependency_groups(
     version: str,
     group_prefix: str,
     upstream_versions: dict[str, str],
+    native_skiko_group: str,
+    native_skiko_version: str,
 ) -> tuple[int, int]:
     modules_rewritten = sum(
         rewrite_module_dependency_groups(
-            module_file, group_prefix, version, upstream_versions
+            module_file,
+            group_prefix,
+            version,
+            upstream_versions,
+            native_skiko_group,
+            native_skiko_version,
         )
         for module_file in repository.glob(f"**/{version}/*-{version}.module")
     )
     poms_rewritten = sum(
         rewrite_pom_dependency_groups(
-            pom_file, group_prefix, version, upstream_versions
+            pom_file,
+            group_prefix,
+            version,
+            upstream_versions,
+            native_skiko_group,
+            native_skiko_version,
         )
         for pom_file in repository.glob(f"**/{version}/*-{version}.pom")
     )
@@ -206,6 +266,8 @@ def main() -> None:
     parser.add_argument("--upstream-lifecycle-version")
     parser.add_argument("--upstream-navigationevent-version")
     parser.add_argument("--upstream-savedstate-version")
+    parser.add_argument("--native-skiko-group")
+    parser.add_argument("--native-skiko-version")
     args = parser.parse_args()
 
     if bool(args.upstream_repository) != bool(args.upstream_version):
@@ -214,6 +276,15 @@ def main() -> None:
         parser.error("--group and --module must be used together")
     if args.group and args.group_prefix:
         parser.error("--group and --group-prefix cannot be used together")
+    if bool(args.native_skiko_group) != bool(args.native_skiko_version):
+        parser.error(
+            "--native-skiko-group and --native-skiko-version must be used together"
+        )
+    if args.group_prefix and not args.native_skiko_group:
+        parser.error(
+            "--native-skiko-group and --native-skiko-version are required with "
+            "--group-prefix"
+        )
     repository = args.repository.expanduser().resolve()
     version = args.version
     upstream_versions = {
@@ -230,7 +301,12 @@ def main() -> None:
     if args.group_prefix:
         module_dependencies_rewritten, pom_dependencies_rewritten = (
             rewrite_repository_dependency_groups(
-                repository, version, args.group_prefix, upstream_versions
+                repository,
+                version,
+                args.group_prefix,
+                upstream_versions,
+                args.native_skiko_group,
+                args.native_skiko_version,
             )
         )
     else:
@@ -405,7 +481,12 @@ def main() -> None:
     if args.group_prefix:
         additional_module_dependencies, additional_pom_dependencies = (
             rewrite_repository_dependency_groups(
-                repository, version, args.group_prefix, upstream_versions
+                repository,
+                version,
+                args.group_prefix,
+                upstream_versions,
+                args.native_skiko_group,
+                args.native_skiko_version,
             )
         )
         module_dependencies_rewritten += additional_module_dependencies
@@ -418,7 +499,7 @@ def main() -> None:
     print(
         "Rewrote "
         f"{module_dependencies_rewritten} module and "
-        f"{pom_dependencies_rewritten} POM dependency coordinates to upstream groups"
+        f"{pom_dependencies_rewritten} POM dependency coordinates for publication"
     )
 
 

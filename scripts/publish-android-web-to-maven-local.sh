@@ -72,6 +72,8 @@ echo "Publishing forked Compose Android, JS, and Wasm targets as $group_prefix:*
     --upstream-lifecycle-version "$(read_compose_property 'compose.native.upstream.version.LIFECYCLE')" \
     --upstream-navigationevent-version "$(read_compose_property 'compose.native.upstream.version.NAVIGATION_EVENT')" \
     --upstream-savedstate-version "$(read_compose_property 'compose.native.upstream.version.SAVEDSTATE')" \
+    --native-skiko-group "$(read_compose_property 'compose.native.skiko.group')" \
+    --native-skiko-version "$(read_compose_property 'compose.native.skiko.version')" \
     --all-platforms
 
 "$compose_root/gradlew" \

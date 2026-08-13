@@ -7,6 +7,20 @@ import org.gradle.testfixtures.ProjectBuilder
 
 class ComposeNativePluginTest {
     @Test
+    fun enablesRequestedCoordinateMatchingForMetadataTransforms() {
+        val project = ProjectBuilder.builder().build()
+
+        ComposeNativePlugin().apply(project)
+
+        assertEquals(
+            true,
+            project.findProperty(
+                "kotlin.internal.kmp.allowMatchingByRequestedCoordinatesInMetadataTransformations"
+            ),
+        )
+    }
+
+    @Test
     fun doesNotRegisterAProjectExtension() {
         val project = ProjectBuilder.builder().build()
 
