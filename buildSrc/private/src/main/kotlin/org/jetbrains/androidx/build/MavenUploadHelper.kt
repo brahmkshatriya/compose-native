@@ -24,9 +24,9 @@ import androidx.build.multiplatformExtension
 import com.android.build.gradle.LibraryPlugin
 import com.android.utils.childrenIterator
 import com.android.utils.forEach
-import com.android.utils.mapValuesNotNull
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import com.google.gson.stream.JsonWriter
 import java.io.File
 import java.io.StringReader
@@ -163,16 +163,30 @@ private fun Project.configureComponentPublishing(
     }
 
     project.tasks.withType(GenerateModuleMetadata::class.java).configureEach { task ->
+        fun hasTargetWithComponent(componentName: String) =
+            task.project.multiplatformExtension?.targets?.find { target ->
+                target.components.any { it.name == componentName }
+            } != null
+        val componentName =
+            Regex("^generateMetadataFileFor(.*)Publication$")
+                .matchEntire(task.name)
+                ?.groupValues
+                ?.get(1)
+                ?.replaceFirstChar { it.lowercase() }
+                ?.takeIf(::hasTargetWithComponent)
         //        val capabilitiesToRemove = publishedRedirectionCapabilities() // TODO CMP-10368
         // fix old capability mechanism after migration to new artifact redirection
         task.doLast {
             val metadataFile = task.outputFile.asFile.get()
             val metadataString = metadataFile.readText()
+            val originalToRedirected =
+                componentName?.let(project::originalToRedirectedDependency).orEmpty()
             val modifiedMetadataString =
                 modifyGradleMetadata(metadataString) { metadata ->
                     //                filterGradleMetadataCapabilities(metadata,
                     // capabilitiesToRemove)  // TODO CMP-10368 fix old capability mechanism after
                     // migration to new artifact redirection
+                    redirectGradleMetadataDependencies(metadata, originalToRedirected)
                     sortGradleMetadataDependencies(metadata)
                 }
 
@@ -216,6 +230,32 @@ private fun Project.configureComponentPublishing(
                 val modifiedPom = modifyPomDependencies(pom, originalToRedirected)
                 if (pom != modifiedPom) {
                     pomFile.writeText(modifiedPom)
+                }
+            }
+        }
+    }
+}
+
+private fun redirectGradleMetadataDependencies(
+    metadata: JsonObject,
+    originalToRedirected: Map<ModuleIdentifier, ModuleVersionIdentifier>,
+) {
+    if (originalToRedirected.isEmpty()) return
+    metadata.getAsJsonArray("variants").forEach { entry ->
+        val variant = entry as? JsonObject ?: return@forEach
+        listOf("dependencies", "dependencyConstraints").forEach { field ->
+            variant.getAsJsonArray(field)?.forEach { dependencyElement ->
+                val dependency = dependencyElement as? JsonObject ?: return@forEach
+                val original =
+                    DefaultModuleIdentifier.newId(
+                        dependency.get("group").asString,
+                        dependency.get("module").asString,
+                    )
+                val redirected = originalToRedirected[original] ?: return@forEach
+                dependency.addProperty("group", redirected.group)
+                dependency.addProperty("module", redirected.name)
+                dependency.getAsJsonObject("version")?.entrySet()?.forEach { version ->
+                    version.setValue(JsonPrimitive(redirected.version))
                 }
             }
         }
@@ -270,8 +310,20 @@ internal fun Project.originalToRedirectedDependency(
         .resolvedConfiguration
         .firstLevelModuleDependencies
         .orEmpty()
-        .associateBy { DefaultModuleIdentifier.newId(it.moduleGroup, it.moduleName) }
-        .mapValuesNotNull { it.value.findRedirectedDependencyHeuristically()?.module?.id }
+        .flatMap { dependency ->
+            val redirected =
+                dependency.findRedirectedDependencyHeuristically()?.module?.id
+                    ?: return@flatMap emptyList()
+            val original =
+                DefaultModuleIdentifier.newId(dependency.moduleGroup, dependency.moduleName)
+            val targetPublication =
+                DefaultModuleIdentifier.newId(
+                    dependency.moduleGroup,
+                    "${dependency.moduleName}-$componentName",
+                )
+            listOf(original, targetPublication).distinct().map { it to redirected }
+        }
+        .toMap()
 }
 
 /**

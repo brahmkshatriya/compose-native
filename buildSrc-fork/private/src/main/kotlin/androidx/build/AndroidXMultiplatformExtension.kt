@@ -1,4 +1,4 @@
-﻿/*
+/*
  * Copyright 2022 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -132,59 +132,70 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     val supportedPlatforms: MutableSet<PlatformIdentifier> = mutableSetOf()
 
     /**
-     * Artifact-redirection (parallel-graph back-end): one entry per concrete target declared inside a
-     * `redirect { }` block. Each entry names a target that the fork builds *empty* (an empty,
-     * but valid, klib/jar/aar depending on the `androidx.*` coordinate) by re-rooting its
-     * source-sets onto an empty parallel graph (`redirectCommonMain`) instead of the real
-     * `commonMain`. The JetBrains plugin reads this registry in `afterEvaluate`.
+     * Artifact-redirection (parallel-graph back-end): one entry per concrete target declared inside
+     * a `redirect { }` block. Each entry names a target that the fork builds *empty* (an empty, but
+     * valid, klib/jar/aar depending on the `androidx.*` coordinate) by re-rooting its source-sets
+     * onto an empty parallel graph (`redirectCommonMain`) instead of the real `commonMain`. The
+     * JetBrains plugin reads this registry in `afterEvaluate`.
      *
      * `redirectCoordinate` carries the `androidx.*` group from the `redirect("group") { }` argument
-     * (required) and the optional version override; when its version is null the back-end resolves it
-     * from the `[versions]` table of `redirectversions.toml`.
+     * (required) and the optional version override; when its version is null the back-end resolves
+     * it from the `[versions]` table of `redirectversions.toml`.
      */
     internal data class RedirectTargetDecl(
         val targetName: String,
-        val redirectCoordinate: RedirectCoordinate
+        val redirectCoordinate: RedirectCoordinate,
     )
 
     /** Targets registered for redirect via `redirect { }`. Consumed by the JetBrains plugin. */
     internal val redirectTargetDecls: MutableList<RedirectTargetDecl> = mutableListOf()
 
     /**
-     * Names of redirect targets, registered **before** the target is created (see `expectRedirect`).
-     * The hierarchy-template `excludeCompilations` predicate reads this to keep redirect targets out
-     * of the `commonMain` tree. Must be populated before the target's compilation is created, because
-     * the template evaluates the predicate at compilation-creation time.
+     * Names of redirect targets, registered **before** the target is created (see
+     * `expectRedirect`). The hierarchy-template `excludeCompilations` predicate reads this to keep
+     * redirect targets out of the `commonMain` tree. Must be populated before the target's
+     * compilation is created, because the template evaluates the predicate at compilation-creation
+     * time.
      */
     internal val redirectTargetNames: MutableSet<String> = mutableSetOf()
 
     /** Pre-register expected redirect target names so the hierarchy predicate excludes them. */
-    private fun expectRedirect(vararg names: String) { redirectTargetNames += names }
+    private fun expectRedirect(vararg names: String) {
+        redirectTargetNames += names
+    }
 
-    /** The `androidx.*` coordinate a `redirect("group", version) { }` block points its targets at. */
+    /**
+     * The `androidx.*` coordinate a `redirect("group", version) { }` block points its targets at.
+     */
     internal data class RedirectCoordinate(val group: String, val version: String?)
 
     // Ambient state for the `redirect { … }` scope: non-null while a redirect block is executing
     // (holding that block's coordinate), null otherwise. A plain target function called inside the
-    // block sees it (via `potentiallyRedirecting`) and redirects its target to the coordinate instead
+    // block sees it (via `potentiallyRedirecting`) and redirects its target to the coordinate
+    // instead
     // of fork-building.
     private var redirectCoordinate: RedirectCoordinate? = null
 
     /**
-     * Empty parallel root for redirect targets. Created lazily on the first redirect target (declared
-     * inside `redirect { }`) so that redirect leaves can be wired to it **at target-creation time** —
-     * this is what keeps them off the real `commonMain`. KGP applies the default hierarchy template
-     * only when a source-set
-     * has no manual `dependsOn` edge; adding one here (synchronously, during configuration) opts the
-     * redirect leaf out of the auto-wiring to `commonMain`. Doing this in `afterEvaluate` is too late
-     * (the dependsOn closure is computed reactively on edge add and is not recomputed on removal).
+     * Empty parallel root for redirect targets. Created lazily on the first redirect target
+     * (declared inside `redirect { }`) so that redirect leaves can be wired to it **at
+     * target-creation time** — this is what keeps them off the real `commonMain`. KGP applies the
+     * default hierarchy template only when a source-set has no manual `dependsOn` edge; adding one
+     * here (synchronously, during configuration) opts the redirect leaf out of the auto-wiring to
+     * `commonMain`. Doing this in `afterEvaluate` is too late (the dependsOn closure is computed
+     * reactively on edge add and is not recomputed on removal).
      */
     private val redirectCommonMain: org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet by lazy {
         kotlinExtension.sourceSets.maybeCreate("redirectCommonMain")
     }
 
-    private fun recordRedirect(target: KotlinTarget, targetName: String, redirectCoordinate: RedirectCoordinate) {
-        // Invariant: the name `potentiallyRedirecting` pre-registered must match the created target,
+    private fun recordRedirect(
+        target: KotlinTarget,
+        targetName: String,
+        redirectCoordinate: RedirectCoordinate,
+    ) {
+        // Invariant: the name `potentiallyRedirecting` pre-registered must match the created
+        // target,
         // otherwise the hierarchy predicate excluded the wrong name from `commonMain`.
         assert(target.name == targetName) {
             "redirect target name mismatch: expected '$targetName' but created target is '${target.name}'"
@@ -459,14 +470,15 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     }
 
     @JvmOverloads
-    fun jvm(block: Action<KotlinJvmTarget>? = null): KotlinJvmTarget? = potentiallyRedirecting("jvm") {
-        supportedPlatforms.add(PlatformIdentifier.JVM)
-        if (project.enableJvm()) {
-            kotlinExtension.jvm { block?.execute(this) }
-        } else {
-            null
+    fun jvm(block: Action<KotlinJvmTarget>? = null): KotlinJvmTarget? =
+        potentiallyRedirecting("jvm") {
+            supportedPlatforms.add(PlatformIdentifier.JVM)
+            if (project.enableJvm()) {
+                kotlinExtension.jvm { block?.execute(this) }
+            } else {
+                null
+            }
         }
-    }
 
     @JvmOverloads
     fun jvmStubs(
@@ -544,14 +556,15 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     @JvmOverloads
     fun androidLibrary(
         block: Action<KotlinMultiplatformAndroidLibraryTarget>? = null
-    ): KotlinMultiplatformAndroidLibraryTarget? = potentiallyRedirecting("android") {
-        supportedPlatforms.add(PlatformIdentifier.ANDROID)
-        if (project.enableJvm()) {
-            agpKmpExtension.also { block?.execute(it) }
-        } else {
-            null
+    ): KotlinMultiplatformAndroidLibraryTarget? =
+        potentiallyRedirecting("android") {
+            supportedPlatforms.add(PlatformIdentifier.ANDROID)
+            if (project.enableJvm()) {
+                agpKmpExtension.also { block?.execute(it) }
+            } else {
+                null
+            }
         }
-    }
 
     @JvmOverloads
     fun desktop(block: Action<KotlinJvmTarget>? = null): KotlinJvmTarget? =
@@ -713,7 +726,10 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun linuxArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("linuxArm64") {
             supportedPlatforms.add(PlatformIdentifier.LINUX_ARM_64)
-            if (project.enableLinux()) {
+            if (
+                project.enableLinux() &&
+                    project.findProperty("compose.native.linux.arm64.enabled") != "false"
+            ) {
                 kotlinExtension.linuxArm64 { block?.execute(this) }
             } else {
                 null
@@ -774,10 +790,10 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
 
     /**
      * Redirect scope: inside `redirect("androidx.foo") { … }` the plain target functions
-     * (`androidLibrary {}`, `ios()`, `jvm()`, …) build their target **empty** and redirect it to the
-     * `androidx.*` artifact instead of compiling the real `commonMain` — the parallel-graph back-end
-     * publishes an empty klib/jar/aar that depends on the androidx coordinate. Mix freely with plain
-     * (fork-built) targets declared outside the block for partial redirects (e.g.
+     * (`androidLibrary {}`, `ios()`, `jvm()`, …) build their target **empty** and redirect it to
+     * the `androidx.*` artifact instead of compiling the real `commonMain` — the parallel-graph
+     * back-end publishes an empty klib/jar/aar that depends on the androidx coordinate. Mix freely
+     * with plain (fork-built) targets declared outside the block for partial redirects (e.g.
      * `redirect("androidx.foo") { androidLibrary {} }` then plain `desktop(); ios()`).
      *
      * [group] is the target `androidx.*` group and is **required** — every redirect declares it
@@ -826,12 +842,16 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     private fun KotlinMultiplatformExtension.applyAndroidXDefaultHierarchyTemplate() =
         applyDefaultHierarchyTemplate {
             common {
-                // Artifact redirection: keep redirect targets (declared inside `redirect { }`) OUT of
-                // the common hierarchy entirely, so the template never wires them to `commonMain`. Their
+                // Artifact redirection: keep redirect targets (declared inside `redirect { }`) OUT
+                // of
+                // the common hierarchy entirely, so the template never wires them to `commonMain`.
+                // Their
                 // leaf source-sets are instead wired to the empty `redirectCommonMain` at
                 // target-creation time (see recordRedirect). This predicate is evaluated lazily per
-                // compilation, so the redirect set — populated by `potentiallyRedirecting` before the
-                // target is created — is already visible here. No-op for modules that declare no redirects.
+                // compilation, so the redirect set — populated by `potentiallyRedirecting` before
+                // the
+                // target is created — is already visible here. No-op for modules that declare no
+                // redirects.
                 excludeCompilations { it.target.name in redirectTargetNames }
                 group("jvmAndAndroid") {
                     // TODO(b/442950553): Switch to withAndroidTarget when bug is fixed
@@ -864,7 +884,9 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
                     testTask {
                         it.useKarma {
                             useChromeHeadless()
-                            useConfigDirectory(File(getSupportRootFolder(), "buildSrc-fork/karmaconfig"))
+                            useConfigDirectory(
+                                File(getSupportRootFolder(), "buildSrc-fork/karmaconfig")
+                            )
                         }
                     }
                 }
@@ -897,15 +919,12 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
 
     // FORK-only public extensions
 
-    /**
-     * Configures native compilation tasks with flags to link required frameworks
-     */
+    /** Configures native compilation tasks with flags to link required frameworks */
     fun configureDarwinFlags() = org.jetbrains.androidx.build.configureDarwinFlags(project)
 
-    /**
-     * Configure instrumented tests to run on an actual iOS simulator.
-     */
-    fun iosInstrumentedTest() = org.jetbrains.androidx.build.addIosInstrumentedTestSourceset(project)
+    /** Configure instrumented tests to run on an actual iOS simulator. */
+    fun iosInstrumentedTest() =
+        org.jetbrains.androidx.build.addIosInstrumentedTestSourceset(project)
 }
 
 // TODO(https://youtrack.jetbrains.com/issue/KT-76874/):

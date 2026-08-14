@@ -79,7 +79,7 @@ paparazzi = "1.0.0"
 paparazziNative = "2022.1.1-canary-f5f9f71"
 shadow = "8.1.1"
 skiko = { strictly = "0.150.1" }
-skikoNative = { strictly = "0.151.3" }
+skikoNative = { strictly = "0.151.4" }
 spdxGradlePlugin = "0.6.0"
 sqldelight = "1.3.0"
 retrofit = "2.12.0"

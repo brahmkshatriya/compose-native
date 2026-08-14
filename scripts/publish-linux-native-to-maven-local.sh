@@ -89,6 +89,7 @@ echo "Resolving native Skiko from Maven Central"
     "-Pjetbrains.publication.groupPrefix=$group_prefix" \
     "-Pjetbrains.publication.version.COMPOSE=$version" \
     "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
+    "-Pjetbrains.publication.version.NAVIGATION_3=$version" \
     "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
     "-Pjetbrains.publication.version.LIFECYCLE=$version" \
     "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
@@ -101,6 +102,7 @@ metadata_args=(
     --upstream-compose-version "$(read_compose_property 'compose.native.upstream.version.COMPOSE')"
     --upstream-material3-version "$(read_compose_property 'compose.native.upstream.version.COMPOSE_MATERIAL3')"
     --upstream-lifecycle-version "$(read_compose_property 'compose.native.upstream.version.LIFECYCLE')"
+    --upstream-navigation3-version "$(read_compose_property 'compose.native.upstream.version.NAVIGATION_3')"
     --upstream-navigationevent-version "$(read_compose_property 'compose.native.upstream.version.NAVIGATION_EVENT')"
     --upstream-savedstate-version "$(read_compose_property 'compose.native.upstream.version.SAVEDSTATE')"
     --native-skiko-group "$(read_compose_property 'compose.native.skiko.group')"

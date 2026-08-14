@@ -39,6 +39,8 @@ def upstream_version_for_dependency(
         return upstream_versions.get("compose")
     if group == "org.jetbrains.androidx.lifecycle":
         return upstream_versions.get("lifecycle")
+    if group == "org.jetbrains.androidx.navigation3":
+        return upstream_versions.get("navigation3")
     if group == "org.jetbrains.androidx.navigationevent":
         return upstream_versions.get("navigationevent")
     if group == "org.jetbrains.androidx.savedstate":
@@ -264,6 +266,7 @@ def main() -> None:
     parser.add_argument("--upstream-compose-version")
     parser.add_argument("--upstream-material3-version")
     parser.add_argument("--upstream-lifecycle-version")
+    parser.add_argument("--upstream-navigation3-version")
     parser.add_argument("--upstream-navigationevent-version")
     parser.add_argument("--upstream-savedstate-version")
     parser.add_argument("--native-skiko-group")
@@ -293,6 +296,7 @@ def main() -> None:
             "compose": args.upstream_compose_version,
             "material3": args.upstream_material3_version,
             "lifecycle": args.upstream_lifecycle_version,
+            "navigation3": args.upstream_navigation3_version,
             "navigationevent": args.upstream_navigationevent_version,
             "savedstate": args.upstream_savedstate_version,
         }.items()

@@ -36,7 +36,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorProducer
-import androidx.compose.ui.graphics.LayerOutsets
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
@@ -46,7 +45,6 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.DelegatableNode
 import androidx.compose.ui.node.DelegatingNode
-import androidx.compose.ui.node.DrawInvalidationOutsetModifierNode
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.LayoutAwareModifierNode
 import androidx.compose.ui.node.requireDensity
@@ -141,7 +139,6 @@ internal abstract class RippleNode(
     Modifier.Node(),
     CompositionLocalConsumerModifierNode,
     DrawModifierNode,
-    DrawInvalidationOutsetModifierNode,
     LayoutAwareModifierNode {
     final override val shouldAutoInvalidate: Boolean = false
 
@@ -155,21 +152,6 @@ internal abstract class RippleNode(
 
     val rippleColor: Color
         get() = color()
-
-    override val drawInvalidationOutsets: LayerOutsets
-        get() {
-            if (bounded || !hasValidSize) return LayerOutsets.Zero
-            val horizontal = (targetRadius - rippleSize.width / 2f).coerceAtLeast(0f)
-            val vertical = (targetRadius - rippleSize.height / 2f).coerceAtLeast(0f)
-            return with(requireDensity()) {
-                LayerOutsets(
-                    left = horizontal.toDp(),
-                    top = vertical.toDp(),
-                    right = horizontal.toDp(),
-                    bottom = vertical.toDp(),
-                )
-            }
-        }
 
     // Track interactions that were emitted before we have been placed - we need to wait until we
     // have a valid size in order to set the radius and size correctly.

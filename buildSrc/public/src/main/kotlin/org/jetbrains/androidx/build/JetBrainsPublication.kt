@@ -169,7 +169,17 @@ object JetBrainsPublication {
                         supportedPlatforms = ComposePlatforms.ALL - ComposePlatforms.WINDOWS_NATIVE,
                     ),
                 ),
-            "NAVIGATION_3" to listOf(ComposeComponent(":navigation3:navigation3-ui")),
+            "NAVIGATION_3" to
+                listOf(
+                    ComposeComponent(
+                        ":navigation3:navigation3-runtime",
+                        supportedPlatforms = ComposePlatforms.ALL,
+                    ),
+                    ComposeComponent(
+                        ":navigation3:navigation3-ui",
+                        supportedPlatforms = ComposePlatforms.ALL,
+                    ),
+                ),
             "NAVIGATION_EVENT" to
                 listOf(
                     ComposeComponent(
@@ -256,31 +266,12 @@ object JetBrainsPublication {
                     )
             }
 
-    /** Compose modules selected by the full-fork plugin on Android, JS, and Wasm. */
+    /** Modules with fork-specific behavior that must replace upstream on Android, JS, and Wasm. */
     val forkComposeComponents: List<ComposeComponent>
         get() = forkComposeComponentPaths.mapNotNull(projectPathToComponent::get)
 
     private val forkComposeComponentPaths =
-        listOf(
-            ":compose:runtime:runtime",
-            ":compose:runtime:runtime-saveable",
-            ":compose:ui:ui-util",
-            ":compose:ui:ui-unit",
-            ":compose:ui:ui-geometry",
-            ":compose:ui:ui-graphics",
-            ":compose:ui:ui-text",
-            ":compose:ui:ui-backhandler",
-            ":compose:ui:ui-skiko",
-            ":compose:ui:ui",
-            ":compose:animation:animation-core",
-            ":compose:animation:animation-graphics",
-            ":compose:animation:animation",
-            ":compose:foundation:foundation-layout",
-            ":compose:foundation:foundation",
-            ":compose:material:material-ripple",
-            ":compose:material:material",
-            ":compose:material3:material3",
-        )
+        listOf(":compose:foundation:foundation", ":compose:material3:material3")
 
     private val nativeComponentPaths =
         listOf(
@@ -292,8 +283,11 @@ object JetBrainsPublication {
             ":lifecycle:lifecycle-viewmodel-savedstate",
             ":lifecycle:lifecycle-runtime-compose",
             ":lifecycle:lifecycle-viewmodel-compose",
+            ":lifecycle:lifecycle-viewmodel-navigation3",
             ":savedstate:savedstate",
             ":savedstate:savedstate-compose",
+            ":navigation3:navigation3-runtime",
+            ":navigation3:navigation3-ui",
             ":navigationevent:navigationevent-compose",
             ":compose:ui:ui-util",
             ":compose:ui:ui-unit",

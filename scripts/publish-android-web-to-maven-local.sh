@@ -39,7 +39,6 @@ find_jdk() {
 
 export JAVA_HOME="$(find_jdk)"
 export PATH="$JAVA_HOME/bin:$PATH"
-
 if [[ -z "${ANDROID_HOME:-}" ]]; then
     for candidate in "$HOME/Android/Sdk" "$HOME/Android/sdk"; do
         if [[ -d "$candidate" ]]; then
@@ -56,12 +55,19 @@ echo "Publishing forked Compose Android, JS, and Wasm targets as $group_prefix:*
 "$compose_root/gradlew" \
     -p "$compose_root" \
     --no-configuration-cache \
+    --no-configure-on-demand \
     "-Dmaven.repo.local=$maven_repository" \
     -Pcompose.platforms=Android,Js,WasmJs \
+    -Pcompose.native.linux.arm64.enabled=false \
     "-Pjetbrains.publication.groupPrefix=$group_prefix" \
     "-Pjetbrains.publication.version.COMPOSE=$version" \
     "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
     :mpp:publishComposeForkPlatformsToMavenLocal
+
+"$compose_root/scripts/verify-fork-android-aars.py" \
+    --repository "$maven_repository" \
+    --version "$version" \
+    --group-prefix "$group_prefix"
 
 "$compose_root/scripts/write-linux-native-root-metadata.py" \
     --repository "$maven_repository" \
@@ -70,6 +76,7 @@ echo "Publishing forked Compose Android, JS, and Wasm targets as $group_prefix:*
     --upstream-compose-version "$(read_compose_property 'compose.native.upstream.version.COMPOSE')" \
     --upstream-material3-version "$(read_compose_property 'compose.native.upstream.version.COMPOSE_MATERIAL3')" \
     --upstream-lifecycle-version "$(read_compose_property 'compose.native.upstream.version.LIFECYCLE')" \
+    --upstream-navigation3-version "$(read_compose_property 'compose.native.upstream.version.NAVIGATION_3')" \
     --upstream-navigationevent-version "$(read_compose_property 'compose.native.upstream.version.NAVIGATION_EVENT')" \
     --upstream-savedstate-version "$(read_compose_property 'compose.native.upstream.version.SAVEDSTATE')" \
     --native-skiko-group "$(read_compose_property 'compose.native.skiko.group')" \

@@ -75,7 +75,7 @@ private fun Project.configureComposeNativeSkikoResolution() {
     val nativeSkikoGroup =
         providers.gradleProperty("compose.native.skiko.group").orElse("dev.brahmkshatriya.skiko")
     val nativeSkikoVersion =
-        providers.gradleProperty("compose.native.skiko.version").orElse("0.151.3")
+        providers.gradleProperty("compose.native.skiko.version").orElse("0.151.4")
 
     configurations.configureEach { configuration ->
         val lowerName = configuration.name.lowercase()
@@ -88,7 +88,8 @@ private fun Project.configureComposeNativeSkikoResolution() {
             return@configureEach
         }
         configuration.resolutionStrategy.dependencySubstitution { substitutions ->
-            substitutions.substitute(substitutions.module("org.jetbrains.skiko:skiko"))
+            substitutions
+                .substitute(substitutions.module("org.jetbrains.skiko:skiko"))
                 .using(
                     substitutions.module(
                         "${nativeSkikoGroup.get()}:skiko:${nativeSkikoVersion.get()}"

@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "dev.brahmkshatriya.compose"
-version = "1.12.10-alpha05"
+version = "1.12.10-alpha06"
 
 kotlin {
     jvmToolchain(21)
@@ -22,7 +22,7 @@ gradlePlugin {
             id = "dev.brahmkshatriya.compose"
             implementationClass = "dev.brahmkshatriya.compose.ComposeNativePlugin"
             displayName = "Compose Native"
-            description = "Adds grouped desktop Kotlin/Native targets to Compose Multiplatform"
+            description = "Adds desktop Kotlin/Native targets and application conventions to Compose Multiplatform"
         }
     }
 }
@@ -38,7 +38,7 @@ mavenPublishing {
     coordinates(group.toString(), "compose-gradle-plugin", version.toString())
     pom {
         name = "Compose Native Gradle Plugin"
-        description = "Adds grouped desktop Kotlin/Native targets to Compose Multiplatform"
+        description = "Adds desktop Kotlin/Native targets and application conventions to Compose Multiplatform"
         inceptionYear = "2026"
         url = "https://github.com/brahmkshatriya/compose-native"
         licenses {

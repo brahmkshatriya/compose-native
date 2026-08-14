@@ -20,12 +20,12 @@
 package androidx.compose.ui.graphics
 
 import androidx.compose.ui.InternalComposeUiApi
-import kotlin.jvm.JvmName
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.util.fastForEach
+import kotlin.jvm.JvmName
 import org.jetbrains.skia.Canvas as SkCanvas
 import org.jetbrains.skia.ClipMode as SkClipMode
 import org.jetbrains.skia.CubicResampler
@@ -37,9 +37,7 @@ import org.jetbrains.skia.MipmapMode
 import org.jetbrains.skia.SamplingMode
 import org.jetbrains.skia.impl.use
 
-/**
- * Convert the [org.jetbrains.skia.Canvas] instance into a Compose-compatible Canvas
- */
+/** Convert the [org.jetbrains.skia.Canvas] instance into a Compose-compatible Canvas */
 fun SkCanvas.asComposeCanvas(): Canvas = SkiaBackedCanvas(this)
 
 /**
@@ -62,9 +60,7 @@ val Canvas.skiaCanvas: SkCanvas
 val Canvas.nativeCanvas: SkCanvas
     get() = skiaCanvas
 
-internal class SkiaBackedCanvas(
-    internal val internalSkiaCanvas: SkCanvas,
-) : Canvas {
+internal class SkiaBackedCanvas(internal val internalSkiaCanvas: SkCanvas) : Canvas {
     override fun save() {
         internalSkiaCanvas.save()
     }
@@ -79,7 +75,7 @@ internal class SkiaBackedCanvas(
             bounds.top,
             bounds.right,
             bounds.bottom,
-            paint.skiaPaint
+            paint.skiaPaint,
         )
     }
 
@@ -113,7 +109,7 @@ internal class SkiaBackedCanvas(
             right = right,
             bottom = bottom,
             mode = clipOp.toSkia(),
-            antiAlias = antiAlias
+            antiAlias = antiAlias,
         )
     }
 
@@ -149,7 +145,7 @@ internal class SkiaBackedCanvas(
         bottom: Float,
         radiusX: Float,
         radiusY: Float,
-        paint: Paint
+        paint: Paint,
     ) {
         internalSkiaCanvas.drawRRect(
             left = left,
@@ -188,7 +184,7 @@ internal class SkiaBackedCanvas(
         startAngle: Float,
         sweepAngle: Float,
         useCenter: Boolean,
-        paint: Paint
+        paint: Paint,
     ) {
         internalSkiaCanvas.drawArc(
             left = left,
@@ -203,10 +199,7 @@ internal class SkiaBackedCanvas(
     }
 
     override fun drawPath(path: Path, paint: Paint) {
-        internalSkiaCanvas.drawPath(
-            path = path.materializeSkiaPath(),
-            paint = paint.skiaPaint,
-        )
+        internalSkiaCanvas.drawPath(path = path.materializeSkiaPath(), paint = paint.skiaPaint)
     }
 
     override fun drawImage(image: ImageBitmap, topLeftOffset: Offset, paint: Paint) {
@@ -230,7 +223,7 @@ internal class SkiaBackedCanvas(
         srcSize: IntSize,
         dstOffset: IntOffset,
         dstSize: IntSize,
-        paint: Paint
+        paint: Paint,
     ) {
         drawImageRect(
             image = image,
@@ -257,7 +250,7 @@ internal class SkiaBackedCanvas(
         dstTop: Float,
         dstRight: Float,
         dstBottom: Float,
-        paint: Paint
+        paint: Paint,
     ) {
         val bitmap = image.asSkiaBitmap()
 
@@ -300,23 +293,18 @@ internal class SkiaBackedCanvas(
     private fun drawPoints(points: List<Offset>, paint: Paint) {
         val skiaPaint = paint.skiaPaint
         points.fastForEach { point ->
-            internalSkiaCanvas.drawPoint(
-                x = point.x,
-                y = point.y,
-                paint = skiaPaint,
-            )
+            internalSkiaCanvas.drawPoint(x = point.x, y = point.y, paint = skiaPaint)
         }
     }
 
     /**
      * Draw lines connecting points based on the corresponding step.
      *
-     * ex. 3 points with a step of 1 would draw 2 lines between the first and second points
-     * and another between the second and third
+     * ex. 3 points with a step of 1 would draw 2 lines between the first and second points and
+     * another between the second and third
      *
      * ex. 4 points with a step of 2 would draw 2 lines between the first and second and another
-     * between the third and fourth. If there is an odd number of points, the last point is
-     * ignored
+     * between the third and fourth. If there is an odd number of points, the last point is ignored
      *
      * @see drawRawLines
      */
@@ -333,9 +321,7 @@ internal class SkiaBackedCanvas(
         }
     }
 
-    /**
-     * @throws IllegalArgumentException if a non even number of points is provided
-     */
+    /** @throws IllegalArgumentException if a non even number of points is provided */
     override fun drawRawPoints(pointMode: PointMode, points: FloatArray, paint: Paint) {
         if (points.size % 2 != 0) {
             throw IllegalArgumentException("points must have an even number of values")
@@ -361,15 +347,14 @@ internal class SkiaBackedCanvas(
     }
 
     /**
-     * Draw lines connecting points based on the corresponding step. The points are interpreted
-     * as x, y coordinate pairs in alternating index positions
+     * Draw lines connecting points based on the corresponding step. The points are interpreted as
+     * x, y coordinate pairs in alternating index positions
      *
-     * ex. 3 points with a step of 1 would draw 2 lines between the first and second points
-     * and another between the second and third
+     * ex. 3 points with a step of 1 would draw 2 lines between the first and second points and
+     * another between the second and third
      *
      * ex. 4 points with a step of 2 would draw 2 lines between the first and second and another
-     * between the third and fourth. If there is an odd number of points, the last point is
-     * ignored
+     * between the third and fourth. If there is an odd number of points, the last point is ignored
      *
      * @see drawLines
      */
@@ -402,41 +387,41 @@ internal class SkiaBackedCanvas(
         )
     }
 
-    private fun ClipOp.toSkia() = when (this) {
-        ClipOp.Difference -> SkClipMode.DIFFERENCE
-        ClipOp.Intersect -> SkClipMode.INTERSECT
-        else -> SkClipMode.INTERSECT
-    }
+    private fun ClipOp.toSkia() =
+        when (this) {
+            ClipOp.Difference -> SkClipMode.DIFFERENCE
+            ClipOp.Intersect -> SkClipMode.INTERSECT
+            else -> SkClipMode.INTERSECT
+        }
 
-    private fun Matrix.toSkia() = Matrix44(
-        this[0, 0],
-        this[1, 0],
-        this[2, 0],
-        this[3, 0],
-
-        this[0, 1],
-        this[1, 1],
-        this[2, 1],
-        this[3, 1],
-
-        this[0, 2],
-        this[1, 2],
-        this[2, 2],
-        this[3, 2],
-
-        this[0, 3],
-        this[1, 3],
-        this[2, 3],
-        this[3, 3]
-    )
+    private fun Matrix.toSkia() =
+        Matrix44(
+            this[0, 0],
+            this[1, 0],
+            this[2, 0],
+            this[3, 0],
+            this[0, 1],
+            this[1, 1],
+            this[2, 1],
+            this[3, 1],
+            this[0, 2],
+            this[1, 2],
+            this[2, 2],
+            this[3, 2],
+            this[0, 3],
+            this[1, 3],
+            this[2, 3],
+            this[3, 3],
+        )
 
     // These constants are chosen to correspond the old implementation of SkFilterQuality:
     // https://github.com/google/skia/blob/1f193df9b393d50da39570dab77a0bb5d28ec8ef/src/image/SkImage.cpp#L809
     // https://github.com/google/skia/blob/1f193df9b393d50da39570dab77a0bb5d28ec8ef/include/core/SkSamplingOptions.h#L86
-    private fun FilterQuality.toSkia(): SamplingMode = when (this) {
-        FilterQuality.Low -> FilterMipmap(FilterMode.LINEAR, MipmapMode.NONE)
-        FilterQuality.Medium -> FilterMipmap(FilterMode.LINEAR, MipmapMode.NEAREST)
-        FilterQuality.High -> CubicResampler(1 / 3.0f, 1 / 3.0f)
-        else -> FilterMipmap(FilterMode.NEAREST, MipmapMode.NONE)
-    }
+    private fun FilterQuality.toSkia(): SamplingMode =
+        when (this) {
+            FilterQuality.Low -> FilterMipmap(FilterMode.LINEAR, MipmapMode.NONE)
+            FilterQuality.Medium -> FilterMipmap(FilterMode.LINEAR, MipmapMode.LINEAR)
+            FilterQuality.High -> CubicResampler(1 / 3.0f, 1 / 3.0f)
+            else -> FilterMipmap(FilterMode.NEAREST, MipmapMode.NONE)
+        }
 }

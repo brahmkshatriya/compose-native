@@ -666,7 +666,9 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
                 34 -> "8.1.1"
                 35 -> "8.6.0"
                 36 -> "8.9.1"
-                37 -> "9.1.0"
+                // The fork compiles API 37 with its pinned AGP 8.12 build. Requiring AGP 9.1
+                // would force consumers and this AndroidX snapshot onto built-in Kotlin.
+                37 -> "8.12.0"
                 else -> throw Exception("Unknown compileSdk to minAgpVersion mapping")
             }
         }
@@ -749,7 +751,8 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
                     project.objects.named<BuildTypeAttr>("release"),
                 )
                 // disable, as it triggers android compilation during IDEA sync
-                if (!isJetBrainsFork(project)) it.outgoing.artifact(project.tasks.named("createFullJarAndroidMain"))
+                if (!isJetBrainsFork(project))
+                    it.outgoing.artifact(project.tasks.named("createFullJarAndroidMain"))
             }
         }
     }

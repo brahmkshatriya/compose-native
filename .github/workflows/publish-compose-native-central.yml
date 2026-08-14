@@ -130,6 +130,7 @@ jobs:
             --no-daemon \
             --stacktrace \
             --no-configuration-cache \
+            --no-configure-on-demand \
             "-Dmaven.repo.local=$repository" \
             "-Pcompose.platforms=$COMPOSE_PLATFORM" \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
@@ -185,7 +186,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager 'platforms;android-34' 'build-tools;36.0.0'
+          sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
           echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
 
       - name: Publish fork platforms to an isolated Maven repository
@@ -199,12 +200,18 @@ jobs:
             --no-daemon \
             --stacktrace \
             --no-configuration-cache \
+            --no-configure-on-demand \
             "-Dmaven.repo.local=$repository" \
             -Pcompose.platforms=Android,Js,WasmJs \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
             "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
             :mpp:publishComposeForkPlatformsToMavenLocal
+
+          scripts/verify-fork-android-aars.py \
+            --repository "$repository" \
+            --version "$RELEASE_VERSION" \
+            --group-prefix dev.brahmkshatriya
 
       - name: Export only fork publications
         shell: bash
@@ -284,6 +291,7 @@ jobs:
           upstream_compose="$(sed -n 's/^compose.native.upstream.version.COMPOSE=//p' gradle.properties | tail -n1)"
           upstream_material3="$(sed -n 's/^compose.native.upstream.version.COMPOSE_MATERIAL3=//p' gradle.properties | tail -n1)"
           upstream_lifecycle="$(sed -n 's/^compose.native.upstream.version.LIFECYCLE=//p' gradle.properties | tail -n1)"
+          upstream_navigation3="$(sed -n 's/^compose.native.upstream.version.NAVIGATION_3=//p' gradle.properties | tail -n1)"
           upstream_navigationevent="$(sed -n 's/^compose.native.upstream.version.NAVIGATION_EVENT=//p' gradle.properties | tail -n1)"
           upstream_savedstate="$(sed -n 's/^compose.native.upstream.version.SAVEDSTATE=//p' gradle.properties | tail -n1)"
           native_skiko_group="$(sed -n 's/^compose.native.skiko.group=//p' gradle.properties | tail -n1)"
@@ -295,6 +303,7 @@ jobs:
             --upstream-compose-version "$upstream_compose" \
             --upstream-material3-version "$upstream_material3" \
             --upstream-lifecycle-version "$upstream_lifecycle" \
+            --upstream-navigation3-version "$upstream_navigation3" \
             --upstream-navigationevent-version "$upstream_navigationevent" \
             --upstream-savedstate-version "$upstream_savedstate" \
             --native-skiko-group "$native_skiko_group" \
@@ -332,8 +341,14 @@ jobs:
           expected_targets=$'linux_arm64\nlinux_x64\nmingw_x64'
           actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$ui_root" | sort -u)"
           test "$actual_targets" = "$expected_targets"
-          for module in ui-linuxx64 ui-linuxarm64 ui-mingwx64 ui-android ui-js ui-wasm-js; do
+          for module in ui-linuxx64 ui-linuxarm64 ui-mingwx64; do
             test -d "$group_root/compose/ui/$module/$RELEASE_VERSION"
+          done
+          for module in foundation-android foundation-js foundation-wasm-js; do
+            test -d "$group_root/compose/foundation/$module/$RELEASE_VERSION"
+          done
+          for module in material3-android material3-js material3-wasm-js; do
+            test -d "$group_root/compose/material3/$module/$RELEASE_VERSION"
           done
           native_skiko_dependencies=0
           while IFS= read -r -d '' module_file; do

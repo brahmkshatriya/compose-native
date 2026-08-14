@@ -7,11 +7,11 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 
 | Role | Version |
 | --- | --- |
-| Fork artifacts | `1.12.10-alpha05` |
+| Fork artifacts | `1.12.10-alpha06` |
 | JetBrains Compose upstream | `1.12.0-rc01` |
 | Maven Central Material 3 upstream | `1.12.0-alpha03` |
 | Official Skiko (desktop/web) | `0.150.1` |
-| Native Skiko fork | `0.151.3` |
+| Native Skiko fork | `0.151.4` |
 | Kotlin | `2.3.20` |
 
 The machine-readable values live in `gradle.properties`. Material 3 is pinned separately because
@@ -19,7 +19,7 @@ it has an independent release train.
 
 ## Linux x64 coordinates
 
-Native Skiko is published as `dev.brahmkshatriya.skiko:skiko:0.151.3`. JVM desktop, Apple, JS, and
+Native Skiko is published as `dev.brahmkshatriya.skiko:skiko:0.151.4`. JVM desktop, Apple, JS, and
 Wasm continue to use the official JetBrains Skiko artifacts. Native platform module metadata is
 rewritten during publication so it records that fork coordinate instead of the shared source set's
 official Skiko compile coordinate. The Compose target closure is defined once by
@@ -44,7 +44,7 @@ Run:
 ./scripts/publish-linux-native-to-maven-local.sh
 ```
 
-The script resolves Skiko `0.151.3` from Maven Central, publishes the complete Compose target
+The script resolves Skiko `0.151.4` from Maven Central, publishes the complete Compose target
 closure through `:mpp:publishComposeNativeToMavenLocal`, and then creates native-only KMP root
 metadata in Maven Local. It also publishes the `dev.brahmkshatriya.compose` Gradle plugin and its
 plugin marker.
@@ -81,7 +81,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.12.0-rc01"
-    id("dev.brahmkshatriya.compose") version "1.12.10-alpha05"
+    id("dev.brahmkshatriya.compose") version "1.12.10-alpha06"
 }
 ```
 
@@ -93,15 +93,15 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha05"
+                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha06"
             )
             implementation(
-                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha05"
+                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha06"
             )
         }
         desktopNativeMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha05"
+                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha06"
             )
         }
     }
@@ -144,12 +144,12 @@ Create and push a version tag that exactly matches both
 `jetbrains.publication.version.COMPOSE` and the Gradle plugin version:
 
 ```bash
-git tag 1.12.10-alpha05
-git push origin 1.12.10-alpha05
+git tag 1.12.10-alpha06
+git push origin 1.12.10-alpha06
 ```
 
 The deployment includes both the implementation artifact
-`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha05` and the marker
-`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha05`.
-Native Skiko `0.151.3` must already be available from Maven Central. Do not reuse a published tag
+`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha06` and the marker
+`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha06`.
+Native Skiko `0.151.4` must already be available from Maven Central. Do not reuse a published tag
 version: Central releases are immutable.
