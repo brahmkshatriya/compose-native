@@ -186,7 +186,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager 'platforms;android-37' 'build-tools;36.0.0'
+          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
           echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
 
       - name: Publish fork platforms to an isolated Maven repository
