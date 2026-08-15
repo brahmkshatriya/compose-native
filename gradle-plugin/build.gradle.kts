@@ -1,3 +1,5 @@
+import org.gradle.plugin.devel.tasks.PluginUnderTestMetadata
+
 plugins {
     kotlin("jvm") version "2.3.20"
     `java-gradle-plugin`
@@ -5,15 +7,26 @@ plugins {
 }
 
 group = "dev.brahmkshatriya.compose"
-version = "1.12.10-alpha06"
+version = "1.12.10-alpha07"
 
 kotlin {
     jvmToolchain(21)
 }
 
+val kotlinGradlePluginApiForTests by configurations.creating
+
 dependencies {
+    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
+    compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.20")
+    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
+    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.20")
+
     testImplementation(kotlin("test"))
     testImplementation(gradleTestKit())
+}
+
+tasks.named<PluginUnderTestMetadata>("pluginUnderTestMetadata") {
+    pluginClasspath.from(kotlinGradlePluginApiForTests)
 }
 
 gradlePlugin {

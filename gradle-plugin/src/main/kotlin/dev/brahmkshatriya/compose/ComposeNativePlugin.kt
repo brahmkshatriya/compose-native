@@ -8,7 +8,6 @@ import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ModuleComponentSelector
-import org.gradle.api.attributes.Attribute
 import org.gradle.api.plugins.ExtensionAware
 
 class ComposeNativePlugin : Plugin<Project> {
@@ -17,24 +16,32 @@ class ComposeNativePlugin : Plugin<Project> {
         project.addDesktopNativeSourceSets()
         project.createComposeNativeApplicationExtension()
         project.configureDesktopNativeApplicationConventions()
-        project.configureSharedNativeMetadataTarget()
+        project.configureIdeDependencyResolution()
         project.configureSkikoCapabilityResolution()
         project.configureDependencySubstitutions()
     }
 }
 
-private fun Project.configureSharedNativeMetadataTarget() {
-    configurations.configureEach { configuration ->
-        if (!configuration.name.isSharedNativeMetadataConfiguration()) return@configureEach
-        configuration.attributes.attribute(
-            Attribute.of(KOTLIN_NATIVE_TARGET_ATTRIBUTE, String::class.java),
-            DESKTOP_NATIVE_METADATA_TARGET,
-        )
+private fun Project.enableRequestedCoordinateMatching() {
+    pluginManager.withPlugin(KOTLIN_MULTIPLATFORM_PLUGIN_ID) {
+        val kotlinPluginVersion =
+            plugins
+                .getPlugin(KOTLIN_MULTIPLATFORM_PLUGIN_ID)
+                .javaClass
+                .`package`
+                .implementationVersion
+        if (kotlinPluginVersion.requiresRequestedCoordinateMatchingFlag()) {
+            extensions.extraProperties.set(KMP_MATCH_REQUESTED_COORDINATES_PROPERTY, true)
+        }
     }
 }
 
-private fun Project.enableRequestedCoordinateMatching() {
-    extensions.extraProperties.set(KMP_MATCH_REQUESTED_COORDINATES_PROPERTY, true)
+internal fun String?.requiresRequestedCoordinateMatchingFlag(): Boolean {
+    if (this == null) return true
+    val components = substringBefore('-').split('.')
+    val major = components.getOrNull(0)?.toIntOrNull() ?: return true
+    val minor = components.getOrNull(1)?.toIntOrNull() ?: return true
+    return major < 2 || major == 2 && minor < 4
 }
 
 private fun Project.configureSkikoCapabilityResolution() {
@@ -478,8 +485,6 @@ private const val KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multipl
 private const val ANDROID_APPLICATION_PLUGIN_ID = "com.android.application"
 private const val KMP_MATCH_REQUESTED_COORDINATES_PROPERTY =
     "kotlin.internal.kmp.allowMatchingByRequestedCoordinatesInMetadataTransformations"
-private const val KOTLIN_NATIVE_TARGET_ATTRIBUTE = "org.jetbrains.kotlin.native.target"
-private const val DESKTOP_NATIVE_METADATA_TARGET = "linux_x64"
 private const val KOTLIN_NATIVE_BINARY_CONTAINER_CLASS =
     "org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer"
 private const val COMMON_MAIN_CONFIGURATION_PREFIX = "commonMain"

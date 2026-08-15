@@ -338,6 +338,23 @@ jobs:
           test -s "$ui_root"
           test -s "$group_root/compose/ui/ui/$RELEASE_VERSION/ui-$RELEASE_VERSION.jar"
           jq -e '.variants[] | select(.name == "metadataApiElements")' "$ui_root" >/dev/null
+          desktop_root="$group_root/compose/desktop/desktop-native/$RELEASE_VERSION/desktop-native-$RELEASE_VERSION.module"
+          desktop_metadata="$group_root/compose/desktop/desktop-native/$RELEASE_VERSION/desktop-native-$RELEASE_VERSION.jar"
+          test -s "$desktop_root"
+          test -s "$desktop_metadata"
+          jq -e '.variants[] | select(.name == "metadataApiElements")' "$desktop_root" >/dev/null
+          unzip -l "$desktop_metadata" > "$RUNNER_TEMP/desktop-native-metadata-list.txt"
+          grep -q 'desktopNativeMain/default/linkdata/package_androidx.compose.ui.window/' "$RUNNER_TEMP/desktop-native-metadata-list.txt"
+          grep -q 'desktopNativeMain-cinterop/.*/default/manifest' "$RUNNER_TEMP/desktop-native-metadata-list.txt"
+          grep -q 'desktopNativeMain-cinterop/.*cinterop-sdl3/default/linkdata/module' "$RUNNER_TEMP/desktop-native-metadata-list.txt"
+          grep -q 'desktopNativeMain-cinterop/.*cinterop-nativeDesktop/default/linkdata/module' "$RUNNER_TEMP/desktop-native-metadata-list.txt"
+          unzip -p "$desktop_metadata" desktopNativeMain/default/manifest > "$RUNNER_TEMP/desktop-native-manifest.txt"
+          grep -q '^commonizer_native_targets=linux_arm64 linux_x64 mingw_x64$' "$RUNNER_TEMP/desktop-native-manifest.txt"
+          grep -q '^commonizer_target=(linux_arm64, linux_x64, mingw_x64)$' "$RUNNER_TEMP/desktop-native-manifest.txt"
+          grep -q '^native_targets=linux_arm64 linux_x64 mingw_x64$' "$RUNNER_TEMP/desktop-native-manifest.txt"
+          unzip -p "$desktop_metadata" 'desktopNativeMain-cinterop/*/default/manifest' > "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt"
+          test "$(grep -c '^commonizer_native_targets=linux_arm64 linux_x64 mingw_x64$' "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt")" -eq 2
+          test "$(grep -c '^commonizer_target=(linux_arm64, linux_x64, mingw_x64)$' "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt")" -eq 2
           expected_targets=$'linux_arm64\nlinux_x64\nmingw_x64'
           actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$ui_root" | sort -u)"
           test "$actual_targets" = "$expected_targets"

@@ -466,6 +466,9 @@ private fun Project.configureExecutableResourceCopyTasks(target: DesktopNativeAp
                     }
                     .get()
         linkTask.finalizedBy(copyTask)
+        tasks
+            .findByName("run${capitalizedBuildType}Executable${target.taskSuffix}")
+            ?.dependsOn(copyTask)
     }
 }
 

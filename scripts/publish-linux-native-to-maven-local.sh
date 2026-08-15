@@ -93,7 +93,8 @@ echo "Resolving native Skiko from Maven Central"
     "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
     "-Pjetbrains.publication.version.LIFECYCLE=$version" \
     "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
-    :mpp:publishComposeNativeToMavenLocal
+    :mpp:publishComposeNativeToMavenLocal \
+    :mpp:publishComposeForkRootsToMavenLocal
 
 metadata_args=(
     --repository "$maven_repository"

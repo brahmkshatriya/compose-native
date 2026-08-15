@@ -7,7 +7,7 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 
 | Role | Version |
 | --- | --- |
-| Fork artifacts | `1.12.10-alpha06` |
+| Fork artifacts | `1.12.10-alpha07` |
 | JetBrains Compose upstream | `1.12.0-rc01` |
 | Maven Central Material 3 upstream | `1.12.0-alpha03` |
 | Official Skiko (desktop/web) | `0.150.1` |
@@ -34,7 +34,13 @@ official Skiko compile coordinate. The Compose target closure is defined once by
   `animation-graphics`, `material`, `material-ripple`, `material3`, `components-resources`
 
 Each root Gradle module metadata file advertises only the targets actually published under the
-fork namespace.
+fork namespace. `desktop-native` also receives a standard `desktopNativeMain` metadata fragment,
+assembled from the linkdata in its published Linux KLIB, marked as commonized for every supported
+desktop target, and bundled with the SDL and native-desktop cinterop metadata required by that
+KLIB. This is necessary because native Skiko does not publish a standalone
+intermediate-source-set artifact, so Kotlin cannot compile that fragment directly. Android Studio
+consumes the published fragment through KGP's normal metadata and cinterop resolvers; no
+consumer-side KLIB rewriting or synthetic dependency coordinate is involved.
 
 ## Local publication
 
@@ -45,8 +51,9 @@ Run:
 ```
 
 The script resolves Skiko `0.151.4` from Maven Central, publishes the complete Compose target
-closure through `:mpp:publishComposeNativeToMavenLocal`, and then creates native-only KMP root
-metadata in Maven Local. It also publishes the `dev.brahmkshatriya.compose` Gradle plugin and its
+closure through `:mpp:publishComposeNativeToMavenLocal`, publishes the directly compilable KMP
+roots, and then creates native-only aggregate metadata (including the `desktopNativeMain`
+fragment) in Maven Local. It also publishes the `dev.brahmkshatriya.compose` Gradle plugin and its
 plugin marker.
 
 To publish the forked Compose Android, JS, and Wasm variants, run:
@@ -81,7 +88,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.12.0-rc01"
-    id("dev.brahmkshatriya.compose") version "1.12.10-alpha06"
+    id("dev.brahmkshatriya.compose") version "1.12.10-alpha07"
 }
 ```
 
@@ -93,15 +100,15 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha06"
+                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha07"
             )
             implementation(
-                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha06"
+                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha07"
             )
         }
         desktopNativeMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha06"
+                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha07"
             )
         }
     }
@@ -144,12 +151,12 @@ Create and push a version tag that exactly matches both
 `jetbrains.publication.version.COMPOSE` and the Gradle plugin version:
 
 ```bash
-git tag 1.12.10-alpha06
-git push origin 1.12.10-alpha06
+git tag 1.12.10-alpha07
+git push origin 1.12.10-alpha07
 ```
 
 The deployment includes both the implementation artifact
-`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha06` and the marker
-`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha06`.
+`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha07` and the marker
+`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha07`.
 Native Skiko `0.151.4` must already be available from Maven Central. Do not reuse a published tag
 version: Central releases are immutable.

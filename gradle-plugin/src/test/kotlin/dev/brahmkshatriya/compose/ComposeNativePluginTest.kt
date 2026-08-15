@@ -7,6 +7,14 @@ import org.gradle.testfixtures.ProjectBuilder
 
 class ComposeNativePluginTest {
     @Test
+    fun enablesRequestedCoordinateMatchingOnlyWhenKotlinNeedsTheFlag() {
+        assertEquals(true, null.requiresRequestedCoordinateMatchingFlag())
+        assertEquals(true, "2.3.20-release-208".requiresRequestedCoordinateMatchingFlag())
+        assertEquals(false, "2.4.0-release-281".requiresRequestedCoordinateMatchingFlag())
+        assertEquals(false, "3.0.0".requiresRequestedCoordinateMatchingFlag())
+    }
+
+    @Test
     fun identifiesDesktopNativeConfigurations() {
         assertEquals(true, "linuxX64CompileKlibraries".isDesktopNativeConfiguration())
         assertEquals(true, "linuxArm64RuntimeKlibraries".isDesktopNativeConfiguration())
@@ -78,20 +86,6 @@ class ComposeNativePluginTest {
                     )
             ),
             nativeMetadataSubstitutionsFor("1.12.10-alpha06"),
-        )
-    }
-
-    @Test
-    fun enablesRequestedCoordinateMatchingForMetadataTransforms() {
-        val project = ProjectBuilder.builder().build()
-
-        ComposeNativePlugin().apply(project)
-
-        assertEquals(
-            true,
-            project.findProperty(
-                "kotlin.internal.kmp.allowMatchingByRequestedCoordinatesInMetadataTransformations"
-            ),
         )
     }
 

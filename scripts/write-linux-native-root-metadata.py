@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import zipfile
 from collections import defaultdict
 from html import escape
 from pathlib import Path
@@ -18,6 +20,239 @@ NATIVE_TARGETS = {
 }
 OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 SKIKO_MODULE = "skiko"
+DESKTOP_NATIVE_GROUP_SUFFIX = ".compose.desktop"
+DESKTOP_NATIVE_MODULE = "desktop-native"
+DESKTOP_NATIVE_TARGETS = ("linux_arm64", "linux_x64", "mingw_x64")
+DESKTOP_NATIVE_CINTEROPS = ("cinterop-sdl3", "cinterop-nativedesktop")
+
+
+def file_hashes(path: Path) -> dict[str, str | int]:
+    content = path.read_bytes()
+    return {
+        "size": len(content),
+        "sha512": hashlib.sha512(content).hexdigest(),
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "sha1": hashlib.sha1(content).hexdigest(),
+        "md5": hashlib.md5(content).hexdigest(),
+    }
+
+
+def write_metadata_jar_entry(
+    destination: zipfile.ZipFile, name: str, content: bytes | str
+) -> None:
+    entry = zipfile.ZipInfo(name, date_time=(1980, 2, 1, 0, 0, 0))
+    entry.compress_type = zipfile.ZIP_DEFLATED
+    entry.external_attr = 0o100644 << 16
+    destination.writestr(entry, content)
+
+
+def commonize_klib_manifest(content: bytes) -> bytes:
+    values = {}
+    for line in content.decode("utf-8").splitlines():
+        key, separator, value = line.partition("=")
+        if separator:
+            values[key] = value
+    targets = " ".join(DESKTOP_NATIVE_TARGETS)
+    values["commonizer_native_targets"] = targets
+    values["commonizer_target"] = f"({', '.join(DESKTOP_NATIVE_TARGETS)})"
+    values["native_targets"] = targets
+    return ("\n".join(f"{key}={value}" for key, value in sorted(values.items())) + "\n").encode()
+
+
+def cinterop_library_directory(manifest: bytes) -> str:
+    unique_name = next(
+        line.removeprefix("unique_name=")
+        for line in manifest.decode("utf-8").splitlines()
+        if line.startswith("unique_name=")
+    )
+    return unique_name.replace("\\:", "_").replace(":", "_")
+
+
+def create_desktop_native_metadata(
+    repository: Path,
+    root_group: str,
+    root_module: str,
+    version: str,
+) -> dict[str, object] | None:
+    """Create the shared desktopNativeMain fragment from a published target KLIB.
+
+    Kotlin/Native cannot compile this intermediate source set directly because Skiko exposes
+    its desktop API through target KLIBs. The KLIB metadata is target-independent, however, so
+    publishing its linkdata as a normal KMP fragment lets KGP and IDEs consume it without a
+    custom file resolver.
+    """
+    if not (
+        root_group.endswith(DESKTOP_NATIVE_GROUP_SUFFIX)
+        and root_module == DESKTOP_NATIVE_MODULE
+    ):
+        return None
+
+    platform_module = f"{root_module}-linuxx64"
+    platform_directory = repository.joinpath(
+        *root_group.split("."), platform_module, version
+    )
+    platform_module_file = platform_directory / f"{platform_module}-{version}.module"
+    if not platform_module_file.is_file():
+        return None
+
+    platform_metadata = json.loads(platform_module_file.read_text(encoding="utf-8"))
+    api_variant = next(
+        (
+            variant
+            for variant in platform_metadata.get("variants", [])
+            if variant.get("attributes", {}).get("org.jetbrains.kotlin.native.target")
+            == "linux_x64"
+            and variant.get("attributes", {}).get("org.gradle.usage") == "kotlin-api"
+        ),
+        None,
+    )
+    if api_variant is None:
+        return None
+    klib_file_entry = next(
+        (
+            entry
+            for entry in api_variant.get("files", [])
+            if str(entry.get("name", "")).endswith(".klib")
+            and "cinterop" not in str(entry.get("name", "")).lower()
+        ),
+        None,
+    )
+    if klib_file_entry is None:
+        return None
+    klib_file = platform_directory / str(klib_file_entry["url"])
+    if not klib_file.is_file():
+        return None
+
+    root_directory = repository.joinpath(*root_group.split("."), root_module, version)
+    root_directory.mkdir(parents=True, exist_ok=True)
+    metadata_jar = root_directory / f"{root_module}-{version}.jar"
+    temporary_jar = metadata_jar.with_suffix(".jar.tmp")
+    project_structure = {
+        "projectStructure": {
+            "formatVersion": "0.3.3",
+            "isPublishedAsRoot": "true",
+            "variants": [
+                {
+                    "name": "linuxX64ApiElements",
+                    "sourceSet": ["commonMain", "desktopNativeMain"],
+                },
+                {
+                    "name": "linuxArm64ApiElements",
+                    "sourceSet": ["commonMain", "desktopNativeMain"],
+                },
+                {
+                    "name": "mingwX64ApiElements",
+                    "sourceSet": ["commonMain", "desktopNativeMain"],
+                },
+            ],
+            "sourceSets": [
+                {
+                    "name": "commonMain",
+                    "dependsOn": [],
+                    "moduleDependency": [],
+                    "binaryLayout": "klib",
+                },
+                {
+                    "name": "desktopNativeMain",
+                    "dependsOn": ["commonMain"],
+                    "moduleDependency": sorted(
+                        {
+                            f'{dependency["group"]}:{dependency["module"]}'
+                            for dependency in api_variant.get("dependencies", [])
+                            if "group" in dependency and "module" in dependency
+                        }
+                    ),
+                    "sourceSetCInteropMetadataDirectory": "desktopNativeMain-cinterop",
+                    "binaryLayout": "klib",
+                },
+            ],
+        }
+    }
+    with zipfile.ZipFile(klib_file) as source, zipfile.ZipFile(
+        temporary_jar, "w", compression=zipfile.ZIP_DEFLATED
+    ) as destination:
+        write_metadata_jar_entry(
+            destination, "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n"
+        )
+        write_metadata_jar_entry(
+            destination,
+            "META-INF/kotlin-project-structure-metadata.json",
+            json.dumps(project_structure, separators=(",", ":")),
+        )
+        for entry in source.infolist():
+            if entry.is_dir() or not (
+                entry.filename == "default/manifest"
+                or entry.filename.startswith("default/linkdata/")
+            ):
+                continue
+            content = source.read(entry.filename)
+            if entry.filename == "default/manifest":
+                content = commonize_klib_manifest(content)
+            write_metadata_jar_entry(
+                destination,
+                f"desktopNativeMain/{entry.filename}",
+                content,
+            )
+        bundled_cinterops = set()
+        for cinterop_entry in api_variant.get("files", []):
+            cinterop_name = str(cinterop_entry.get("name", ""))
+            if not (
+                cinterop_name.endswith(".klib")
+                and "cinterop" in cinterop_name.lower()
+            ):
+                continue
+            cinterop_file = platform_directory / str(cinterop_entry["url"])
+            if not cinterop_file.is_file():
+                raise FileNotFoundError(
+                    f"Missing desktop-native cinterop artifact: {cinterop_file}"
+                )
+            with zipfile.ZipFile(cinterop_file) as cinterop:
+                manifest = cinterop.read("default/manifest")
+                library_directory = cinterop_library_directory(manifest)
+                bundled_cinterops.update(
+                    name
+                    for name in DESKTOP_NATIVE_CINTEROPS
+                    if name in library_directory.lower()
+                )
+                for entry in cinterop.infolist():
+                    if entry.is_dir() or not (
+                        entry.filename == "default/manifest"
+                        or entry.filename.startswith("default/linkdata/")
+                    ):
+                        continue
+                    content = cinterop.read(entry.filename)
+                    if entry.filename == "default/manifest":
+                        content = commonize_klib_manifest(content)
+                    write_metadata_jar_entry(
+                        destination,
+                        f"desktopNativeMain-cinterop/{library_directory}/{entry.filename}",
+                        content,
+                    )
+        missing_cinterops = set(DESKTOP_NATIVE_CINTEROPS) - bundled_cinterops
+        if missing_cinterops:
+            raise RuntimeError(
+                "desktop-native metadata is missing required cinterops: "
+                + ", ".join(sorted(missing_cinterops))
+            )
+    temporary_jar.replace(metadata_jar)
+
+    metadata_file = {
+        "name": f"{root_module}-metadata-{version}.jar",
+        "url": metadata_jar.name,
+        **file_hashes(metadata_jar),
+    }
+    return {
+        "name": "metadataApiElements",
+        "attributes": {
+            "org.gradle.category": "library",
+            "org.gradle.jvm.environment": "non-jvm",
+            "org.gradle.usage": "kotlin-metadata",
+            "org.jetbrains.kotlin.platform.type": "common",
+        },
+        "dependencies": api_variant.get("dependencies", []),
+        "dependencyConstraints": api_variant.get("dependencyConstraints", []),
+        "files": [metadata_file],
+    }
 
 
 def upstream_group_for_fork_dependency(group: str, group_prefix: str) -> str | None:
@@ -418,6 +653,13 @@ def main() -> None:
                 if error.code != 404:
                     raise
 
+        desktop_native_metadata = create_desktop_native_metadata(
+            repository, root_group, root_module, version
+        )
+        if desktop_native_metadata is not None:
+            variants_by_name[desktop_native_metadata["name"]] = (
+                desktop_native_metadata
+            )
         variants_by_name.update((variant["name"], variant) for variant in variants)
         for variant in variants_by_name.values():
             remove_unpublished_stub_dependencies(variant)
