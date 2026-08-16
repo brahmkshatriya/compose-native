@@ -168,6 +168,7 @@ import sdl3.SDL_EVENT_WINDOW_EXPOSED
 import sdl3.SDL_EVENT_WINDOW_FOCUS_GAINED
 import sdl3.SDL_EVENT_WINDOW_FOCUS_LOST
 import sdl3.SDL_EVENT_WINDOW_HIDDEN
+import sdl3.SDL_EVENT_WINDOW_LEAVE_FULLSCREEN
 import sdl3.SDL_EVENT_WINDOW_MAXIMIZED
 import sdl3.SDL_EVENT_WINDOW_MINIMIZED
 import sdl3.SDL_EVENT_WINDOW_MOUSE_ENTER
@@ -222,6 +223,7 @@ import sdl3.SDL_StartTextInput
 import sdl3.SDL_SystemCursor
 import sdl3.SDL_WINDOWPOS_CENTERED
 import sdl3.SDL_WINDOW_BORDERLESS
+import sdl3.SDL_WINDOW_FULLSCREEN
 import sdl3.SDL_WINDOW_HIDDEN
 import sdl3.SDL_WINDOW_HIGH_PIXEL_DENSITY
 import sdl3.SDL_WINDOW_MAXIMIZED
@@ -247,15 +249,27 @@ private val IsLinuxHost = NativePlatform.osFamily == OsFamily.LINUX
 internal fun titleBarInsetHeightPx(
     drawingInsideTitleBar: Boolean,
     placement: WindowPlacement,
-    density: Float,
+    titleBarHeightPx: Int,
 ): Int =
     if (drawingInsideTitleBar && placement != WindowPlacement.Fullscreen) {
-        (NativeTitleBarHeight.value * density).roundToInt()
+        titleBarHeightPx
     } else {
         0
     }
 
 internal fun WindowPlacement.persistsFloatingGeometry(): Boolean = this == WindowPlacement.Floating
+
+internal fun nativeResizeEnabled(resizable: Boolean, placement: WindowPlacement): Boolean =
+    resizable && placement == WindowPlacement.Floating
+
+internal fun nativeResizeStyleEnabled(resizable: Boolean, placement: WindowPlacement): Boolean =
+    nativeResizeEnabled(resizable, placement) ||
+        (resizable &&
+            placement == WindowPlacement.Maximized &&
+            PlatformKeepsResizableStyleWhenMaximized)
+
+internal fun placementAfterExitingFullscreen(previous: WindowPlacement): WindowPlacement =
+    previous.takeUnless { it == WindowPlacement.Fullscreen } ?: WindowPlacement.Floating
 
 /** Defines which application windows are blocked while a dialog is visible. */
 class DialogModalityType private constructor(val name: String) {
@@ -562,9 +576,8 @@ private val LocalNativeApplication =
  *   bar. [TitleBar.Auto] and [TitleBar.Custom] extend the client area underneath the title bar and
  *   draw only the caption controls; no title text or title bar background is rendered. In
  *   fullscreen, the caption controls are hidden and slide down while the pointer hovers over the
- *   top edge of the window. On Windows, the system caption buttons remain available outside
- *   fullscreen. On Linux, `Window` replaces the compositor decorations with Compose-drawn caption
- *   controls. The occupied area is exposed through `WindowInsets.captionBar` and
+ *   top edge of the window. Outside fullscreen, Compose draws platform-style caption controls over
+ *   the extended client area. The occupied area is exposed through `WindowInsets.captionBar` and
  *   `WindowInsets.systemBars`. This option has no effect on undecorated windows.
  */
 @Composable
@@ -1618,10 +1631,17 @@ internal class NativeWindowHost(
     private var currentAlwaysOnTop = false
     private var currentTitleBar by mutableStateOf<TitleBar>(TitleBar.Native)
     private var isDrawingInsideTitleBar by mutableStateOf(false)
+    private var platformCaptionButtonWidthPx by mutableIntStateOf(0)
+    private var platformTitleBarHeightPx by mutableIntStateOf(0)
+    private val measuredCaptionButtonHeightsPx = IntArray(3)
+    private var customTitleBarHeightPx by mutableIntStateOf(0)
     private var windowShadowRefreshPending = false
     private var menuBarModel: NativeMenuModel = NativeMenuModel.Empty
     private var menuBarRevision by androidx.compose.runtime.mutableIntStateOf(0)
     private var currentPlacement = WindowPlacement.Floating
+    private var placementBeforeFullscreen = WindowPlacement.Floating
+    private var maximizeRequestPending = false
+    private var maximizeAfterFullscreenExit = false
     private var currentMinimized = false
     private var currentPosition: WindowPosition = WindowPosition.PlatformDefault
     private var onPreviewKeyEvent: (KeyEvent) -> Boolean = { false }
@@ -1750,7 +1770,8 @@ internal class NativeWindowHost(
             SDL_WINDOW_HIGH_PIXEL_DENSITY or
                 (if (visible) 0uL else SDL_WINDOW_HIDDEN) or
                 (if (undecorated) SDL_WINDOW_BORDERLESS else 0uL) or
-                (if (resizable) SDL_WINDOW_RESIZABLE else 0uL) or
+                (if (nativeResizeStyleEnabled(resizable, state.placement)) SDL_WINDOW_RESIZABLE
+                else 0uL) or
                 (if (renderWithTransparency) SDL_WINDOW_TRANSPARENT else 0uL)
         val initialX =
             (state.position as? WindowPosition.Absolute)?.x?.value?.roundToInt()
@@ -1799,8 +1820,14 @@ internal class NativeWindowHost(
             queryFullscreen = { currentPlacement == WindowPlacement.Fullscreen },
             updateFullscreen = { fullscreen ->
                 val placement =
-                    if (fullscreen) WindowPlacement.Fullscreen else WindowPlacement.Floating
-                currentPlacement = placement
+                    if (fullscreen) {
+                        WindowPlacement.Fullscreen
+                    } else if (currentPlacement == WindowPlacement.Fullscreen) {
+                        placementAfterExitingFullscreen(placementBeforeFullscreen)
+                    } else {
+                        currentPlacement
+                    }
+                updateCurrentPlacement(placement)
                 state.placement = placement
                 applyPlacement()
             },
@@ -1988,8 +2015,8 @@ internal class NativeWindowHost(
             requestRender()
         }
         if (resizable != currentResizable) {
-            SDL_SetWindowResizable(window, resizable)
             currentResizable = resizable
+            applyResizable()
             configureHitTest()
             requestRender()
         }
@@ -2010,7 +2037,7 @@ internal class NativeWindowHost(
             currentAlwaysOnTop = alwaysOnTop
         }
         if (requestedPlacement != currentPlacement) {
-            currentPlacement = requestedPlacement
+            updateCurrentPlacement(requestedPlacement)
             applyPlacement()
             requestRender()
         }
@@ -2086,6 +2113,7 @@ internal class NativeWindowHost(
             SDL_EVENT_WINDOW_SHOWN.toUInt(),
             SDL_EVENT_WINDOW_EXPOSED.toUInt(),
             SDL_EVENT_WINDOW_HIDDEN.toUInt(),
+            SDL_EVENT_WINDOW_LEAVE_FULLSCREEN.toUInt(),
             SDL_EVENT_WINDOW_MAXIMIZED.toUInt(),
             SDL_EVENT_WINDOW_MINIMIZED.toUInt(),
             SDL_EVENT_WINDOW_RESTORED.toUInt(),
@@ -2128,9 +2156,12 @@ internal class NativeWindowHost(
                 updateLifecycle()
             }
             SDL_EVENT_WINDOW_MAXIMIZED.toUInt() -> {
+                maximizeRequestPending = false
+                maximizeAfterFullscreenExit = false
                 isMaximized = true
                 currentPlacement = WindowPlacement.Maximized
                 state.placement = WindowPlacement.Maximized
+                applyResizable()
                 requestRender()
             }
             SDL_EVENT_WINDOW_MINIMIZED.toUInt() -> {
@@ -2139,15 +2170,33 @@ internal class NativeWindowHost(
                 updateLifecycle()
             }
             SDL_EVENT_WINDOW_RESTORED.toUInt() -> {
-                isMaximized = false
+                val windowRemainsMaximized =
+                    maximizeRequestPending ||
+                        sdlWindow?.let { SDL_GetWindowFlags(it) and SDL_WINDOW_MAXIMIZED != 0uL } ==
+                            true
+                isMaximized = windowRemainsMaximized
                 currentMinimized = false
-                if (state.placement != WindowPlacement.Fullscreen) {
+                if (state.placement != WindowPlacement.Fullscreen && !windowRemainsMaximized) {
                     currentPlacement = WindowPlacement.Floating
                     state.placement = WindowPlacement.Floating
+                    applyResizable()
                 }
                 state.isMinimized = false
                 updateLifecycle()
                 requestRender()
+            }
+            SDL_EVENT_WINDOW_LEAVE_FULLSCREEN.toUInt() -> {
+                if (maximizeAfterFullscreenExit) {
+                    maximizeAfterFullscreenExit = false
+                    val maximizeAccepted = sdlWindow?.let(::SDL_MaximizeWindow) == true
+                    if (!maximizeAccepted) {
+                        maximizeRequestPending = false
+                        currentPlacement = WindowPlacement.Floating
+                        state.placement = WindowPlacement.Floating
+                        applyResizable()
+                    }
+                    requestRender()
+                }
             }
             SDL_EVENT_WINDOW_MOVED.toUInt() -> {
                 val nextPosition = WindowPosition(event.window.data1.dp, event.window.data2.dp)
@@ -2302,6 +2351,46 @@ internal class NativeWindowHost(
 
     fun removeDraggableArea(key: Any) {
         draggableAreas.remove(key)
+    }
+
+    fun updateCaptionButtonBounds(type: CaptionButtonType, bounds: Rect?) {
+        val window = sdlWindow ?: return
+        val nativeType =
+            when (type) {
+                CaptionButtonType.Minimize -> 0
+                CaptionButtonType.Maximize,
+                CaptionButtonType.Restore -> 1
+                CaptionButtonType.Close -> 2
+            }
+        if (bounds == null) {
+            updateMeasuredCaptionButtonHeight(nativeType, 0)
+            kplatform_window_set_caption_button_bounds(window, nativeType, 0, 0, 0, 0, 0)
+            return
+        }
+        val left = floor(bounds.left).toInt()
+        val top = floor(bounds.top).toInt()
+        val right = ceil(bounds.right).toInt()
+        val bottom = ceil(bounds.bottom).toInt()
+        updateMeasuredCaptionButtonHeight(nativeType, bottom - top)
+        kplatform_window_set_caption_button_bounds(
+            window,
+            nativeType,
+            1,
+            left,
+            top,
+            right - left,
+            bottom - top,
+        )
+    }
+
+    private fun updateMeasuredCaptionButtonHeight(buttonType: Int, height: Int) {
+        if (measuredCaptionButtonHeightsPx[buttonType] == height) return
+        measuredCaptionButtonHeightsPx[buttonType] = height
+        val measuredHeight = measuredCaptionButtonHeightsPx.maxOrNull() ?: 0
+        if (customTitleBarHeightPx != measuredHeight) {
+            customTitleBarHeightPx = measuredHeight
+            if (currentTitleBar is TitleBar.Custom) updateTitleBarInset()
+        }
     }
 
     fun hitTest(x: Int, y: Int): SDL_HitTestResult {
@@ -2618,13 +2707,60 @@ internal class NativeWindowHost(
     }
 
     private fun updateTitleBarInset(density: Float = metrics?.density ?: 1f) {
+        refreshTitleBarMetrics(density)
         platformContext.updateTitleBarInset(
             titleBarInsetHeightPx(
                 drawingInsideTitleBar = isDrawingInsideTitleBar,
                 placement = currentPlacement,
-                density = density,
+                titleBarHeightPx = resolvedTitleBarHeightPx(density),
             )
         )
+    }
+
+    private var platformTitleBarMetricsDensity = 0f
+
+    private fun refreshTitleBarMetrics(density: Float) {
+        val window = sdlWindow ?: return
+        if (platformTitleBarMetricsDensity != density) {
+            platformTitleBarMetricsDensity = density
+            platformCaptionButtonWidthPx = 0
+            platformTitleBarHeightPx = 0
+        }
+        memScoped {
+            val captionButtonWidth = alloc<IntVar>()
+            val titleBarHeight = alloc<IntVar>()
+            if (
+                kplatform_window_get_title_bar_metrics(
+                    window,
+                    captionButtonWidth.ptr,
+                    titleBarHeight.ptr,
+                ) != 0
+            ) {
+                if (captionButtonWidth.value > 0) {
+                    platformCaptionButtonWidthPx = captionButtonWidth.value
+                }
+                if (titleBarHeight.value > 0) {
+                    platformTitleBarHeightPx = max(platformTitleBarHeightPx, titleBarHeight.value)
+                }
+            }
+        }
+    }
+
+    private fun resolvedTitleBarHeightPx(density: Float = metrics?.density ?: 1f): Int =
+        (if (currentTitleBar is TitleBar.Custom) customTitleBarHeightPx else 0).takeIf { it > 0 }
+            ?: platformTitleBarHeightPx.takeIf { it > 0 }
+            ?: (NativeTitleBarHeight.value * density).roundToInt()
+
+    internal fun titleBarHeightPx(): Int = resolvedTitleBarHeightPx()
+
+    internal fun titleBarHeightDp(): Dp = (resolvedTitleBarHeightPx() / (metrics?.density ?: 1f)).dp
+
+    internal fun captionButtonWidthDp(): Dp {
+        val nativeWidth =
+            platformCaptionButtonWidthPx
+                .takeIf { it > 0 }
+                ?.let { (it / (metrics?.density ?: 1f)).dp }
+        return nativeWidth?.takeIf { it > PlatformCaptionButtonWidth } ?: PlatformCaptionButtonWidth
     }
 
     // Lets the fullscreen caption reveal animate the captionBar/systemBars top inset
@@ -2680,21 +2816,42 @@ internal class NativeWindowHost(
     private fun applyPlacement() {
         val window = sdlWindow ?: return
         when (currentPlacement) {
-            WindowPlacement.Fullscreen ->
+            WindowPlacement.Fullscreen -> {
+                maximizeRequestPending = false
+                maximizeAfterFullscreenExit = false
                 check(SDL_SetWindowFullscreen(window, true)) {
                     "Could not enter fullscreen: ${SDL_GetError()?.toKString()}"
                 }
+            }
             WindowPlacement.Maximized -> {
+                val wasFullscreen = SDL_GetWindowFlags(window) and SDL_WINDOW_FULLSCREEN != 0uL
+                maximizeRequestPending = true
+                maximizeAfterFullscreenExit = wasFullscreen
                 SDL_SetWindowFullscreen(window, false)
-                SDL_MaximizeWindow(window)
+                if (!wasFullscreen && !SDL_MaximizeWindow(window)) maximizeRequestPending = false
             }
             WindowPlacement.Floating -> {
+                maximizeRequestPending = false
+                maximizeAfterFullscreenExit = false
                 SDL_SetWindowFullscreen(window, false)
                 SDL_RestoreWindow(window)
             }
         }
+        applyResizable()
         updateTitleBarInset()
         updateWindowShadow()
+    }
+
+    private fun updateCurrentPlacement(placement: WindowPlacement) {
+        if (placement == WindowPlacement.Fullscreen && currentPlacement != placement) {
+            placementBeforeFullscreen = currentPlacement
+        }
+        currentPlacement = placement
+    }
+
+    private fun applyResizable() {
+        val window = sdlWindow ?: return
+        SDL_SetWindowResizable(window, nativeResizeStyleEnabled(currentResizable, currentPlacement))
     }
 
     private fun configureHitTest() {

@@ -47,6 +47,7 @@ private enum class TitleBarChoice(val label: String) {
 fun TitleBarDemoWindow(onCloseRequest: () -> Unit) {
     var titleBarChoice by remember { mutableStateOf(TitleBarChoice.Auto) }
     var isDarkTheme by remember { mutableStateOf(true) }
+    var placementBeforeFullscreen by remember { mutableStateOf(WindowPlacement.Floating) }
     val state = rememberWindowState(size = DpSize(760.dp, 520.dp))
     val colorScheme = if (isDarkTheme) darkColorScheme() else lightColorScheme()
     val foreground = if (isDarkTheme) Color.White else Color.Black
@@ -135,12 +136,12 @@ fun TitleBarDemoWindow(onCloseRequest: () -> Unit) {
                         }
                         Button(
                             onClick = {
-                                state.placement =
-                                    if (state.placement == WindowPlacement.Fullscreen) {
-                                        WindowPlacement.Floating
-                                    } else {
-                                        WindowPlacement.Fullscreen
-                                    }
+                                if (state.placement == WindowPlacement.Fullscreen) {
+                                    state.placement = placementBeforeFullscreen
+                                } else {
+                                    placementBeforeFullscreen = state.placement
+                                    state.placement = WindowPlacement.Fullscreen
+                                }
                             }
                         ) {
                             Text(

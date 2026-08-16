@@ -1,12 +1,12 @@
 #include "include/native_drag.h"
 
 #include <SDL3/SDL.h>
+#include <windows.h>
 #include <dwmapi.h>
 #include <objidl.h>
 #include <ole2.h>
 #include <shellapi.h>
 #include <shlobj.h>
-#include <windows.h>
 
 #include <atomic>
 #include <cstdlib>
@@ -17,18 +17,212 @@
 namespace {
 
 constexpr const wchar_t *extended_title_bar_property = L"ComposeNativeExtendedTitleBar";
+constexpr int caption_button_count = 3;
+constexpr DWORD state_system_invisible = 0x00008000;
+constexpr DWORD state_system_focusable = 0x00100000;
+
+enum CaptionButtonType {
+    CaptionButtonMinimize = 0,
+    CaptionButtonMaximize = 1,
+    CaptionButtonClose = 2,
+};
 
 struct ExtendedTitleBarState {
     WNDPROC original_window_proc = nullptr;
+    SDL_Window *sdl_window = nullptr;
+    bool tracking_non_client_mouse = false;
+    bool has_non_client_pointer_position = false;
+    POINT non_client_pointer_position = {};
+    bool has_caption_button_bounds[caption_button_count] = {};
+    RECT caption_button_bounds[caption_button_count] = {};
 };
 
+LRESULT caption_button_hit_test(
+    const ExtendedTitleBarState *state,
+    const POINT &point
+) {
+    if (state->has_caption_button_bounds[CaptionButtonMinimize] &&
+        PtInRect(&state->caption_button_bounds[CaptionButtonMinimize], point)) {
+        return HTMINBUTTON;
+    }
+    if (state->has_caption_button_bounds[CaptionButtonMaximize] &&
+        PtInRect(&state->caption_button_bounds[CaptionButtonMaximize], point)) {
+        return HTMAXBUTTON;
+    }
+    if (state->has_caption_button_bounds[CaptionButtonClose] &&
+        PtInRect(&state->caption_button_bounds[CaptionButtonClose], point)) {
+        return HTCLOSE;
+    }
+    return HTNOWHERE;
+}
+
+bool has_measured_caption_buttons(const ExtendedTitleBarState *state) {
+    for (int index = 0; index < caption_button_count; ++index) {
+        if (state->has_caption_button_bounds[index]) return true;
+    }
+    return false;
+}
+
+bool is_fullscreen(const ExtendedTitleBarState *state) {
+    return state->sdl_window &&
+        (SDL_GetWindowFlags(state->sdl_window) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+RECT client_rect_to_screen(HWND window, const RECT &client_rect) {
+    POINT corners[2] = {
+        {client_rect.left, client_rect.top},
+        {client_rect.right, client_rect.bottom},
+    };
+    MapWindowPoints(window, nullptr, corners, 2);
+    return {corners[0].x, corners[0].y, corners[1].x, corners[1].y};
+}
+
+void set_title_bar_button_info(
+    HWND window,
+    const ExtendedTitleBarState *state,
+    TITLEBARINFOEX *info,
+    int info_index,
+    int button_type
+) {
+    if (!state->has_caption_button_bounds[button_type]) return;
+    info->rgrect[info_index] =
+        client_rect_to_screen(window, state->caption_button_bounds[button_type]);
+    info->rgstate[info_index] = state_system_focusable;
+}
+
+void populate_title_bar_info(
+    HWND window,
+    const ExtendedTitleBarState *state,
+    TITLEBARINFOEX *info
+) {
+    for (int index = 0; index <= CCHILDREN_TITLEBAR; ++index) {
+        info->rgstate[index] = state_system_invisible;
+        info->rgrect[index] = {0, 0, 0, 0};
+    }
+
+    RECT client_bounds = {};
+    GetClientRect(window, &client_bounds);
+    LONG title_bar_bottom = 0;
+    for (int index = 0; index < caption_button_count; ++index) {
+        if (state->has_caption_button_bounds[index] &&
+            state->caption_button_bounds[index].bottom > title_bar_bottom) {
+            title_bar_bottom = state->caption_button_bounds[index].bottom;
+        }
+    }
+    const RECT title_bar_bounds = {0, 0, client_bounds.right, title_bar_bottom};
+    info->rcTitleBar = client_rect_to_screen(window, title_bar_bounds);
+    info->rgrect[0] = info->rcTitleBar;
+    info->rgstate[0] = 0;
+    set_title_bar_button_info(window, state, info, 2, CaptionButtonMinimize);
+    set_title_bar_button_info(window, state, info, 3, CaptionButtonMaximize);
+    set_title_bar_button_info(window, state, info, 5, CaptionButtonClose);
+}
+
+UINT window_dpi(HWND window) {
+    using GetDpiForWindowFunction = UINT(WINAPI *)(HWND);
+    const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    const auto get_dpi_for_window =
+        user32
+            ? reinterpret_cast<GetDpiForWindowFunction>(
+                  GetProcAddress(user32, "GetDpiForWindow"))
+            : nullptr;
+    return get_dpi_for_window ? get_dpi_for_window(window) : 96;
+}
+
+int system_metric_for_window(HWND window, int metric) {
+    using GetSystemMetricsForDpiFunction = int(WINAPI *)(int, UINT);
+    const HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    const auto get_system_metrics_for_dpi =
+        user32
+            ? reinterpret_cast<GetSystemMetricsForDpiFunction>(
+                  GetProcAddress(user32, "GetSystemMetricsForDpi"))
+            : nullptr;
+    return get_system_metrics_for_dpi
+        ? get_system_metrics_for_dpi(metric, window_dpi(window))
+        : GetSystemMetrics(metric);
+}
+
+bool query_title_bar_metrics(HWND window, int *caption_button_width, int *title_bar_height) {
+    RECT bounds = {};
+    const bool has_caption_bounds =
+        SUCCEEDED(DwmGetWindowAttribute(
+            window,
+            DWMWA_CAPTION_BUTTON_BOUNDS,
+            &bounds,
+            sizeof(bounds))) &&
+        bounds.right > bounds.left && bounds.bottom > bounds.top;
+    const int button_width = system_metric_for_window(window, SM_CXSIZE);
+    const int frame_height = system_metric_for_window(window, SM_CYFRAME);
+    const int padded_border = system_metric_for_window(window, SM_CXPADDEDBORDER);
+    const int system_title_bar_height =
+        system_metric_for_window(window, SM_CYCAPTION) + frame_height + padded_border;
+    if (has_caption_bounds) {
+        if (caption_button_width) *caption_button_width = button_width;
+        if (title_bar_height) {
+            *title_bar_height = bounds.bottom > system_title_bar_height
+                ? bounds.bottom
+                : system_title_bar_height;
+        }
+        return true;
+    }
+
+    if (caption_button_width) *caption_button_width = button_width;
+    if (title_bar_height) *title_bar_height = system_title_bar_height;
+    return true;
+}
+
 void extend_frame_into_title_bar(HWND window) {
-    const int title_bar_height =
-        GetSystemMetrics(SM_CYCAPTION) +
-        GetSystemMetrics(SM_CYFRAME) +
-        GetSystemMetrics(SM_CXPADDEDBORDER);
+    int title_bar_height = 0;
+    query_title_bar_metrics(window, nullptr, &title_bar_height);
     const MARGINS margins = {0, 0, title_bar_height, 0};
     DwmExtendFrameIntoClientArea(window, &margins);
+}
+
+void push_non_client_mouse_motion(HWND window, ExtendedTitleBarState *state, LPARAM l_param) {
+    if (!state->sdl_window) return;
+    POINT point = {
+        static_cast<short>(LOWORD(l_param)),
+        static_cast<short>(HIWORD(l_param)),
+    };
+    if (!ScreenToClient(window, &point)) return;
+
+    const SDL_WindowID window_id = SDL_GetWindowID(state->sdl_window);
+    if (!state->tracking_non_client_mouse) {
+        TRACKMOUSEEVENT tracking = {};
+        tracking.cbSize = sizeof(tracking);
+        tracking.dwFlags = TME_LEAVE | TME_NONCLIENT;
+        tracking.hwndTrack = window;
+        if (TrackMouseEvent(&tracking)) state->tracking_non_client_mouse = true;
+
+        SDL_Event enter = {};
+        enter.type = SDL_EVENT_WINDOW_MOUSE_ENTER;
+        enter.window.windowID = window_id;
+        SDL_PushEvent(&enter);
+    }
+
+    SDL_Event motion = {};
+    motion.type = SDL_EVENT_MOUSE_MOTION;
+    motion.motion.windowID = window_id;
+    motion.motion.state = SDL_GetMouseState(nullptr, nullptr);
+    motion.motion.x = static_cast<float>(point.x);
+    motion.motion.y = static_cast<float>(point.y);
+    if (state->has_non_client_pointer_position) {
+        motion.motion.xrel = static_cast<float>(point.x - state->non_client_pointer_position.x);
+        motion.motion.yrel = static_cast<float>(point.y - state->non_client_pointer_position.y);
+    }
+    state->non_client_pointer_position = point;
+    state->has_non_client_pointer_position = true;
+    SDL_PushEvent(&motion);
+}
+
+void push_non_client_mouse_leave(ExtendedTitleBarState *state) {
+    state->tracking_non_client_mouse = false;
+    state->has_non_client_pointer_position = false;
+    if (!state->sdl_window) return;
+    SDL_Event leave = {};
+    leave.type = SDL_EVENT_WINDOW_MOUSE_LEAVE;
+    leave.window.windowID = SDL_GetWindowID(state->sdl_window);
+    SDL_PushEvent(&leave);
 }
 
 LRESULT CALLBACK extended_title_bar_window_proc(
@@ -43,9 +237,36 @@ LRESULT CALLBACK extended_title_bar_window_proc(
         return DefWindowProcW(window, message, w_param, l_param);
     }
 
+    LRESULT dwm_result = 0;
+    const bool dwm_handled =
+        DwmDefWindowProc(window, message, w_param, l_param, &dwm_result) != FALSE;
+
     if (message == WM_NCHITTEST) {
-        LRESULT result = 0;
-        if (DwmDefWindowProc(window, message, w_param, l_param, &result)) return result;
+        POINT point = {
+            static_cast<short>(LOWORD(l_param)),
+            static_cast<short>(HIWORD(l_param)),
+        };
+        if (ScreenToClient(window, &point)) {
+            const LRESULT measured_result = caption_button_hit_test(state, point);
+            if (measured_result != HTNOWHERE) {
+                if (is_fullscreen(state)) return HTCLIENT;
+                // Native non-client results retain Windows tooltips and Snap Layouts while the
+                // rectangles themselves follow the buttons that Compose actually laid out.
+                return dwm_handled && dwm_result == measured_result
+                    ? dwm_result
+                    : measured_result;
+            }
+        }
+
+        if (dwm_handled) {
+            if (has_measured_caption_buttons(state) &&
+                (dwm_result == HTMINBUTTON ||
+                 dwm_result == HTMAXBUTTON ||
+                 dwm_result == HTCLOSE)) {
+                return HTCLIENT;
+            }
+            return dwm_result;
+        }
     }
 
     if (message == WM_NCCALCSIZE && w_param != FALSE) {
@@ -53,15 +274,44 @@ LRESULT CALLBACK extended_title_bar_window_proc(
         const LONG window_top = params->rgrc[0].top;
         CallWindowProcW(state->original_window_proc, window, message, w_param, l_param);
         // Preserve the system-calculated side and bottom borders, but make the title bar part of
-        // the client area. SDL hit testing supplies the top resize border and draggable regions.
-        params->rgrc[0].top = window_top;
+        // the client area. A maximized resizable window extends its outer frame beyond the monitor;
+        // start the client at the visible work-area edge so that frame thickness does not clip the
+        // top of the Compose title bar.
+        LONG client_top = window_top;
+        if (IsZoomed(window)) {
+            MONITORINFO monitor_info = {};
+            monitor_info.cbSize = sizeof(monitor_info);
+            const HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+            if (monitor && GetMonitorInfoW(monitor, &monitor_info) &&
+                monitor_info.rcWork.top > client_top) {
+                client_top = monitor_info.rcWork.top;
+            }
+        }
+        params->rgrc[0].top = client_top;
         return 0;
+    }
+
+    if (message == WM_GETTITLEBARINFOEX && l_param != 0) {
+        auto *info = reinterpret_cast<TITLEBARINFOEX *>(l_param);
+        if (info->cbSize >= sizeof(TITLEBARINFOEX)) {
+            populate_title_bar_info(window, state, info);
+            return 0;
+        }
+    }
+
+    if (message == WM_NCMOUSEMOVE) {
+        // DWM owns the maximize-button hit box so Windows can show Snap Layouts. Mirror its
+        // non-client pointer movement into SDL so Compose still receives hover transitions.
+        push_non_client_mouse_motion(window, state, l_param);
+    } else if (message == WM_NCMOUSELEAVE) {
+        push_non_client_mouse_leave(state);
     }
 
     if (message == WM_ACTIVATE || message == WM_DWMCOMPOSITIONCHANGED) {
         extend_frame_into_title_bar(window);
     }
 
+    if (dwm_handled) return dwm_result;
     return CallWindowProcW(state->original_window_proc, window, message, w_param, l_param);
 }
 
@@ -362,6 +612,7 @@ int kplatform_window_allow_drawing_inside_title_bar(void *raw_window, int allow)
         state = new ExtendedTitleBarState();
         state->original_window_proc = reinterpret_cast<WNDPROC>(
             GetWindowLongPtrW(window, GWLP_WNDPROC));
+        state->sdl_window = sdl_window;
         if (!state->original_window_proc ||
             !SetPropW(window, extended_title_bar_property, state)) {
             delete state;
@@ -398,6 +649,37 @@ int kplatform_window_allow_drawing_inside_title_bar(void *raw_window, int allow)
         0,
         SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER
     );
+    return 1;
+}
+
+int kplatform_window_get_title_bar_metrics(
+    void *raw_window,
+    int *caption_button_width,
+    int *title_bar_height
+) {
+    SDL_Window *sdl_window = static_cast<SDL_Window *>(raw_window);
+    HWND window = window_handle(sdl_window);
+    if (!window || !caption_button_width || !title_bar_height) return 0;
+    return query_title_bar_metrics(window, caption_button_width, title_bar_height) ? 1 : 0;
+}
+
+int kplatform_window_set_caption_button_bounds(
+    void *raw_window,
+    int button_type,
+    int enabled,
+    int x,
+    int y,
+    int width,
+    int height
+) {
+    SDL_Window *sdl_window = static_cast<SDL_Window *>(raw_window);
+    HWND window = window_handle(sdl_window);
+    if (!window) return 0;
+    auto *state = static_cast<ExtendedTitleBarState *>(
+        GetPropW(window, extended_title_bar_property));
+    if (!state || button_type < 0 || button_type >= caption_button_count) return 0;
+    state->has_caption_button_bounds[button_type] = enabled != 0 && width > 0 && height > 0;
+    state->caption_button_bounds[button_type] = {x, y, x + width, y + height};
     return 1;
 }
 

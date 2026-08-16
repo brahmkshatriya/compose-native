@@ -31,7 +31,7 @@ class WindowPlatformFeaturesTest {
             titleBarInsetHeightPx(
                 drawingInsideTitleBar = true,
                 placement = WindowPlacement.Floating,
-                density = 1.5f,
+                titleBarHeightPx = 54,
             ),
         )
         assertEquals(
@@ -39,7 +39,7 @@ class WindowPlatformFeaturesTest {
             titleBarInsetHeightPx(
                 drawingInsideTitleBar = false,
                 placement = WindowPlacement.Floating,
-                density = 1.5f,
+                titleBarHeightPx = 54,
             ),
         )
         assertEquals(
@@ -47,7 +47,7 @@ class WindowPlatformFeaturesTest {
             titleBarInsetHeightPx(
                 drawingInsideTitleBar = true,
                 placement = WindowPlacement.Fullscreen,
-                density = 1.5f,
+                titleBarHeightPx = 54,
             ),
         )
     }

@@ -44,7 +44,7 @@ val windowsIcuData by
 
 dependencies {
     windowsIcuData(
-        "org.jetbrains.skiko:skiko-mingwx64:${libs.versions.skiko.get()}:icudtl@dat"
+        "dev.brahmkshatriya.skiko:skiko-mingwx64:${libs.versions.skikoNative.get()}:icudtl@dat"
     )
 }
 

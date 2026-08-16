@@ -7,86 +7,60 @@
 
 package androidx.compose.ui.window
 
-import androidx.compose.foundation.Canvas as ComposeCanvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.platform.SystemFont
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
-internal actual val PlatformClientTitleBarOutsideFullscreen: Boolean = false
+internal actual val PlatformClientTitleBarOutsideFullscreen: Boolean = true
+
+internal actual val PlatformKeepsResizableStyleWhenMaximized: Boolean = true
 
 internal actual val PlatformCaptionButtonWidth: Dp = 46.dp
 
+internal actual val PlatformCaptionButtonHeight: Dp = 40.dp
+
 @Composable internal actual fun PlatformTitleBarEndPadding() {}
 
-// Vector replicas of the Segoe MDL2/Fluent caption glyphs: minimize (E921), maximize (E922),
-// restore (E923), and close (E8BB).
+@OptIn(ExperimentalTextApi::class)
+private val WindowsCaptionIconFontFamily =
+    FontFamily(SystemFont("Segoe Fluent Icons"), SystemFont("Segoe MDL2 Assets"))
+
+private fun CaptionButtonType.windowsGlyph(): String =
+    when (this) {
+        CaptionButtonType.Minimize -> "\uE921"
+        CaptionButtonType.Maximize -> "\uE922"
+        CaptionButtonType.Restore -> "\uE923"
+        CaptionButtonType.Close -> "\uE8BB"
+    }
+
 @Composable
 internal actual fun CaptionButtonIcon(type: CaptionButtonType, color: Color, modifier: Modifier) {
-    ComposeCanvas(modifier) {
-        val strokeWidth = 1.25.dp.toPx()
-        val cap = StrokeCap.Square
-        when (type) {
-            CaptionButtonType.Minimize ->
-                drawLine(
+    Box(modifier, contentAlignment = Alignment.Center) {
+        BasicText(
+            text = type.windowsGlyph(),
+            style =
+                TextStyle(
                     color = color,
-                    start = Offset(size.width * 0.2f, size.height * 0.68f),
-                    end = Offset(size.width * 0.8f, size.height * 0.68f),
-                    strokeWidth = strokeWidth,
-                    cap = cap,
-                )
-            CaptionButtonType.Maximize ->
-                drawRect(
-                    color = color,
-                    topLeft = Offset(size.width * 0.22f, size.height * 0.22f),
-                    size = Size(size.width * 0.56f, size.height * 0.56f),
-                    style = Stroke(strokeWidth),
-                )
-            CaptionButtonType.Restore -> {
-                drawRect(
-                    color = color,
-                    topLeft = Offset(size.width * 0.31f, size.height * 0.18f),
-                    size = Size(size.width * 0.52f, size.height * 0.52f),
-                    style = Stroke(strokeWidth),
-                )
-                drawRect(
-                    color = color,
-                    topLeft = Offset(size.width * 0.17f, size.height * 0.32f),
-                    size = Size(size.width * 0.52f, size.height * 0.52f),
-                    style = Stroke(strokeWidth),
-                )
-            }
-            CaptionButtonType.Close -> {
-                drawLine(
-                    color = color,
-                    start = Offset(size.width * 0.24f, size.height * 0.24f),
-                    end = Offset(size.width * 0.76f, size.height * 0.76f),
-                    strokeWidth = strokeWidth,
-                    cap = cap,
-                )
-                drawLine(
-                    color = color,
-                    start = Offset(size.width * 0.76f, size.height * 0.24f),
-                    end = Offset(size.width * 0.24f, size.height * 0.76f),
-                    strokeWidth = strokeWidth,
-                    cap = cap,
-                )
-            }
-        }
+                    fontFamily = WindowsCaptionIconFontFamily,
+                    fontSize = 10.sp,
+                ),
+        )
     }
 }
 
@@ -112,6 +86,6 @@ internal actual fun AutoCaptionButtonContent(
             foreground
         }
     Box(Modifier.fillMaxSize().background(background), contentAlignment = Alignment.Center) {
-        CaptionButtonIcon(type = type, color = glyphColor, modifier = Modifier.size(16.dp))
+        CaptionButtonIcon(type = type, color = glyphColor, modifier = Modifier.fillMaxSize())
     }
 }

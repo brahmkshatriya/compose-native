@@ -1079,6 +1079,28 @@ int kplatform_window_allow_drawing_inside_title_bar(void *raw_window, int allow)
     return allow ? 1 : 0;
 }
 
+int kplatform_window_get_title_bar_metrics(
+    void *,
+    int *caption_button_width,
+    int *title_bar_height
+) {
+    if (caption_button_width) *caption_button_width = 0;
+    if (title_bar_height) *title_bar_height = 0;
+    return 0;
+}
+
+int kplatform_window_set_caption_button_bounds(
+    void *,
+    int,
+    int,
+    int,
+    int,
+    int,
+    int
+) {
+    return 0;
+}
+
 int kplatform_window_set_shadow(void *raw_window, int enabled) {
     SDL_Window *window = static_cast<SDL_Window *>(raw_window);
     std::fprintf(stderr, "[shadow] kplatform_window_set_shadow(window=%p, enabled=%d)\n",

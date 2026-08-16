@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,7 +42,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.isUiSystemInDarkTheme
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
@@ -163,8 +165,14 @@ internal fun defaultTitleBarForeground(): Color =
 /** Whether the client title bar is drawn outside fullscreen on this platform. */
 internal expect val PlatformClientTitleBarOutsideFullscreen: Boolean
 
+/** Whether a maximized window retains its resizable style for native caption commands. */
+internal expect val PlatformKeepsResizableStyleWhenMaximized: Boolean
+
 /** The width of the clickable caption-button hit area on this platform. */
 internal expect val PlatformCaptionButtonWidth: Dp
+
+/** The height of the clickable caption-button hit area on this platform. */
+internal expect val PlatformCaptionButtonHeight: Dp
 
 /** Draws the platform-specific content after the last caption button. */
 @Composable internal expect fun PlatformTitleBarEndPadding()
@@ -197,8 +205,14 @@ internal fun FrameWindowScope.ClientTitleBar(
     onCloseRequest: () -> Unit,
 ) {
     val foreground = resolveTitleBarForeground(titleBar)
+    val titleBarHeight =
+        if (titleBar is TitleBar.Custom) {
+            window.host.titleBarHeightDp()
+        } else {
+            maxOf(window.host.titleBarHeightDp(), PlatformCaptionButtonHeight)
+        }
     Row(
-        Modifier.fillMaxWidth().height(NativeTitleBarHeight),
+        Modifier.fillMaxWidth().height(titleBarHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         WindowDraggableArea(Modifier.weight(1f).fillMaxHeight()) {}
@@ -237,7 +251,7 @@ internal fun FrameWindowScope.ClientTitleBar(
 }
 
 @Composable
-private fun CaptionButton(
+private fun FrameWindowScope.CaptionButton(
     type: CaptionButtonType,
     titleBar: TitleBar,
     foreground: Color,
@@ -259,10 +273,17 @@ private fun CaptionButton(
         if (titleBar is TitleBar.Custom) {
             Modifier
         } else {
-            Modifier.width(PlatformCaptionButtonWidth).fillMaxHeight()
+            Modifier.width(PlatformCaptionButtonWidth).height(PlatformCaptionButtonHeight)
+        }
+    DisposableEffect(window, type) {
+        onDispose { window.host.updateCaptionButtonBounds(type, null) }
+    }
+    val measuredSizeModifier =
+        sizeModifier.onGloballyPositioned {
+            window.host.updateCaptionButtonBounds(type, it.boundsInRoot())
         }
     Box(
-        sizeModifier
+        measuredSizeModifier
             .semantics { contentDescription = description }
             .clickable(
                 enabled = enabled,
@@ -308,8 +329,7 @@ internal fun FrameWindowScope.FullscreenClientTitleBarReveal(
 ) {
     val hoverInteraction = remember { MutableInteractionSource() }
     val isRevealed by hoverInteraction.collectIsHoveredAsState()
-    val density = LocalDensity.current
-    val revealedInsetPx = with(density) { NativeTitleBarHeight.roundToPx() }
+    val revealedInsetPx = window.host.titleBarHeightPx()
     LaunchedEffect(isRevealed, revealedInsetPx) {
         // The value is pushed to the platform on every animation frame directly from the
         // animation coroutine: a SideEffect reading the animated state would not be invalidated
