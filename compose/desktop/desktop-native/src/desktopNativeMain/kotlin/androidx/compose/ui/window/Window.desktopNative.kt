@@ -1,16 +1,21 @@
 @file:OptIn(
     androidx.compose.ui.ExperimentalComposeUiApi::class,
     androidx.compose.ui.InternalComposeUiApi::class,
+    kotlin.experimental.ExperimentalNativeApi::class,
     kotlinx.cinterop.ExperimentalForeignApi::class,
     org.jetbrains.skiko.InternalSkikoApi::class,
 )
 
 package androidx.compose.ui.window
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposableOpenTarget
 import androidx.compose.runtime.DisposableEffect
@@ -18,6 +23,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCompositionContext
@@ -31,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.ProvideSystemTheme
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTransferData
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -43,6 +50,7 @@ import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.graphics.asComposeImageBitmap
 import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.platform.PlatformGraphicsContext
 import androidx.compose.ui.input.key.Key
@@ -62,8 +70,10 @@ import androidx.compose.ui.platform.PlatformArchitectureComponentsOwner
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformDispatcherRegistry
 import androidx.compose.ui.platform.PlatformDragAndDropManager
+import androidx.compose.ui.platform.PlatformInsets
 import androidx.compose.ui.platform.PlatformRootForTest
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
+import androidx.compose.ui.platform.PlatformWindowInsets
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.clearSkikoComposeImplementation
 import androidx.compose.ui.platform.registerSkikoComposeImplementation
@@ -91,6 +101,8 @@ import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.native.OsFamily
+import kotlin.native.Platform as NativePlatform
 import kotlin.native.concurrent.ObsoleteWorkersApi
 import kotlin.native.concurrent.Worker
 import kotlin.system.exitProcess
@@ -227,6 +239,21 @@ enum class WindowPlacement {
     Maximized,
     Fullscreen,
 }
+
+internal val NativeTitleBarHeight = 36.dp
+private val NativeWindowCornerRadius = 6.dp
+private val IsLinuxHost = NativePlatform.osFamily == OsFamily.LINUX
+
+internal fun titleBarInsetHeightPx(
+    drawingInsideTitleBar: Boolean,
+    placement: WindowPlacement,
+    density: Float,
+): Int =
+    if (drawingInsideTitleBar && placement != WindowPlacement.Fullscreen) {
+        (NativeTitleBarHeight.value * density).roundToInt()
+    } else {
+        0
+    }
 
 internal fun WindowPlacement.persistsFloatingGeometry(): Boolean = this == WindowPlacement.Floating
 
@@ -506,6 +533,7 @@ fun DialogWindow(
         enabled = enabled,
         focusable = focusable,
         alwaysOnTop = alwaysOnTop,
+        titleBar = TitleBar.Native,
         owner = owner,
         modalityType = modalityType,
         onPreviewKeyEvent = onPreviewKeyEvent,
@@ -527,6 +555,18 @@ private val LocalNativeApplication =
         error("Window must be called inside application")
     }
 
+/**
+ * Opens a native Compose window.
+ *
+ * @param titleBar how the window presents its title bar. [TitleBar.Native] keeps the system title
+ *   bar. [TitleBar.Auto] and [TitleBar.Custom] extend the client area underneath the title bar and
+ *   draw only the caption controls; no title text or title bar background is rendered. In
+ *   fullscreen, the caption controls are hidden and slide down while the pointer hovers over the
+ *   top edge of the window. On Windows, the system caption buttons remain available outside
+ *   fullscreen. On Linux, `Window` replaces the compositor decorations with Compose-drawn caption
+ *   controls. The occupied area is exposed through `WindowInsets.captionBar` and
+ *   `WindowInsets.systemBars`. This option has no effect on undecorated windows.
+ */
 @Composable
 @ComposableOpenTarget(-1)
 fun Window(
@@ -541,6 +581,7 @@ fun Window(
     enabled: Boolean = true,
     focusable: Boolean = true,
     alwaysOnTop: Boolean = false,
+    titleBar: TitleBar = TitleBar.Native,
     onPreviewKeyEvent: (KeyEvent) -> Boolean = { false },
     onKeyEvent: (KeyEvent) -> Boolean = { false },
     content: @Composable FrameWindowScope.() -> Unit,
@@ -557,6 +598,7 @@ fun Window(
         enabled = enabled,
         focusable = focusable,
         alwaysOnTop = alwaysOnTop,
+        titleBar = titleBar,
         owner = null,
         modalityType = DialogModalityType.Modeless,
         onPreviewKeyEvent = onPreviewKeyEvent,
@@ -578,6 +620,7 @@ private fun WindowImpl(
     enabled: Boolean,
     focusable: Boolean,
     alwaysOnTop: Boolean,
+    titleBar: TitleBar,
     owner: NativeWindowHost?,
     modalityType: DialogModalityType,
     onPreviewKeyEvent: (KeyEvent) -> Boolean,
@@ -593,6 +636,9 @@ private fun WindowImpl(
         remember(application, state, owner, modalityType, transparent) {
             NativeWindowHost(application, state, owner, modalityType)
         }
+    val requestedPlacement = state.placement
+    val requestedMinimized = state.isMinimized
+    val requestedPosition = state.position
     val requestedSize = state.size
 
     DisposableEffect(host) {
@@ -607,6 +653,7 @@ private fun WindowImpl(
             enabled = enabled,
             focusable = focusable,
             alwaysOnTop = alwaysOnTop,
+            titleBar = titleBar,
             onPreviewKeyEvent = onPreviewKeyEvent,
             onKeyEvent = onKeyEvent,
             closeRequest = { currentCloseRequest.value() },
@@ -626,8 +673,12 @@ private fun WindowImpl(
             enabled = enabled,
             focusable = focusable,
             alwaysOnTop = alwaysOnTop,
+            titleBar = titleBar,
             onPreviewKeyEvent = onPreviewKeyEvent,
             onKeyEvent = onKeyEvent,
+            requestedPlacement = requestedPlacement,
+            requestedMinimized = requestedMinimized,
+            requestedPosition = requestedPosition,
             requestedSize = requestedSize,
         )
     }
@@ -827,6 +878,15 @@ private val NativeWindowSelfTestContent: @Composable ApplicationScope.() -> Unit
     }
 }
 
+/**
+ * Opens a native Compose application containing a single window.
+ *
+ * @param titleBar how the window presents its title bar. [TitleBar.Native] keeps the system title
+ *   bar. [TitleBar.Auto] and [TitleBar.Custom] extend the client area underneath the title bar and
+ *   draw only the caption controls; no title text or title bar background is rendered. In
+ *   fullscreen, the caption controls are hidden and slide down while the pointer hovers over the
+ *   top edge of the window.
+ */
 fun singleWindowApplication(
     state: WindowState = WindowState(),
     visible: Boolean = true,
@@ -838,6 +898,7 @@ fun singleWindowApplication(
     enabled: Boolean = true,
     focusable: Boolean = true,
     alwaysOnTop: Boolean = false,
+    titleBar: TitleBar = TitleBar.Native,
     onPreviewKeyEvent: (KeyEvent) -> Boolean = { false },
     onKeyEvent: (KeyEvent) -> Boolean = { false },
     exitProcessOnExit: Boolean = true,
@@ -856,6 +917,7 @@ fun singleWindowApplication(
             enabled = enabled,
             focusable = focusable,
             alwaysOnTop = alwaysOnTop,
+            titleBar = titleBar,
             onPreviewKeyEvent = onPreviewKeyEvent,
             onKeyEvent = onKeyEvent,
             content = content,
@@ -1246,6 +1308,18 @@ private class SdlRootForTestListener : PlatformContext.RootForTestListener {
     fun contains(root: PlatformRootForTest): Boolean = root in roots
 }
 
+private class NativeWindowInsets : PlatformWindowInsets {
+    var titleBarTop by mutableIntStateOf(0)
+
+    private val titleBar = PlatformInsets(getTop = { titleBarTop })
+
+    override val captionBar: PlatformInsets
+        get() = titleBar
+
+    override val systemBars: PlatformInsets
+        get() = titleBar
+}
+
 private class SdlPlatformContext(
     private val accessibility: NativeAccessibility,
     private val damageTracker: FrameDamageTracker,
@@ -1253,6 +1327,7 @@ private class SdlPlatformContext(
 ) : PlatformContext by PlatformContext.Empty() {
     var window: CPointer<SDL_Window>? = null
     private val testRootListener = SdlRootForTestListener()
+    private val nativeWindowInsets = NativeWindowInsets()
     internal val nativeDragAndDropManager = SdlDragAndDropManager()
 
     override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener
@@ -1262,8 +1337,15 @@ private class SdlPlatformContext(
         get() = testRootListener
 
     override val windowInfo = SdlWindowInfo()
+    override val windowInsets: PlatformWindowInsets
+        get() = nativeWindowInsets
+
     override val dragAndDropManager: PlatformDragAndDropManager
         get() = nativeDragAndDropManager
+
+    fun updateTitleBarInset(top: Int) {
+        nativeWindowInsets.titleBarTop = top
+    }
 
     override fun onDrawDamage(boundsInRoot: Rect) {
         damageTracker.add(boundsInRoot)
@@ -1523,16 +1605,20 @@ internal class NativeWindowHost(
     }
 
     private var closeRequest: () -> Unit = {}
-    private var currentTitle = ""
+    private var currentTitle by mutableStateOf("")
     private var currentIcon: Painter? = null
     private var currentVisible = false
     private var currentTransparent = false
+    private var hasTransparentWindowBuffer = false
     private var windowShown = false
     private var currentUndecorated = false
-    private var currentResizable = true
+    private var currentResizable by mutableStateOf(true)
     private var currentEnabled = true
     private var currentFocusable = true
     private var currentAlwaysOnTop = false
+    private var currentTitleBar by mutableStateOf<TitleBar>(TitleBar.Native)
+    private var isDrawingInsideTitleBar by mutableStateOf(false)
+    private var windowShadowRefreshPending = false
     private var menuBarModel: NativeMenuModel = NativeMenuModel.Empty
     private var menuBarRevision by androidx.compose.runtime.mutableIntStateOf(0)
     private var currentPlacement = WindowPlacement.Floating
@@ -1640,6 +1726,7 @@ internal class NativeWindowHost(
         enabled: Boolean,
         focusable: Boolean,
         alwaysOnTop: Boolean,
+        titleBar: TitleBar,
         onPreviewKeyEvent: (KeyEvent) -> Boolean,
         onKeyEvent: (KeyEvent) -> Boolean,
         closeRequest: () -> Unit,
@@ -1656,12 +1743,15 @@ internal class NativeWindowHost(
             else 600
         val nativeLayer = SkiaLayer()
         configureNativeGraphics(nativeLayer)
+        val needsTransparentClientFrame =
+            IsLinuxHost && titleBar !is TitleBar.Native && !undecorated
+        val renderWithTransparency = transparent || needsTransparentClientFrame
         val baseFlags =
             SDL_WINDOW_HIGH_PIXEL_DENSITY or
                 (if (visible) 0uL else SDL_WINDOW_HIDDEN) or
                 (if (undecorated) SDL_WINDOW_BORDERLESS else 0uL) or
                 (if (resizable) SDL_WINDOW_RESIZABLE else 0uL) or
-                (if (transparent) SDL_WINDOW_TRANSPARENT else 0uL)
+                (if (renderWithTransparency) SDL_WINDOW_TRANSPARENT else 0uL)
         val initialX =
             (state.position as? WindowPosition.Absolute)?.x?.value?.roundToInt()
                 ?: SDL_WINDOWPOS_CENTERED.toInt()
@@ -1685,7 +1775,7 @@ internal class NativeWindowHost(
         platformContext.window = window
         windowId = SDL_GetWindowID(window)
         SDL_SetWindowPosition(window, initialX, initialY)
-        if (transparent) {
+        if (renderWithTransparency) {
             check(kplatform_window_set_transparent(window, 1) != 0) {
                 "Per-pixel transparency is not supported by the active SDL backend"
             }
@@ -1704,7 +1794,7 @@ internal class NativeWindowHost(
         attachNativeSkiaLayer(
             layer = nativeLayer,
             window = window,
-            transparency = transparent,
+            transparency = renderWithTransparency,
             queryContentScale = { queryMetrics(window).density },
             queryFullscreen = { currentPlacement == WindowPlacement.Fullscreen },
             updateFullscreen = { fullscreen ->
@@ -1727,12 +1817,14 @@ internal class NativeWindowHost(
         currentIcon = icon
         currentVisible = visible
         currentTransparent = transparent
+        hasTransparentWindowBuffer = renderWithTransparency
         windowShown = SDL_GetWindowFlags(window) and SDL_WINDOW_HIDDEN == 0uL
         currentUndecorated = undecorated
         currentResizable = resizable
         currentEnabled = enabled
         currentFocusable = focusable
         currentAlwaysOnTop = alwaysOnTop
+        currentTitleBar = titleBar
         currentPlacement = state.placement
         currentMinimized = state.isMinimized
         currentPosition = state.position
@@ -1743,9 +1835,11 @@ internal class NativeWindowHost(
         if (state.isMinimized) SDL_MinimizeWindow(window)
         isMaximized = SDL_GetWindowFlags(window) and SDL_WINDOW_MAXIMIZED != 0uL
         hitTestReference = StableRef.create(this)
+        applyDrawingInsideTitleBar()
         configureHitTest()
         applyMinimumSize()
         applyMaximumSize()
+        applyTitleBarMode()
 
         val initialMetrics = queryMetrics(window)
         metrics = initialMetrics
@@ -1786,9 +1880,46 @@ internal class NativeWindowHost(
                         },
                 ) {
                     @Suppress("UNUSED_VARIABLE") val revision = menuBarRevision
-                    Column(Modifier.fillMaxSize()) {
-                        NativeWindowMenuBar(menuBarModel)
-                        Box(Modifier.fillMaxWidth().weight(1f)) { content() }
+                    val roundedClientFrame =
+                        IsLinuxHost &&
+                            isDrawingInsideTitleBar &&
+                            state.placement == WindowPlacement.Floating
+                    val frameModifier =
+                        if (roundedClientFrame) {
+                            Modifier.fillMaxSize()
+                                .clip(RoundedCornerShape(NativeWindowCornerRadius))
+                                .border(
+                                    width = 1.dp,
+                                    color = Color.Gray.copy(alpha = 0.38f),
+                                    shape = RoundedCornerShape(NativeWindowCornerRadius),
+                                )
+                        } else {
+                            Modifier.fillMaxSize()
+                        }
+                    Box(frameModifier) {
+                        Column(Modifier.fillMaxSize()) {
+                            NativeWindowMenuBar(menuBarModel)
+                            Box(Modifier.fillMaxWidth().weight(1f)) {
+                                content()
+                                if (isDrawingInsideTitleBar) {
+                                    if (state.placement == WindowPlacement.Fullscreen) {
+                                        scope.FullscreenClientTitleBarReveal(
+                                            state = state,
+                                            resizable = currentResizable,
+                                            titleBar = currentTitleBar,
+                                            onCloseRequest = closeRequest,
+                                        )
+                                    } else if (PlatformClientTitleBarOutsideFullscreen) {
+                                        scope.ClientTitleBar(
+                                            state = state,
+                                            resizable = currentResizable,
+                                            titleBar = currentTitleBar,
+                                            onCloseRequest = closeRequest,
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1814,8 +1945,12 @@ internal class NativeWindowHost(
         enabled: Boolean,
         focusable: Boolean,
         alwaysOnTop: Boolean,
+        titleBar: TitleBar,
         onPreviewKeyEvent: (KeyEvent) -> Boolean,
         onKeyEvent: (KeyEvent) -> Boolean,
+        requestedPlacement: WindowPlacement,
+        requestedMinimized: Boolean,
+        requestedPosition: WindowPosition,
         requestedSize: DpSize,
     ) {
         val window = sdlWindow ?: return
@@ -1836,9 +1971,19 @@ internal class NativeWindowHost(
             windowShown = visible
             if (visible) requestRender()
         }
+        var frameConfigurationChanged = false
         if (undecorated != currentUndecorated) {
             SDL_SetWindowBordered(window, !undecorated)
             currentUndecorated = undecorated
+            frameConfigurationChanged = true
+        }
+        if (titleBar != currentTitleBar) {
+            currentTitleBar = titleBar
+            frameConfigurationChanged = true
+        }
+        if (frameConfigurationChanged) {
+            applyDrawingInsideTitleBar()
+            applyTitleBarMode()
             configureHitTest()
             requestRender()
         }
@@ -1864,14 +2009,14 @@ internal class NativeWindowHost(
             SDL_SetWindowAlwaysOnTop(window, alwaysOnTop)
             currentAlwaysOnTop = alwaysOnTop
         }
-        if (state.placement != currentPlacement) {
-            currentPlacement = state.placement
+        if (requestedPlacement != currentPlacement) {
+            currentPlacement = requestedPlacement
             applyPlacement()
             requestRender()
         }
-        if (state.isMinimized != currentMinimized) {
-            if (state.isMinimized) SDL_MinimizeWindow(window) else SDL_RestoreWindow(window)
-            currentMinimized = state.isMinimized
+        if (requestedMinimized != currentMinimized) {
+            if (requestedMinimized) SDL_MinimizeWindow(window) else SDL_RestoreWindow(window)
+            currentMinimized = requestedMinimized
             if (!currentMinimized) requestRender()
         }
         platformContext.updateLifecycle(
@@ -1880,10 +2025,10 @@ internal class NativeWindowHost(
         )
         if (
             currentPlacement.persistsFloatingGeometry() &&
-                state.position != currentPosition &&
-                state.position is WindowPosition.Absolute
+                requestedPosition != currentPosition &&
+                requestedPosition is WindowPosition.Absolute
         ) {
-            val position = state.position as WindowPosition.Absolute
+            val position = requestedPosition
             SDL_SetWindowPosition(
                 window,
                 position.x.value.roundToInt(),
@@ -2079,7 +2224,7 @@ internal class NativeWindowHost(
                         1f
                     } else {
                         -1f
-                }
+                    }
                 val step = 40f * (metrics?.density ?: 1f)
                 val modifiers = SDL_GetModState().toInt()
                 val scrollDelta =
@@ -2088,12 +2233,7 @@ internal class NativeWindowHost(
                         y = event.wheel.y * step * direction,
                         isShiftPressed = modifiers and SdlShiftMask != 0,
                     )
-                pointer(
-                    PointerEventType.Scroll,
-                    pointerX,
-                    pointerY,
-                    scrollDelta = scrollDelta,
-                )
+                pointer(PointerEventType.Scroll, pointerX, pointerY, scrollDelta = scrollDelta)
             }
             SDL_EVENT_MOUSE_BUTTON_DOWN.toUInt(),
             SDL_EVENT_MOUSE_BUTTON_UP.toUInt() -> {
@@ -2167,8 +2307,11 @@ internal class NativeWindowHost(
     fun hitTest(x: Int, y: Int): SDL_HitTestResult {
         val currentMetrics = metrics ?: return SDL_HitTestResult.SDL_HITTEST_NORMAL
         val point = Offset(x * currentMetrics.inputScaleX, y * currentMetrics.inputScaleY)
-        val border = 6f * currentMetrics.density
-        if (currentResizable) {
+        // Maximized and fullscreen windows fill the workspace and are resized by the window
+        // manager, so they never offer resize edges (or the resize cursor that SDL derives
+        // from them). Only floating windows expose resize borders.
+        if (currentResizable && currentPlacement == WindowPlacement.Floating) {
+            val border = 6f * currentMetrics.density
             val left = point.x < border
             val right = point.x >= currentMetrics.pixelWidth - border
             val top = point.y < border
@@ -2405,7 +2548,7 @@ internal class NativeWindowHost(
                 if (densityChanged) println("$currentTitle: ${nextMetrics.description()}")
             }
             platformContext.updateTextInputRect(nextMetrics)
-            if (currentTransparent && metricsChanged) {
+            if (hasTransparentWindowBuffer && metricsChanged) {
                 kplatform_window_set_transparent(window, 1)
             }
             val hadPendingLayout = nativeScene.hasPendingMeasureOrLayout
@@ -2418,6 +2561,12 @@ internal class NativeWindowHost(
             if (composeNeedsDraw) {
                 if (hadPendingLayout) nativeScene.measureAndLayout()
                 nativeLayer.render(force = true)
+                if (windowShadowRefreshPending) {
+                    windowShadowRefreshPending = false
+                    if (isDrawingInsideTitleBar && currentPlacement == WindowPlacement.Floating) {
+                        kplatform_window_refresh_shadow(window)
+                    }
+                }
                 damageTracker.clear()
                 if (renderStats) {
                     val total = nextMetrics.pixelWidth * nextMetrics.pixelHeight
@@ -2465,6 +2614,29 @@ internal class NativeWindowHost(
                 (metrics.pixelWidth / metrics.density).dp,
                 (metrics.pixelHeight / metrics.density).dp,
             )
+        updateTitleBarInset(metrics.density)
+    }
+
+    private fun updateTitleBarInset(density: Float = metrics?.density ?: 1f) {
+        platformContext.updateTitleBarInset(
+            titleBarInsetHeightPx(
+                drawingInsideTitleBar = isDrawingInsideTitleBar,
+                placement = currentPlacement,
+                density = density,
+            )
+        )
+    }
+
+    // Lets the fullscreen caption reveal animate the captionBar/systemBars top inset
+    // alongside the caption bar itself.
+    internal var titleBarInsetPx: Int = 0
+        private set
+
+    internal fun updateTitleBarInsetPx(top: Int) {
+        if (top != titleBarInsetPx) {
+            titleBarInsetPx = top
+            platformContext.updateTitleBarInset(top)
+        }
     }
 
     private fun queryMetrics(window: CPointer<SDL_Window>): RenderMetrics = memScoped {
@@ -2521,11 +2693,13 @@ internal class NativeWindowHost(
                 SDL_RestoreWindow(window)
             }
         }
+        updateTitleBarInset()
+        updateWindowShadow()
     }
 
     private fun configureHitTest() {
         val window = sdlWindow ?: return
-        if (currentUndecorated) {
+        if (currentUndecorated || isDrawingInsideTitleBar) {
             val reference = checkNotNull(hitTestReference)
             check(SDL_SetWindowHitTest(window, NativeWindowHitTest, reference.asCPointer())) {
                 "Window hit testing is unavailable: ${SDL_GetError()?.toKString()}"
@@ -2534,6 +2708,56 @@ internal class NativeWindowHost(
             SDL_SetWindowHitTest(window, null, null)
         }
     }
+
+    private fun applyDrawingInsideTitleBar() {
+        val window = sdlWindow ?: return
+        val wasDrawingInsideTitleBar = isDrawingInsideTitleBar
+        val enable = currentTitleBar !is TitleBar.Native && !currentUndecorated
+        isDrawingInsideTitleBar =
+            kplatform_window_allow_drawing_inside_title_bar(window, if (enable) 1 else 0) != 0 &&
+                enable
+        // Disabling the platform title-bar integration can restore decorations on Linux. Preserve
+        // the caller's explicit undecorated setting after the platform hook has been reset.
+        if (currentUndecorated) SDL_SetWindowBordered(window, false)
+        updateTitleBarInset()
+        updateWindowShadow()
+        // On Wayland, switching from server-side to client-side decorations is asynchronous.
+        // KWin can apply that change after the shadow installed above and clear its association
+        // with the surface. Recreate the shadow after the first client-decorated frame.
+        windowShadowRefreshPending =
+            IsLinuxHost &&
+                !wasDrawingInsideTitleBar &&
+                isDrawingInsideTitleBar &&
+                currentPlacement == WindowPlacement.Floating
+    }
+
+    private fun updateWindowShadow() {
+        val window = sdlWindow ?: return
+        val enabled =
+            IsLinuxHost && isDrawingInsideTitleBar && currentPlacement == WindowPlacement.Floating
+        kplatform_window_set_shadow(window, if (enabled) 1 else 0)
+    }
+
+    private fun applyTitleBarMode() {
+        val window = sdlWindow ?: return
+        // Caption styling only applies while drawing inside the title bar. The Linux title bar is
+        // rendered by Compose (`ClientTitleBar`), so only Windows needs a native hook to
+        // restyle the system caption glyphs.
+        if (!isDrawingInsideTitleBar) return
+        if (IsLinuxHost) return
+        val foreground = currentTitleBar.foreground.takeIf { it.isSpecified } ?: return
+        kplatform_window_set_title_bar_color(
+            window,
+            -1,
+            -1,
+            -1,
+            foreground.red.channelByte(),
+            foreground.green.channelByte(),
+            foreground.blue.channelByte(),
+        )
+    }
+
+    private fun Float.channelByte(): Int = (coerceIn(0f, 1f) * 255f).roundToInt()
 
     fun close() {
         if (closed) return
@@ -2546,9 +2770,13 @@ internal class NativeWindowHost(
         }
         scene = null
         accessibility.close()
+        sdlWindow?.let {
+            SDL_SetWindowHitTest(it, null, null)
+            kplatform_window_set_shadow(it, 0)
+            kplatform_window_allow_drawing_inside_title_bar(it, 0)
+        }
         platformContext.nativeDragAndDropManager.close()
         platformContext.close()
-        sdlWindow?.let { SDL_SetWindowHitTest(it, null, null) }
         hitTestReference?.dispose()
         hitTestReference = null
         gpuInteropRegistry = null
@@ -2605,11 +2833,7 @@ private fun pointerKeyboardModifiers(modifiers: Int) =
     )
 
 /** Converts Shift + a vertical mouse-wheel tick into horizontal scrolling. */
-internal fun nativeMouseWheelScrollDelta(
-    x: Float,
-    y: Float,
-    isShiftPressed: Boolean,
-): Offset =
+internal fun nativeMouseWheelScrollDelta(x: Float, y: Float, isShiftPressed: Boolean): Offset =
     if (isShiftPressed && x == 0f) {
         Offset(x = y, y = 0f)
     } else {

@@ -25,6 +25,34 @@ import kotlin.test.assertTrue
 
 class WindowPlatformFeaturesTest {
     @Test
+    fun titleBarInsetIsOnlyPresentForExtendedNonFullscreenWindows() {
+        assertEquals(
+            54,
+            titleBarInsetHeightPx(
+                drawingInsideTitleBar = true,
+                placement = WindowPlacement.Floating,
+                density = 1.5f,
+            ),
+        )
+        assertEquals(
+            0,
+            titleBarInsetHeightPx(
+                drawingInsideTitleBar = false,
+                placement = WindowPlacement.Floating,
+                density = 1.5f,
+            ),
+        )
+        assertEquals(
+            0,
+            titleBarInsetHeightPx(
+                drawingInsideTitleBar = true,
+                placement = WindowPlacement.Fullscreen,
+                density = 1.5f,
+            ),
+        )
+    }
+
+    @Test
     fun onlyFloatingPlacementPersistsWindowGeometry() {
         assertTrue(WindowPlacement.Floating.persistsFloatingGeometry())
         assertFalse(WindowPlacement.Maximized.persistsFloatingGeometry())

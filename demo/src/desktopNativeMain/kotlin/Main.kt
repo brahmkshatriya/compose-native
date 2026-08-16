@@ -387,6 +387,7 @@ fun main() {
     application {
         var previewWindow by remember { mutableStateOf(false) }
         var transparentWindow by remember { mutableStateOf(false) }
+        var titleBarDemoWindow by remember { mutableStateOf(true) }
         var previewAlwaysOnTop by remember { mutableStateOf(true) }
         var dialogModality by remember { mutableStateOf<DialogModalityType?>(null) }
         var accentChoice by remember { mutableStateOf(0) }
@@ -491,6 +492,8 @@ fun main() {
                     }
                 }
                 Menu("Window", mnemonic = 'W') {
+                    Item("Open title bar demo") { titleBarDemoWindow = true }
+                    Separator()
                     Item("Open modeless dialog") { dialogModality = DialogModalityType.Modeless }
                     Item("Open document-modal dialog") {
                         dialogModality = DialogModalityType.DocumentModal
@@ -540,6 +543,10 @@ fun main() {
                     }
                 }
             }
+        }
+
+        if (titleBarDemoWindow) {
+            TitleBarDemoWindow(onCloseRequest = { titleBarDemoWindow = false })
         }
 
         if (previewWindow) {

@@ -11,13 +11,101 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cmath>
 #include <csignal>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
 
 namespace {
+
+struct org_kde_kwin_shadow;
+struct org_kde_kwin_shadow_manager;
+
+extern const wl_interface org_kde_kwin_shadow_interface;
+
+static const wl_interface *kwin_shadow_types[] = {
+    nullptr,
+    &org_kde_kwin_shadow_interface,
+    &wl_surface_interface,
+    &wl_surface_interface,
+    &wl_buffer_interface,
+    &wl_buffer_interface,
+    &wl_buffer_interface,
+    &wl_buffer_interface,
+    &wl_buffer_interface,
+    &wl_buffer_interface,
+    &wl_buffer_interface,
+    &wl_buffer_interface,
+};
+
+static const wl_message kwin_shadow_manager_requests[] = {
+    {"create", "no", kwin_shadow_types + 1},
+    {"unset", "o", kwin_shadow_types + 3},
+    {"destroy", "2", kwin_shadow_types},
+};
+
+extern const wl_interface org_kde_kwin_shadow_manager_interface = {
+    "org_kde_kwin_shadow_manager", 2, 3, kwin_shadow_manager_requests, 0, nullptr,
+};
+
+static const wl_message kwin_shadow_requests[] = {
+    {"commit", "", kwin_shadow_types},
+    {"attach_left", "o", kwin_shadow_types + 4},
+    {"attach_top_left", "o", kwin_shadow_types + 5},
+    {"attach_top", "o", kwin_shadow_types + 6},
+    {"attach_top_right", "o", kwin_shadow_types + 7},
+    {"attach_right", "o", kwin_shadow_types + 8},
+    {"attach_bottom_right", "o", kwin_shadow_types + 9},
+    {"attach_bottom", "o", kwin_shadow_types + 10},
+    {"attach_bottom_left", "o", kwin_shadow_types + 11},
+    {"set_left_offset", "f", kwin_shadow_types},
+    {"set_top_offset", "f", kwin_shadow_types},
+    {"set_right_offset", "f", kwin_shadow_types},
+    {"set_bottom_offset", "f", kwin_shadow_types},
+    {"destroy", "2", kwin_shadow_types},
+};
+
+extern const wl_interface org_kde_kwin_shadow_interface = {
+    "org_kde_kwin_shadow", 2, 14, kwin_shadow_requests, 0, nullptr,
+};
+
+org_kde_kwin_shadow *kwin_shadow_create(
+    org_kde_kwin_shadow_manager *manager,
+    wl_surface *surface
+) {
+    return reinterpret_cast<org_kde_kwin_shadow *>(wl_proxy_marshal_flags(
+        reinterpret_cast<wl_proxy *>(manager), 0, &org_kde_kwin_shadow_interface,
+        wl_proxy_get_version(reinterpret_cast<wl_proxy *>(manager)), 0, nullptr, surface));
+}
+
+void kwin_shadow_request(org_kde_kwin_shadow *shadow, uint32_t opcode, wl_buffer *buffer = nullptr) {
+    wl_proxy_marshal_flags(
+        reinterpret_cast<wl_proxy *>(shadow), opcode, nullptr,
+        wl_proxy_get_version(reinterpret_cast<wl_proxy *>(shadow)), 0, buffer);
+}
+
+void kwin_shadow_set_offset(org_kde_kwin_shadow *shadow, uint32_t opcode, int offset) {
+    wl_proxy_marshal_flags(
+        reinterpret_cast<wl_proxy *>(shadow), opcode, nullptr,
+        wl_proxy_get_version(reinterpret_cast<wl_proxy *>(shadow)), 0,
+        wl_fixed_from_int(offset));
+}
+
+void kwin_shadow_destroy(org_kde_kwin_shadow *shadow) {
+    wl_proxy_marshal_flags(
+        reinterpret_cast<wl_proxy *>(shadow), 13, nullptr,
+        wl_proxy_get_version(reinterpret_cast<wl_proxy *>(shadow)),
+        WL_MARSHAL_FLAG_DESTROY);
+}
+
+void kwin_shadow_unset(org_kde_kwin_shadow_manager *manager, wl_surface *surface) {
+    wl_proxy_marshal_flags(
+        reinterpret_cast<wl_proxy *>(manager), 1, nullptr,
+        wl_proxy_get_version(reinterpret_cast<wl_proxy *>(manager)), 0, surface);
+}
 
 char *copy_string(const char *value) {
     if (!value) return nullptr;
@@ -56,6 +144,7 @@ struct WaylandContext {
     wl_data_device_manager *manager = nullptr;
     wl_data_device *device = nullptr;
     wl_data_source *source = nullptr;
+    org_kde_kwin_shadow_manager *shadow_manager = nullptr;
     wl_surface *icon_surface = nullptr;
     wl_buffer *icon_buffer = nullptr;
     void *icon_data = nullptr;
@@ -69,12 +158,179 @@ struct WaylandContext {
     int references = 0;
 };
 
+struct ShadowBuffer {
+    wl_buffer *buffer = nullptr;
+    void *data = nullptr;
+    size_t size = 0;
+};
+
+struct WindowShadow {
+    WaylandContext *context = nullptr;
+    wl_surface *surface = nullptr;
+    org_kde_kwin_shadow *shadow = nullptr;
+    ShadowBuffer buffers[8];
+};
+
 struct WaylandHandle {
     WaylandContext *context = nullptr;
     wl_surface *surface = nullptr;
 };
 
 std::vector<WaylandContext *> wayland_contexts;
+std::vector<std::pair<SDL_Window *, WindowShadow *>> window_shadows;
+
+void destroy_shadow_buffer(ShadowBuffer *buffer) {
+    if (buffer->buffer) wl_buffer_destroy(buffer->buffer);
+    if (buffer->data && buffer->size) munmap(buffer->data, buffer->size);
+    *buffer = {};
+}
+
+bool create_shadow_buffer(
+    WaylandContext *context,
+    ShadowBuffer *result,
+    int width,
+    int height,
+    int horizontal,
+    int vertical
+) {
+    const int stride = width * 4;
+    const size_t bytes = static_cast<size_t>(stride) * static_cast<size_t>(height);
+    static uint32_t next_shadow_id = 1;
+    int fd = -1;
+    std::string name;
+    for (int attempt = 0; attempt < 32 && fd < 0; ++attempt) {
+        name = "/ktnative-shadow-" + std::to_string(getpid()) + "-" +
+            std::to_string(next_shadow_id++);
+        fd = shm_open(name.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
+    }
+    if (fd < 0) return false;
+    shm_unlink(name.c_str());
+    if (ftruncate(fd, static_cast<off_t>(bytes)) != 0) {
+        close(fd);
+        return false;
+    }
+    void *mapping = mmap(nullptr, bytes, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (mapping == MAP_FAILED) {
+        close(fd);
+        return false;
+    }
+
+    constexpr int padding = 24;
+    auto *pixels = static_cast<uint32_t *>(mapping);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const float dx = horizontal < 0 ? std::max(0, padding - x) :
+                horizontal > 0 ? std::max(0, x - (width - padding - 1)) : 0;
+            const float dy = vertical < 0 ? std::max(0, padding - y) :
+                vertical > 0 ? std::max(0, y - (height - padding - 1)) : 0;
+            const float distance = std::sqrt(dx * dx + dy * dy);
+            const float strength = std::max(0.0f, 1.0f - distance / padding);
+            const uint32_t alpha = static_cast<uint32_t>(72.0f * strength * strength);
+            pixels[y * width + x] = alpha << 24;
+        }
+    }
+
+    wl_shm_pool *pool = wl_shm_create_pool(context->shm, fd, static_cast<int>(bytes));
+    close(fd);
+    if (!pool) {
+        munmap(mapping, bytes);
+        return false;
+    }
+    wl_buffer *buffer = wl_shm_pool_create_buffer(
+        pool, 0, width, height, stride, WL_SHM_FORMAT_ARGB8888);
+    wl_shm_pool_destroy(pool);
+    if (!buffer) {
+        munmap(mapping, bytes);
+        return false;
+    }
+    result->buffer = buffer;
+    result->data = mapping;
+    result->size = bytes;
+    return true;
+}
+
+void destroy_window_shadow(WindowShadow *window_shadow, bool unset) {
+    if (unset && window_shadow->context && window_shadow->context->shadow_manager &&
+        window_shadow->surface) {
+        kwin_shadow_unset(window_shadow->context->shadow_manager, window_shadow->surface);
+        wl_surface_commit(window_shadow->surface);
+    }
+    if (window_shadow->shadow) kwin_shadow_destroy(window_shadow->shadow);
+    for (auto &buffer : window_shadow->buffers) destroy_shadow_buffer(&buffer);
+    delete window_shadow;
+}
+
+void remove_window_shadow(SDL_Window *window) {
+    auto iterator = std::find_if(
+        window_shadows.begin(), window_shadows.end(),
+        [window](const auto &entry) { return entry.first == window; });
+    if (iterator == window_shadows.end()) return;
+    destroy_window_shadow(iterator->second, true);
+    window_shadows.erase(iterator);
+}
+
+bool install_window_shadow(SDL_Window *window) {
+    std::fprintf(stderr, "[shadow] install_window_shadow(window=%p)\n", static_cast<void *>(window));
+    remove_window_shadow(window);
+    const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+    wl_display *display = static_cast<wl_display *>(SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr));
+    wl_surface *surface = static_cast<wl_surface *>(SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr));
+    if (!display || !surface) {
+        std::fprintf(stderr, "[shadow] FAIL: no display(%p)/surface(%p)\n",
+            static_cast<void *>(display), static_cast<void *>(surface));
+        return false;
+    }
+    auto context_iterator = std::find_if(
+        wayland_contexts.begin(), wayland_contexts.end(),
+        [display](WaylandContext *context) { return context->display == display; });
+    if (context_iterator == wayland_contexts.end()) {
+        std::fprintf(stderr, "[shadow] FAIL: no wayland context for display=%p (contexts=%zu)\n",
+            static_cast<void *>(display), wayland_contexts.size());
+        return false;
+    }
+    WaylandContext *context = *context_iterator;
+    if (!context->shadow_manager || !context->shm) {
+        std::fprintf(stderr, "[shadow] FAIL: shadow_manager=%p shm=%p\n",
+            static_cast<void *>(context->shadow_manager), static_cast<void *>(context->shm));
+        return false;
+    }
+
+    auto *window_shadow = new WindowShadow();
+    window_shadow->context = context;
+    window_shadow->surface = surface;
+    window_shadow->shadow = kwin_shadow_create(context->shadow_manager, surface);
+    constexpr int tile = 32;
+    const int widths[8] = {tile, tile, 1, tile, tile, tile, 1, tile};
+    const int heights[8] = {1, tile, tile, tile, 1, tile, tile, tile};
+    const int horizontal[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+    const int vertical[8] = {0, -1, -1, -1, 0, 1, 1, 1};
+    for (int index = 0; index < 8; ++index) {
+        if (!window_shadow->shadow || !create_shadow_buffer(
+                context, &window_shadow->buffers[index], widths[index], heights[index],
+                horizontal[index], vertical[index])) {
+            std::fprintf(stderr, "[shadow] FAIL: shadow=%p or buffer[%d] failed\n",
+                static_cast<void *>(window_shadow->shadow), index);
+            destroy_window_shadow(window_shadow, false);
+            return false;
+        }
+    }
+    for (uint32_t index = 0; index < 8; ++index) {
+        kwin_shadow_request(window_shadow->shadow, index + 1, window_shadow->buffers[index].buffer);
+    }
+    constexpr int padding = 24;
+    for (uint32_t opcode = 9; opcode <= 12; ++opcode) {
+        kwin_shadow_set_offset(window_shadow->shadow, opcode, padding);
+    }
+    kwin_shadow_request(window_shadow->shadow, 0);
+    wl_surface_commit(surface);
+    wl_display_flush(display);
+    window_shadows.emplace_back(window, window_shadow);
+    std::fprintf(stderr, "[shadow] install_window_shadow OK (surface=%p)\n",
+        static_cast<void *>(surface));
+    return true;
+}
 
 void wayland_clear_icon(WaylandContext *context) {
     if (context->icon_surface) wl_surface_destroy(context->icon_surface);
@@ -274,6 +530,18 @@ void registry_global(void *data, wl_registry *registry, uint32_t name, const cha
     } else if (std::strcmp(interface, wl_seat_interface.name) == 0 && !context->seat) {
         context->seat = static_cast<wl_seat *>(
             wl_registry_bind(registry, name, &wl_seat_interface, std::min(version, 5u)));
+    } else if (
+        std::strcmp(interface, org_kde_kwin_shadow_manager_interface.name) == 0 &&
+        !context->shadow_manager
+    ) {
+        context->shadow_manager = static_cast<org_kde_kwin_shadow_manager *>(
+            wl_registry_bind(
+                registry,
+                name,
+                &org_kde_kwin_shadow_manager_interface,
+                std::min(version, 2u)));
+        std::fprintf(stderr, "[shadow] registry_global bound shadow_manager name=%u version=%u\n",
+            name, version);
     }
 }
 void registry_remove(void *, wl_registry *, uint32_t) {}
@@ -311,6 +579,15 @@ void wayland_destroy_context(WaylandContext *context) {
     if (context->seat) wl_seat_destroy(context->seat);
     if (context->shm) wl_shm_destroy(context->shm);
     if (context->compositor) wl_compositor_destroy(context->compositor);
+    if (context->shadow_manager) {
+        auto *proxy = reinterpret_cast<wl_proxy *>(context->shadow_manager);
+        if (wl_proxy_get_version(proxy) >= 2) {
+            wl_proxy_marshal_flags(
+                proxy, 2, nullptr, wl_proxy_get_version(proxy), WL_MARSHAL_FLAG_DESTROY);
+        } else {
+            wl_proxy_destroy(proxy);
+        }
+    }
     if (context->registry) wl_registry_destroy(context->registry);
 }
 
@@ -789,6 +1066,101 @@ int kplatform_window_set_transparent(void *raw_window, int transparent) {
     const bool has_transparent_buffer =
         (SDL_GetWindowFlags(window) & SDL_WINDOW_TRANSPARENT) != 0;
     return transparent ? (has_transparent_buffer ? 1 : 0) : 1;
+}
+
+int kplatform_window_allow_drawing_inside_title_bar(void *raw_window, int allow) {
+    SDL_Window *window = static_cast<SDL_Window *>(raw_window);
+    if (!window) return 0;
+
+    // Linux compositors own decorated title bars, so there is no portable way to retain the
+    // system title bar while extending client content into it. Use a client-decorated window
+    // instead; Compose content and WindowDraggableArea provide the custom title bar.
+    if (!SDL_SetWindowBordered(window, allow == 0)) return 0;
+    return allow ? 1 : 0;
+}
+
+int kplatform_window_set_shadow(void *raw_window, int enabled) {
+    SDL_Window *window = static_cast<SDL_Window *>(raw_window);
+    std::fprintf(stderr, "[shadow] kplatform_window_set_shadow(window=%p, enabled=%d)\n",
+        static_cast<void *>(window), enabled);
+    if (!window) return 0;
+    if (!enabled) {
+        remove_window_shadow(window);
+        return 1;
+    }
+    // Reinstalling an existing shadow tears the compositor's custom shadow down and creates a new
+    // one. Keep the installed shadow unless the caller explicitly requests a refresh.
+    auto iterator = std::find_if(
+        window_shadows.begin(), window_shadows.end(),
+        [window](const auto &entry) { return entry.first == window; });
+    if (iterator != window_shadows.end()) return 1;
+    return install_window_shadow(window) ? 1 : 0;
+}
+
+int kplatform_window_refresh_shadow(void *raw_window) {
+    SDL_Window *window = static_cast<SDL_Window *>(raw_window);
+    if (!window) return 0;
+    auto iterator = std::find_if(
+        window_shadows.begin(), window_shadows.end(),
+        [window](const auto &entry) { return entry.first == window; });
+    if (iterator == window_shadows.end()) return install_window_shadow(window) ? 1 : 0;
+
+    // KWin applies the surface shadow state before handling the surface commit that removes the
+    // server-side decoration. Wait until that commit has been processed, then recreate the shadow
+    // so KWin evaluates it while the window is already client-decorated.
+    WaylandContext *context = iterator->second->context;
+    if (!context || wl_display_roundtrip(context->display) < 0) return 0;
+    remove_window_shadow(window);
+    return install_window_shadow(window) ? 1 : 0;
+}
+
+int kplatform_window_set_title_bar_color(
+    void *raw_window,
+    int background_r,
+    int background_g,
+    int background_b,
+    int foreground_r,
+    int foreground_g,
+    int foreground_b
+) {
+    SDL_Window *window = static_cast<SDL_Window *>(raw_window);
+    if (!window) return 0;
+
+    auto has_component = [](int value) { return value >= 0 && value <= 255; };
+    const bool has_background =
+        has_component(background_r) && has_component(background_g) && has_component(background_b);
+    const bool has_foreground =
+        has_component(foreground_r) && has_component(foreground_g) && has_component(foreground_b);
+
+    // "dark" tells GTK-themed window managers whether to render the server-side
+    // title bar with a dark or light variant.
+    int luminance = 128;
+    if (has_background) {
+        luminance = (2126 * background_r + 7152 * background_g + 722 * background_b) / 10000;
+    }
+    std::string value = has_background || has_foreground ? (luminance < 128 ? "dark" : "light") : "";
+
+    const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+    Display *x11_display = static_cast<Display *>(SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr));
+    if (x11_display) {
+        const Window x11_window = static_cast<Window>(SDL_GetNumberProperty(
+            properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+        if (x11_window != None) {
+            const Atom target = XInternAtom(x11_display, "_GTK_THEME_VARIANT", False);
+            const Atom type = XInternAtom(x11_display, "UTF8_STRING", False);
+            XChangeProperty(
+                x11_display, x11_window, target, type, 8, PropModeReplace,
+                reinterpret_cast<const unsigned char *>(value.c_str()),
+                static_cast<int>(value.size()));
+            XFlush(x11_display);
+            return 1;
+        }
+    }
+
+    // The Wayland client-side title bar is drawn by Compose, so there is no
+    // compositor-side color to override here.
+    return 0;
 }
 
 } // extern "C"

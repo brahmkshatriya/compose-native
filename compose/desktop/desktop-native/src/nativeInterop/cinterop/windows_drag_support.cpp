@@ -1,6 +1,7 @@
 #include "include/native_drag.h"
 
 #include <SDL3/SDL.h>
+#include <dwmapi.h>
 #include <objidl.h>
 #include <ole2.h>
 #include <shellapi.h>
@@ -14,6 +15,66 @@
 #include <vector>
 
 namespace {
+
+constexpr const wchar_t *extended_title_bar_property = L"ComposeNativeExtendedTitleBar";
+
+struct ExtendedTitleBarState {
+    WNDPROC original_window_proc = nullptr;
+};
+
+void extend_frame_into_title_bar(HWND window) {
+    const int title_bar_height =
+        GetSystemMetrics(SM_CYCAPTION) +
+        GetSystemMetrics(SM_CYFRAME) +
+        GetSystemMetrics(SM_CXPADDEDBORDER);
+    const MARGINS margins = {0, 0, title_bar_height, 0};
+    DwmExtendFrameIntoClientArea(window, &margins);
+}
+
+LRESULT CALLBACK extended_title_bar_window_proc(
+    HWND window,
+    UINT message,
+    WPARAM w_param,
+    LPARAM l_param
+) {
+    auto *state = static_cast<ExtendedTitleBarState *>(
+        GetPropW(window, extended_title_bar_property));
+    if (!state || !state->original_window_proc) {
+        return DefWindowProcW(window, message, w_param, l_param);
+    }
+
+    if (message == WM_NCHITTEST) {
+        LRESULT result = 0;
+        if (DwmDefWindowProc(window, message, w_param, l_param, &result)) return result;
+    }
+
+    if (message == WM_NCCALCSIZE && w_param != FALSE) {
+        auto *params = reinterpret_cast<NCCALCSIZE_PARAMS *>(l_param);
+        const LONG window_top = params->rgrc[0].top;
+        CallWindowProcW(state->original_window_proc, window, message, w_param, l_param);
+        // Preserve the system-calculated side and bottom borders, but make the title bar part of
+        // the client area. SDL hit testing supplies the top resize border and draggable regions.
+        params->rgrc[0].top = window_top;
+        return 0;
+    }
+
+    if (message == WM_ACTIVATE || message == WM_DWMCOMPOSITIONCHANGED) {
+        extend_frame_into_title_bar(window);
+    }
+
+    return CallWindowProcW(state->original_window_proc, window, message, w_param, l_param);
+}
+
+HWND window_handle(SDL_Window *window) {
+    if (!window) return nullptr;
+    const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+    if (properties == 0) return nullptr;
+    return static_cast<HWND>(SDL_GetPointerProperty(
+        properties,
+        SDL_PROP_WINDOW_WIN32_HWND_POINTER,
+        nullptr
+    ));
+}
 
 char *copy_string(const char *value) {
     if (!value) return nullptr;
@@ -287,6 +348,135 @@ int kplatform_window_set_transparent(void *raw_window, int transparent) {
     if (!window) return 0;
     const bool supported = (SDL_GetWindowFlags(window) & SDL_WINDOW_TRANSPARENT) != 0;
     return transparent ? (supported ? 1 : 0) : 1;
+}
+
+int kplatform_window_allow_drawing_inside_title_bar(void *raw_window, int allow) {
+    SDL_Window *sdl_window = static_cast<SDL_Window *>(raw_window);
+    HWND window = window_handle(sdl_window);
+    if (!window) return 0;
+
+    auto *state = static_cast<ExtendedTitleBarState *>(
+        GetPropW(window, extended_title_bar_property));
+    if (allow) {
+        if (state) return 1;
+        state = new ExtendedTitleBarState();
+        state->original_window_proc = reinterpret_cast<WNDPROC>(
+            GetWindowLongPtrW(window, GWLP_WNDPROC));
+        if (!state->original_window_proc ||
+            !SetPropW(window, extended_title_bar_property, state)) {
+            delete state;
+            return 0;
+        }
+        SetLastError(ERROR_SUCCESS);
+        const LONG_PTR previous = SetWindowLongPtrW(
+            window,
+            GWLP_WNDPROC,
+            reinterpret_cast<LONG_PTR>(extended_title_bar_window_proc));
+        if (previous == 0 && GetLastError() != ERROR_SUCCESS) {
+            RemovePropW(window, extended_title_bar_property);
+            delete state;
+            return 0;
+        }
+        extend_frame_into_title_bar(window);
+    } else if (state) {
+        SetWindowLongPtrW(
+            window,
+            GWLP_WNDPROC,
+            reinterpret_cast<LONG_PTR>(state->original_window_proc));
+        RemovePropW(window, extended_title_bar_property);
+        const MARGINS margins = {0, 0, 0, 0};
+        DwmExtendFrameIntoClientArea(window, &margins);
+        delete state;
+    }
+
+    SetWindowPos(
+        window,
+        nullptr,
+        0,
+        0,
+        0,
+        0,
+        SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER
+    );
+    return 1;
+}
+
+int kplatform_window_set_shadow(void *, int enabled) {
+    return enabled ? 0 : 1;
+}
+
+int kplatform_window_refresh_shadow(void *) {
+    return 0;
+}
+
+namespace {
+
+constexpr DWORD DWM_ATTRIBUTE_IMMERSIVE_DARK_MODE = 20;
+constexpr DWORD DWM_ATTRIBUTE_CAPTION_COLOR = 35;
+constexpr DWORD DWM_ATTRIBUTE_BORDER_COLOR = 34;
+constexpr DWORD DWM_ATTRIBUTE_TEXT_COLOR = 36;
+
+DWORD to_color_ref(int red, int green, int blue) {
+    // COLORREF is 0x00BBGGRR.
+    return static_cast<DWORD>(blue & 0xff) << 16 |
+        static_cast<DWORD>(green & 0xff) << 8 |
+        static_cast<DWORD>(red & 0xff);
+}
+
+bool set_window_attribute(HWND window, DWORD attribute, DWORD value) {
+    return SUCCEEDED(DwmSetWindowAttribute(
+        window, attribute, &value, static_cast<DWORD>(sizeof(value))));
+}
+
+} // namespace
+
+int kplatform_window_set_title_bar_color(
+    void *raw_window,
+    int background_r,
+    int background_g,
+    int background_b,
+    int foreground_r,
+    int foreground_g,
+    int foreground_b
+) {
+    SDL_Window *sdl_window = static_cast<SDL_Window *>(raw_window);
+    HWND window = window_handle(sdl_window);
+    if (!window) return 0;
+
+    auto has_component = [](int value) { return value >= 0 && value <= 255; };
+    const bool has_background =
+        has_component(background_r) && has_component(background_g) && has_component(background_b);
+    const bool has_foreground =
+        has_component(foreground_r) && has_component(foreground_g) && has_component(foreground_b);
+
+    if (!has_background && !has_foreground) return 1;
+
+    bool success = true;
+    if (has_background) {
+        const int luminance = (2126 * background_r + 7152 * background_g + 722 * background_b) / 10000;
+        const DWORD dark = luminance < 128 ? 1u : 0u;
+        // Immersive dark mode drives the system caption buttons. It must be applied
+        // before the caption color, because toggling it resets the caption color.
+        success =
+            set_window_attribute(window, DWM_ATTRIBUTE_IMMERSIVE_DARK_MODE, dark) && success;
+        // Caption, border, and text colors are best-effort: they are rejected on
+        // older builds and ignored while the frame is extended into the title bar.
+        set_window_attribute(
+            window,
+            DWM_ATTRIBUTE_CAPTION_COLOR,
+            to_color_ref(background_r, background_g, background_b));
+        set_window_attribute(
+            window,
+            DWM_ATTRIBUTE_BORDER_COLOR,
+            to_color_ref(background_r, background_g, background_b));
+    }
+    if (has_foreground) {
+        set_window_attribute(
+            window,
+            DWM_ATTRIBUTE_TEXT_COLOR,
+            to_color_ref(foreground_r, foreground_g, foreground_b));
+    }
+    return success ? 1 : 0;
 }
 
 } // extern "C"

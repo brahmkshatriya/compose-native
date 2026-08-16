@@ -24,6 +24,25 @@ int kdrag_active(void *drag);
 /* Configures per-pixel top-level transparency for the active SDL backend. */
 int kplatform_window_set_transparent(void *sdl_window, int transparent);
 
+/* Extends the client area into the system title bar when the backend supports it. */
+int kplatform_window_allow_drawing_inside_title_bar(void *sdl_window, int allow);
+
+/* Requests an external compositor shadow for a client-decorated window when supported. */
+int kplatform_window_set_shadow(void *sdl_window, int enabled);
+int kplatform_window_refresh_shadow(void *sdl_window);
+
+/* Overrides the native title bar colors when the platform supports it.
+ * Color components are sRGB values in 0..255, or -1 to leave a component unchanged. */
+int kplatform_window_set_title_bar_color(
+    void *sdl_window,
+    int background_r,
+    int background_g,
+    int background_b,
+    int foreground_r,
+    int foreground_g,
+    int foreground_b
+);
+
 #ifdef __cplusplus
 }
 #endif
