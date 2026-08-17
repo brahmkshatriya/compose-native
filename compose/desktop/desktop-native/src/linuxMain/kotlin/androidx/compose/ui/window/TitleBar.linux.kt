@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 
 internal actual val PlatformClientTitleBarOutsideFullscreen: Boolean = true
 
-internal actual val PlatformKeepsResizableStyleWhenMaximized: Boolean = false
+internal actual val PlatformKeepsResizableStyleWhenMaximized: Boolean = true
 
 internal actual val PlatformCaptionButtonWidth: Dp = 28.dp
 

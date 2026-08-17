@@ -60,6 +60,14 @@ class WindowPlatformFeaturesTest {
     }
 
     @Test
+    fun maximizedWindowRetainsNativeResizableStyle() {
+        assertTrue(nativeResizeStyleEnabled(resizable = true, WindowPlacement.Floating))
+        assertTrue(nativeResizeStyleEnabled(resizable = true, WindowPlacement.Maximized))
+        assertFalse(nativeResizeStyleEnabled(resizable = true, WindowPlacement.Fullscreen))
+        assertFalse(nativeResizeStyleEnabled(resizable = false, WindowPlacement.Maximized))
+    }
+
+    @Test
     fun mapsPortalColorSchemeToDarkPreference() {
         assertNull(portalColorSchemePrefersDark(0))
         assertTrue(portalColorSchemePrefersDark(1) == true)

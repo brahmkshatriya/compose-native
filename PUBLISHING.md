@@ -7,7 +7,7 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 
 | Role | Version |
 | --- | --- |
-| Fork artifacts | `1.12.10-alpha07` |
+| Fork artifacts | `1.12.10-alpha08` |
 | JetBrains Compose upstream | `1.12.0-rc01` |
 | Maven Central Material 3 upstream | `1.12.0-alpha03` |
 | Official Skiko (desktop/web) | `0.150.1` |
@@ -88,7 +88,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.12.0-rc01"
-    id("dev.brahmkshatriya.compose") version "1.12.10-alpha07"
+    id("dev.brahmkshatriya.compose") version "1.12.10-alpha08"
 }
 ```
 
@@ -100,15 +100,15 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha07"
+                "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha08"
             )
             implementation(
-                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha07"
+                "dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha08"
             )
         }
         desktopNativeMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha07"
+                "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha08"
             )
         }
     }
@@ -151,12 +151,12 @@ Create and push a version tag that exactly matches both
 `jetbrains.publication.version.COMPOSE` and the Gradle plugin version:
 
 ```bash
-git tag 1.12.10-alpha07
-git push origin 1.12.10-alpha07
+git tag 1.12.10-alpha08
+git push origin 1.12.10-alpha08
 ```
 
 The deployment includes both the implementation artifact
-`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha07` and the marker
-`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha07`.
+`dev.brahmkshatriya.compose:compose-gradle-plugin:1.12.10-alpha08` and the marker
+`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.12.10-alpha08`.
 Native Skiko `0.151.4` must already be available from Maven Central. Do not reuse a published tag
 version: Central releases are immutable.

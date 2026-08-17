@@ -481,6 +481,7 @@ kotlin {
     }
 
     linuxX64 {
+        binaries.all { linkerOpts("-L/usr/lib") }
         compilerOptions {
             freeCompilerArgs.add("-Xbackend-threads=0")
             freeCompilerArgs.addAll(
