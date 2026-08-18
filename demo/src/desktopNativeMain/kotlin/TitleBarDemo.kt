@@ -45,7 +45,7 @@ private enum class TitleBarChoice(val label: String) {
 
 @Composable
 fun TitleBarDemoWindow(onCloseRequest: () -> Unit) {
-    var titleBarChoice by remember { mutableStateOf(TitleBarChoice.Auto) }
+    var titleBarChoice by remember { mutableStateOf(TitleBarChoice.Native) }
     var isDarkTheme by remember { mutableStateOf(true) }
     var placementBeforeFullscreen by remember { mutableStateOf(WindowPlacement.Floating) }
     val state = rememberWindowState(size = DpSize(760.dp, 520.dp))

@@ -3,6 +3,7 @@
 #include <GL/glext.h>
 #include <SDL3/SDL.h>
 #include <cstdint>
+#include <cstring>
 
 #include "include/native_gl.h"
 
@@ -24,6 +25,19 @@ static GenFramebuffersFunction kglGenFramebuffers = nullptr;
 template <typename T>
 static T resolveGlFunction(const char *name) {
     return reinterpret_cast<T>(SDL_GL_GetProcAddress(name));
+}
+
+static kgl_gl_function skiaGlGetProc(void *, const char *name) {
+    const char *driver = SDL_GetCurrentVideoDriver();
+    if (driver && std::strcmp(driver, "x11") == 0 && name &&
+        (std::strcmp(name, "eglQueryString") == 0 ||
+         std::strcmp(name, "eglGetCurrentDisplay") == 0)) {
+        // SDL's X11 backend resolves OpenGL through GLX. GLX proc lookup may return non-null
+        // dispatch stubs for EGL entry points even though they are not callable for this context.
+        // Skia probes these two names while assembling its GL interface, so report them absent.
+        return nullptr;
+    }
+    return reinterpret_cast<kgl_gl_function>(SDL_GL_GetProcAddress(name));
 }
 
 static bool ensureFramebufferFunctions() {
@@ -217,6 +231,10 @@ int kgl_context_is_lost(void) {
         );
     }
     return getResetStatus && getResetStatus() != GL_NO_ERROR;
+}
+
+kgl_gl_get_proc kgl_skia_gl_get_proc_resolver(void) {
+    return skiaGlGetProc;
 }
 
 }

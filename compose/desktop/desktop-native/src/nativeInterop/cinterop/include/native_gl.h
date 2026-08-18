@@ -14,6 +14,10 @@ unsigned int kgl_layer_texture(void *layer);
 const char *kgl_renderer(void);
 int kgl_context_is_lost(void);
 
+typedef void (*kgl_gl_function)(void);
+typedef kgl_gl_function (*kgl_gl_get_proc)(void *context, const char *name);
+kgl_gl_get_proc kgl_skia_gl_get_proc_resolver(void);
+
 typedef int (*kgl_event_watch_callback)(void *userdata, void *event);
 void *kgl_event_watch_add(kgl_event_watch_callback callback, void *userdata);
 void kgl_event_watch_remove(void *watch);

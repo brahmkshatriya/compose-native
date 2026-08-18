@@ -143,7 +143,6 @@ import sdl3.SDL_BUTTON_X1
 import sdl3.SDL_BUTTON_X2
 import sdl3.SDL_CreateSurfaceFrom
 import sdl3.SDL_CreateSystemCursor
-import sdl3.SDL_CreateWindow
 import sdl3.SDL_DestroyCursor
 import sdl3.SDL_DestroySurface
 import sdl3.SDL_DestroyWindow
@@ -244,7 +243,56 @@ enum class WindowPlacement {
 
 internal val NativeTitleBarHeight = 36.dp
 private val NativeWindowCornerRadius = 6.dp
+private const val NativeResizeBorder = 6
 private val IsLinuxHost = NativePlatform.osFamily == OsFamily.LINUX
+
+internal data class ClientFrameInsets(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+) {
+    val horizontal: Int
+        get() = left + right
+
+    val vertical: Int
+        get() = top + bottom
+
+    fun contentWidth(surfaceWidth: Int): Int = (surfaceWidth - horizontal).coerceAtLeast(1)
+
+    fun contentHeight(surfaceHeight: Int): Int = (surfaceHeight - vertical).coerceAtLeast(1)
+
+    fun contentX(surfaceX: Int): Int = surfaceX - left
+
+    fun contentY(surfaceY: Int): Int = surfaceY - top
+
+    fun scaled(scale: Float): ClientFrameInsets =
+        ClientFrameInsets(
+            (left * scale).roundToInt(),
+            (top * scale).roundToInt(),
+            (right * scale).roundToInt(),
+            (bottom * scale).roundToInt(),
+        )
+
+    companion object {
+        val Zero = ClientFrameInsets(0, 0, 0, 0)
+    }
+}
+
+internal fun clientFrameInsets(
+    drawingInsideTitleBar: Boolean,
+    placement: WindowPlacement,
+): ClientFrameInsets =
+    if (drawingInsideTitleBar && placement == WindowPlacement.Floating) {
+        ClientFrameInsets(
+            NativeResizeBorder,
+            NativeResizeBorder,
+            NativeResizeBorder,
+            NativeResizeBorder,
+        )
+    } else {
+        ClientFrameInsets.Zero
+    }
 
 internal fun titleBarInsetHeightPx(
     drawingInsideTitleBar: Boolean,
@@ -1284,10 +1332,20 @@ private data class RenderMetrics(
     val windowHeight: Int,
     val pixelWidth: Int,
     val pixelHeight: Int,
+    val surfacePixelWidth: Int,
+    val surfacePixelHeight: Int,
+    val frameInsets: ClientFrameInsets,
+    val frameInsetsPx: ClientFrameInsets,
     val density: Float,
 ) {
     val inputScaleX: Float = pixelWidth.toFloat() / windowWidth.toFloat()
     val inputScaleY: Float = pixelHeight.toFloat() / windowHeight.toFloat()
+
+    fun contentPoint(surfaceX: Int, surfaceY: Int): Offset =
+        Offset(
+            frameInsets.contentX(surfaceX) * inputScaleX,
+            frameInsets.contentY(surfaceY) * inputScaleY,
+        )
 }
 
 private class SdlWindowInfo : WindowInfo {
@@ -1434,8 +1492,8 @@ private class SdlPlatformContext(
         val focused = textInputRequest?.focusedRectInRoot?.invoke() ?: return
         memScoped {
             val rect = alloc<SDL_Rect>()
-            rect.x = (focused.left / metrics.inputScaleX).roundToInt()
-            rect.y = (focused.top / metrics.inputScaleY).roundToInt()
+            rect.x = metrics.frameInsets.left + (focused.left / metrics.inputScaleX).roundToInt()
+            rect.y = metrics.frameInsets.top + (focused.top / metrics.inputScaleY).roundToInt()
             rect.w = (focused.width / metrics.inputScaleX).roundToInt().coerceAtLeast(1)
             rect.h = (focused.height / metrics.inputScaleY).roundToInt().coerceAtLeast(1)
             window?.let { SDL_SetTextInputArea(it, rect.ptr, 0) }
@@ -1591,10 +1649,32 @@ internal class NativeWindowHost(
     fun captureCurrentFrame(boundsInWindow: Rect?): ImageBitmap {
         val currentMetrics = checkNotNull(metrics) { "The SDL window has no render metrics" }
         val nativeLayer = checkNotNull(skiaLayer) { "The SDL window has no Skia layer" }
-        val fullImage =
+        val surfaceImage =
             nativeLayer
-                .snapshot(currentMetrics.pixelWidth, currentMetrics.pixelHeight)
+                .snapshot(currentMetrics.surfacePixelWidth, currentMetrics.surfacePixelHeight)
                 .asComposeImageBitmap()
+        val fullImage =
+            if (currentMetrics.frameInsetsPx == ClientFrameInsets.Zero) {
+                surfaceImage
+            } else {
+                val contentImage =
+                    ImageBitmap(currentMetrics.pixelWidth, currentMetrics.pixelHeight)
+                Canvas(contentImage)
+                    .drawImageRect(
+                        image = surfaceImage,
+                        srcOffset =
+                            IntOffset(
+                                currentMetrics.frameInsetsPx.left,
+                                currentMetrics.frameInsetsPx.top,
+                            ),
+                        srcSize = IntSize(currentMetrics.pixelWidth, currentMetrics.pixelHeight),
+                        dstOffset = IntOffset.Zero,
+                        dstSize = IntSize(currentMetrics.pixelWidth, currentMetrics.pixelHeight),
+                        paint = Paint(),
+                    )
+                surfaceImage.asSkiaBitmap().close()
+                contentImage
+            }
         val bounds = boundsInWindow ?: return fullImage
         val left = floor(bounds.left).toInt().coerceIn(0, fullImage.width)
         val top = floor(bounds.top).toInt().coerceIn(0, fullImage.height)
@@ -1631,6 +1711,8 @@ internal class NativeWindowHost(
     private var currentAlwaysOnTop = false
     private var currentTitleBar by mutableStateOf<TitleBar>(TitleBar.Native)
     private var isDrawingInsideTitleBar by mutableStateOf(false)
+    private var clientFrameInsetsSupported = false
+    private var configuredClientFrameInsets = ClientFrameInsets.Zero
     private var platformCaptionButtonWidthPx by mutableIntStateOf(0)
     private var platformTitleBarHeightPx by mutableIntStateOf(0)
     private val measuredCaptionButtonHeightsPx = IntArray(3)
@@ -1673,15 +1755,17 @@ internal class NativeWindowHost(
         try {
             val window = sdlWindow ?: return
             if (widthHint > 1 && heightHint > 1) {
-                windowWidth = widthHint
-                windowHeight = heightHint
+                val insets = activeClientFrameInsets()
+                windowWidth = insets.contentWidth(widthHint)
+                windowHeight = insets.contentHeight(heightHint)
             } else {
                 memScoped {
                     val width = alloc<IntVar>()
                     val height = alloc<IntVar>()
                     kgl_get_window_size(window, width.ptr, height.ptr)
-                    windowWidth = width.value.coerceAtLeast(1)
-                    windowHeight = height.value.coerceAtLeast(1)
+                    val insets = activeClientFrameInsets()
+                    windowWidth = insets.contentWidth(width.value)
+                    windowHeight = insets.contentHeight(height.value)
                 }
             }
             renderScheduled.value = true
@@ -1765,6 +1849,12 @@ internal class NativeWindowHost(
         configureNativeGraphics(nativeLayer)
         val needsTransparentClientFrame =
             IsLinuxHost && titleBar !is TitleBar.Native && !undecorated
+        clientFrameInsetsSupported = IsLinuxHost && kplatform_window_supports_frame_insets() != 0
+        val initialClientFrameInsets =
+            clientFrameInsets(
+                needsTransparentClientFrame && clientFrameInsetsSupported,
+                state.placement,
+            )
         val renderWithTransparency = transparent || needsTransparentClientFrame
         val baseFlags =
             SDL_WINDOW_HIGH_PIXEL_DENSITY or
@@ -1780,21 +1870,43 @@ internal class NativeWindowHost(
             (state.position as? WindowPosition.Absolute)?.y?.value?.roundToInt()
                 ?: SDL_WINDOWPOS_CENTERED.toInt()
         var candidateWindow =
-            SDL_CreateWindow(
-                title,
-                windowWidth,
-                windowHeight,
-                baseFlags or nativeGraphicsWindowFlags(nativeLayer),
-            )
+            kplatform_create_window(
+                    title,
+                    windowWidth + initialClientFrameInsets.horizontal,
+                    windowHeight + initialClientFrameInsets.vertical,
+                    baseFlags or nativeGraphicsWindowFlags(nativeLayer),
+                    if (clientFrameInsetsSupported) 1 else 0,
+                )
+                ?.reinterpret<SDL_Window>()
         if (candidateWindow == null && nativeGraphicsWindowFlags(nativeLayer) != 0uL) {
             nativeLayer.renderApi = org.jetbrains.skiko.GraphicsApi.SOFTWARE_FAST
-            candidateWindow = SDL_CreateWindow(title, windowWidth, windowHeight, baseFlags)
+            candidateWindow =
+                kplatform_create_window(
+                        title,
+                        windowWidth + initialClientFrameInsets.horizontal,
+                        windowHeight + initialClientFrameInsets.vertical,
+                        baseFlags,
+                        if (clientFrameInsetsSupported) 1 else 0,
+                    )
+                    ?.reinterpret<SDL_Window>()
         }
         val window =
             candidateWindow ?: error("Could not create window: ${SDL_GetError()?.toKString()}")
         sdlWindow = window
         platformContext.window = window
         windowId = SDL_GetWindowID(window)
+        configuredClientFrameInsets =
+            if (needsTransparentClientFrame && clientFrameInsetsSupported) {
+                ClientFrameInsets(
+                    NativeResizeBorder,
+                    NativeResizeBorder,
+                    NativeResizeBorder,
+                    NativeResizeBorder,
+                )
+            } else {
+                ClientFrameInsets.Zero
+            }
+        applyClientFrameInsets(window, configuredClientFrameInsets)
         SDL_SetWindowPosition(window, initialX, initialY)
         if (renderWithTransparency) {
             check(kplatform_window_set_transparent(window, 1) != 0) {
@@ -1890,7 +2002,18 @@ internal class NativeWindowHost(
         updateAccessibility(initialMetrics)
         scene = nativeScene
         nativeLayer.renderDelegate = SkikoRenderDelegate { canvas, _, _, _ ->
-            nativeScene.draw(canvas.asComposeCanvas())
+            val currentMetrics = metrics
+            if (currentMetrics == null || currentMetrics.frameInsetsPx == ClientFrameInsets.Zero) {
+                nativeScene.draw(canvas.asComposeCanvas())
+            } else {
+                canvas.save()
+                canvas.translate(
+                    currentMetrics.frameInsetsPx.left.toFloat(),
+                    currentMetrics.frameInsetsPx.top.toFloat(),
+                )
+                nativeScene.draw(canvas.asComposeCanvas())
+                canvas.restore()
+            }
         }
         nativeScene.setContent(parentComposition) {
             ProvideSystemTheme(application.systemDarkThemeState.value) {
@@ -2078,7 +2201,12 @@ internal class NativeWindowHost(
         ) {
             windowWidth = requestedWidth
             windowHeight = requestedHeight
-            SDL_SetWindowSize(window, requestedWidth, requestedHeight)
+            val insets = activeClientFrameInsets()
+            SDL_SetWindowSize(
+                window,
+                requestedWidth + insets.horizontal,
+                requestedHeight + insets.vertical,
+            )
             requestRender()
         }
         updateAccessibility()
@@ -2222,8 +2350,9 @@ internal class NativeWindowHost(
             SDL_EVENT_WINDOW_MOUSE_LEAVE.toUInt() ->
                 pointer(PointerEventType.Exit, pointerX, pointerY)
             SDL_EVENT_WINDOW_RESIZED.toUInt() -> {
-                windowWidth = event.window.data1.coerceAtLeast(1)
-                windowHeight = event.window.data2.coerceAtLeast(1)
+                val insets = activeClientFrameInsets()
+                windowWidth = insets.contentWidth(event.window.data1)
+                windowHeight = insets.contentHeight(event.window.data2)
                 if (currentPlacement.persistsFloatingGeometry()) {
                     state.size = DpSize(windowWidth.dp, windowHeight.dp)
                 }
@@ -2395,16 +2524,28 @@ internal class NativeWindowHost(
 
     fun hitTest(x: Int, y: Int): SDL_HitTestResult {
         val currentMetrics = metrics ?: return SDL_HitTestResult.SDL_HITTEST_NORMAL
-        val point = Offset(x * currentMetrics.inputScaleX, y * currentMetrics.inputScaleY)
+        val point = currentMetrics.contentPoint(x, y)
         // Maximized and fullscreen windows fill the workspace and are resized by the window
         // manager, so they never offer resize edges (or the resize cursor that SDL derives
         // from them). Only floating windows expose resize borders.
         if (currentResizable && currentPlacement == WindowPlacement.Floating) {
-            val border = 6f * currentMetrics.density
-            val left = point.x < border
-            val right = point.x >= currentMetrics.pixelWidth - border
-            val top = point.y < border
-            val bottom = point.y >= currentMetrics.pixelHeight - border
+            val frameInsets = currentMetrics.frameInsets
+            val hasExternalFrame = frameInsets != ClientFrameInsets.Zero
+            val border = NativeResizeBorder * currentMetrics.density
+            val left = if (hasExternalFrame) x < frameInsets.left else point.x < border
+            val right =
+                if (hasExternalFrame) {
+                    x >= frameInsets.left + currentMetrics.windowWidth
+                } else {
+                    point.x >= currentMetrics.pixelWidth - border
+                }
+            val top = if (hasExternalFrame) y < frameInsets.top else point.y < border
+            val bottom =
+                if (hasExternalFrame) {
+                    y >= frameInsets.top + currentMetrics.windowHeight
+                } else {
+                    point.y >= currentMetrics.pixelHeight - border
+                }
             if (left && top) return SDL_HitTestResult.SDL_HITTEST_RESIZE_TOPLEFT
             if (right && top) return SDL_HitTestResult.SDL_HITTEST_RESIZE_TOPRIGHT
             if (left && bottom) return SDL_HitTestResult.SDL_HITTEST_RESIZE_BOTTOMLEFT
@@ -2431,7 +2572,7 @@ internal class NativeWindowHost(
         val currentMetrics = metrics ?: return
         scene?.sendPointerEvent(
             eventType = type,
-            position = Offset(x * currentMetrics.inputScaleX, y * currentMetrics.inputScaleY),
+            position = currentMetrics.contentPoint(x, y),
             scrollDelta = scrollDelta,
             buttons = pointerButtons(),
             keyboardModifiers = platformContext.windowInfo.keyboardModifiers,
@@ -2484,8 +2625,10 @@ internal class NativeWindowHost(
             TouchPoint(
                 position =
                     Offset(
-                        event.tfinger.x * currentMetrics.pixelWidth,
-                        event.tfinger.y * currentMetrics.pixelHeight,
+                        event.tfinger.x * currentMetrics.surfacePixelWidth -
+                            currentMetrics.frameInsetsPx.left,
+                        event.tfinger.y * currentMetrics.surfacePixelHeight -
+                            currentMetrics.frameInsetsPx.top,
                     ),
                 pressure = event.tfinger.pressure,
                 pressed = !released,
@@ -2576,7 +2719,7 @@ internal class NativeWindowHost(
             if (currentMetrics == null) {
                 Offset.Zero
             } else {
-                Offset(pointerX * currentMetrics.inputScaleX, pointerY * currentMetrics.inputScaleY)
+                currentMetrics.contentPoint(pointerX, pointerY)
             }
         return DragAndDropEvent(
             offset = position,
@@ -2686,8 +2829,8 @@ internal class NativeWindowHost(
                 title = currentTitle,
                 visible = currentVisible && windowShown && !currentMinimized,
                 focused = platformContext.windowInfo.isWindowFocused,
-                screenX = x.value,
-                screenY = y.value,
+                screenX = x.value + resolvedMetrics.frameInsets.left,
+                screenY = y.value + resolvedMetrics.frameInsets.top,
                 width = resolvedMetrics.windowWidth,
                 height = resolvedMetrics.windowHeight,
                 scaleX = resolvedMetrics.inputScaleX,
@@ -2776,21 +2919,41 @@ internal class NativeWindowHost(
     }
 
     private fun queryMetrics(window: CPointer<SDL_Window>): RenderMetrics = memScoped {
-        val pixelWidth = alloc<IntVar>()
-        val pixelHeight = alloc<IntVar>()
-        SDL_GetWindowSizeInPixels(window, pixelWidth.ptr, pixelHeight.ptr)
+        val surfacePixelWidth = alloc<IntVar>()
+        val surfacePixelHeight = alloc<IntVar>()
+        SDL_GetWindowSizeInPixels(window, surfacePixelWidth.ptr, surfacePixelHeight.ptr)
         val density = SDL_GetWindowDisplayScale(window).takeIf { it > 0f } ?: 1f
+        val frameInsets = activeClientFrameInsets()
+        val frameInsetsPx = frameInsets.scaled(density)
         RenderMetrics(
             windowWidth = windowWidth.coerceAtLeast(1),
             windowHeight = windowHeight.coerceAtLeast(1),
-            pixelWidth = pixelWidth.value.coerceAtLeast(1),
-            pixelHeight = pixelHeight.value.coerceAtLeast(1),
+            pixelWidth = frameInsetsPx.contentWidth(surfacePixelWidth.value),
+            pixelHeight = frameInsetsPx.contentHeight(surfacePixelHeight.value),
+            surfacePixelWidth = surfacePixelWidth.value.coerceAtLeast(1),
+            surfacePixelHeight = surfacePixelHeight.value.coerceAtLeast(1),
+            frameInsets = frameInsets,
+            frameInsetsPx = frameInsetsPx,
             density = density,
+        )
+    }
+
+    private fun activeClientFrameInsets(): ClientFrameInsets =
+        clientFrameInsets(isDrawingInsideTitleBar && clientFrameInsetsSupported, currentPlacement)
+
+    private fun applyClientFrameInsets(window: CPointer<SDL_Window>, insets: ClientFrameInsets) {
+        kplatform_window_set_frame_insets(
+            window,
+            insets.left,
+            insets.top,
+            insets.right,
+            insets.bottom,
         )
     }
 
     private fun applyMinimumSize() {
         val window = sdlWindow ?: return
+        val insets = configuredClientFrameInsets
         val width =
             if (minimumSize.width.isSpecified) minimumSize.width.value.roundToInt().coerceAtLeast(1)
             else 1
@@ -2798,18 +2961,22 @@ internal class NativeWindowHost(
             if (minimumSize.height.isSpecified)
                 minimumSize.height.value.roundToInt().coerceAtLeast(1)
             else 1
-        SDL_SetWindowMinimumSize(window, width, height)
+        SDL_SetWindowMinimumSize(window, width + insets.horizontal, height + insets.vertical)
     }
 
     private fun applyMaximumSize() {
         val window = sdlWindow ?: return
+        val insets = configuredClientFrameInsets
         val width =
-            if (maximumSize.width.isSpecified) maximumSize.width.value.roundToInt().coerceAtLeast(1)
-            else 0
+            if (maximumSize.width.isSpecified) {
+                maximumSize.width.value.roundToInt().coerceAtLeast(1) + insets.horizontal
+            } else 0
         val height =
-            if (maximumSize.height.isSpecified)
-                maximumSize.height.value.roundToInt().coerceAtLeast(1)
-            else 0
+            if (maximumSize.height.isSpecified) {
+                maximumSize.height.value.roundToInt().coerceAtLeast(1) + insets.vertical
+            } else {
+                0
+            }
         SDL_SetWindowMaximumSize(window, width, height)
     }
 
@@ -2870,12 +3037,41 @@ internal class NativeWindowHost(
         val window = sdlWindow ?: return
         val wasDrawingInsideTitleBar = isDrawingInsideTitleBar
         val enable = currentTitleBar !is TitleBar.Native && !currentUndecorated
+        val requestedInsets =
+            if (IsLinuxHost && enable && clientFrameInsetsSupported) {
+                ClientFrameInsets(
+                    NativeResizeBorder,
+                    NativeResizeBorder,
+                    NativeResizeBorder,
+                    NativeResizeBorder,
+                )
+            } else {
+                ClientFrameInsets.Zero
+            }
         isDrawingInsideTitleBar =
             kplatform_window_allow_drawing_inside_title_bar(window, if (enable) 1 else 0) != 0 &&
                 enable
+        configuredClientFrameInsets =
+            requestedInsets.takeIf { isDrawingInsideTitleBar } ?: ClientFrameInsets.Zero
+        // SDL's X11 border-mode change clears _GTK_FRAME_EXTENTS, so publish the insets only after
+        // switching to the client-decorated frame. Reapplying is also harmless on Wayland.
+        applyClientFrameInsets(window, configuredClientFrameInsets)
         // Disabling the platform title-bar integration can restore decorations on Linux. Preserve
         // the caller's explicit undecorated setting after the platform hook has been reset.
         if (currentUndecorated) SDL_SetWindowBordered(window, false)
+        if (
+            wasDrawingInsideTitleBar != isDrawingInsideTitleBar &&
+                currentPlacement.persistsFloatingGeometry()
+        ) {
+            val insets = activeClientFrameInsets()
+            SDL_SetWindowSize(
+                window,
+                windowWidth + insets.horizontal,
+                windowHeight + insets.vertical,
+            )
+            applyMinimumSize()
+            applyMaximumSize()
+        }
         updateTitleBarInset()
         updateWindowShadow()
         // On Wayland, switching from server-side to client-side decorations is asynchronous.

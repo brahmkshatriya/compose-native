@@ -525,6 +525,24 @@ struct Drag {
 
 extern "C" {
 
+void *kplatform_create_window(
+    const char *title,
+    int width,
+    int height,
+    uint64_t flags,
+    int
+) {
+    return SDL_CreateWindow(title, width, height, static_cast<SDL_WindowFlags>(flags));
+}
+
+int kplatform_window_set_frame_insets(void *, int, int, int, int) {
+    return 1;
+}
+
+int kplatform_window_supports_frame_insets(void) {
+    return 0;
+}
+
 void *kdrag_create(void *raw_window, char **error_message) {
     if (error_message) *error_message = nullptr;
     SDL_Window *window = static_cast<SDL_Window *>(raw_window);

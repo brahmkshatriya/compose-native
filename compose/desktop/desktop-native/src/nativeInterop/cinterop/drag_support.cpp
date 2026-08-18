@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <wayland-client.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -171,6 +172,12 @@ struct WindowShadow {
     ShadowBuffer buffers[8];
 };
 
+struct X11WindowShadow {
+    Display *display = nullptr;
+    Window window = None;
+    Pixmap pixmaps[8] = {};
+};
+
 struct WaylandHandle {
     WaylandContext *context = nullptr;
     wl_surface *surface = nullptr;
@@ -178,6 +185,7 @@ struct WaylandHandle {
 
 std::vector<WaylandContext *> wayland_contexts;
 std::vector<std::pair<SDL_Window *, WindowShadow *>> window_shadows;
+std::vector<std::pair<SDL_Window *, X11WindowShadow *>> x11_window_shadows;
 
 void destroy_shadow_buffer(ShadowBuffer *buffer) {
     if (buffer->buffer) wl_buffer_destroy(buffer->buffer);
@@ -260,7 +268,164 @@ void destroy_window_shadow(WindowShadow *window_shadow, bool unset) {
     delete window_shadow;
 }
 
+void remove_x11_window_shadow(SDL_Window *window) {
+    auto iterator = std::find_if(
+        x11_window_shadows.begin(), x11_window_shadows.end(),
+        [window](const auto &entry) { return entry.first == window; });
+    if (iterator == x11_window_shadows.end()) return;
+    X11WindowShadow *window_shadow = iterator->second;
+    if (window_shadow->display && window_shadow->window != None) {
+        const Atom shadow_atom =
+            XInternAtom(window_shadow->display, "_KDE_NET_WM_SHADOW", False);
+        XDeleteProperty(window_shadow->display, window_shadow->window, shadow_atom);
+        for (Pixmap pixmap : window_shadow->pixmaps) {
+            if (pixmap != None) XFreePixmap(window_shadow->display, pixmap);
+        }
+        XFlush(window_shadow->display);
+    }
+    delete window_shadow;
+    x11_window_shadows.erase(iterator);
+}
+
+bool x11_supports_argb_pixmaps(Display *display, int screen) {
+    int count = 0;
+    int *depths = XListDepths(display, screen, &count);
+    if (!depths) return false;
+    const bool supported =
+        std::find(depths, depths + count, 32) != depths + count;
+    XFree(depths);
+    return supported;
+}
+
+Pixmap create_x11_shadow_pixmap(
+    Display *display,
+    Drawable root,
+    int screen,
+    int width,
+    int height,
+    int horizontal,
+    int vertical
+) {
+    const Pixmap pixmap = XCreatePixmap(display, root, width, height, 32);
+    if (pixmap == None) return None;
+    const GC gc = XCreateGC(display, pixmap, 0, nullptr);
+    if (!gc) {
+        XFreePixmap(display, pixmap);
+        return None;
+    }
+    XImage *image = XCreateImage(
+        display,
+        DefaultVisual(display, screen),
+        32,
+        ZPixmap,
+        0,
+        nullptr,
+        width,
+        height,
+        32,
+        0
+    );
+    if (!image) {
+        XFreeGC(display, gc);
+        XFreePixmap(display, pixmap);
+        return None;
+    }
+    const size_t bytes = static_cast<size_t>(image->bytes_per_line) * height;
+    image->data = static_cast<char *>(std::calloc(bytes, 1));
+    if (!image->data) {
+        XDestroyImage(image);
+        XFreeGC(display, gc);
+        XFreePixmap(display, pixmap);
+        return None;
+    }
+
+    constexpr int padding = 24;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const float dx = horizontal < 0 ? std::max(0, padding - x) :
+                horizontal > 0 ? std::max(0, x - (width - padding - 1)) : 0;
+            const float dy = vertical < 0 ? std::max(0, padding - y) :
+                vertical > 0 ? std::max(0, y - (height - padding - 1)) : 0;
+            const float distance = std::sqrt(dx * dx + dy * dy);
+            const float strength = std::max(0.0f, 1.0f - distance / padding);
+            const unsigned long alpha =
+                static_cast<unsigned long>(72.0f * strength * strength);
+            XPutPixel(image, x, y, alpha << 24);
+        }
+    }
+    XPutImage(display, pixmap, gc, image, 0, 0, 0, 0, width, height);
+    XDestroyImage(image);
+    XFreeGC(display, gc);
+    return pixmap;
+}
+
+bool install_x11_window_shadow(SDL_Window *window, Display *display, Window xwindow) {
+    remove_x11_window_shadow(window);
+    if (!display || xwindow == None) return false;
+
+    XWindowAttributes attributes = {};
+    if (!XGetWindowAttributes(display, xwindow, &attributes) || !attributes.screen) return false;
+    const int screen = XScreenNumberOfScreen(attributes.screen);
+    if (!x11_supports_argb_pixmaps(display, screen)) return false;
+    const Window root = RootWindowOfScreen(attributes.screen);
+
+    auto *window_shadow = new X11WindowShadow();
+    window_shadow->display = display;
+    window_shadow->window = xwindow;
+    constexpr int tile = 32;
+    // _KDE_NET_WM_SHADOW uses top, top-right, right, bottom-right, bottom, bottom-left,
+    // left, and top-left pixmaps, followed by top/right/bottom/left padding values.
+    const int widths[8] = {1, tile, tile, tile, 1, tile, tile, tile};
+    const int heights[8] = {tile, tile, 1, tile, tile, tile, 1, tile};
+    const int horizontal[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+    const int vertical[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+    for (int index = 0; index < 8; ++index) {
+        window_shadow->pixmaps[index] = create_x11_shadow_pixmap(
+            display,
+            root,
+            screen,
+            widths[index],
+            heights[index],
+            horizontal[index],
+            vertical[index]
+        );
+        if (window_shadow->pixmaps[index] == None) {
+            for (Pixmap pixmap : window_shadow->pixmaps) {
+                if (pixmap != None) XFreePixmap(display, pixmap);
+            }
+            delete window_shadow;
+            return false;
+        }
+    }
+
+    unsigned long values[12] = {};
+    for (int index = 0; index < 8; ++index) {
+        values[index] = static_cast<unsigned long>(window_shadow->pixmaps[index]);
+    }
+    constexpr unsigned long padding = 24;
+    values[8] = padding;
+    values[9] = padding;
+    values[10] = padding;
+    values[11] = padding;
+    const Atom shadow_atom = XInternAtom(display, "_KDE_NET_WM_SHADOW", False);
+    XChangeProperty(
+        display,
+        xwindow,
+        shadow_atom,
+        XA_CARDINAL,
+        32,
+        PropModeReplace,
+        reinterpret_cast<const unsigned char *>(values),
+        12
+    );
+    XFlush(display);
+    x11_window_shadows.emplace_back(window, window_shadow);
+    std::fprintf(stderr, "[shadow] install_x11_window_shadow OK (window=0x%lx)\n", xwindow);
+    return true;
+}
+
 void remove_window_shadow(SDL_Window *window) {
+    remove_x11_window_shadow(window);
     auto iterator = std::find_if(
         window_shadows.begin(), window_shadows.end(),
         [window](const auto &entry) { return entry.first == window; });
@@ -273,6 +438,13 @@ bool install_window_shadow(SDL_Window *window) {
     std::fprintf(stderr, "[shadow] install_window_shadow(window=%p)\n", static_cast<void *>(window));
     remove_window_shadow(window);
     const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+    Display *x11_display = static_cast<Display *>(SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr));
+    const Window xwindow = static_cast<Window>(SDL_GetNumberProperty(
+        properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+    if (x11_display && xwindow != None) {
+        return install_x11_window_shadow(window, x11_display, xwindow);
+    }
     wl_display *display = static_cast<wl_display *>(SDL_GetPointerProperty(
         properties, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr));
     wl_surface *surface = static_cast<wl_surface *>(SDL_GetPointerProperty(
@@ -1060,12 +1232,92 @@ int kdrag_active(void *raw) {
     return 0;
 }
 
+void *kplatform_create_window(
+    const char *title,
+    int width,
+    int height,
+    uint64_t flags,
+    int enable_wayland_insets
+) {
+    SDL_PropertiesID properties = SDL_CreateProperties();
+    if (!properties) return nullptr;
+    SDL_SetStringProperty(properties, SDL_PROP_WINDOW_CREATE_TITLE_STRING, title ? title : "");
+    SDL_SetNumberProperty(properties, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, width);
+    SDL_SetNumberProperty(properties, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, height);
+    SDL_SetNumberProperty(
+        properties, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, static_cast<Sint64>(flags));
+    if (enable_wayland_insets) {
+        SDL_SetBooleanProperty(
+            properties, "SDL.window.create.wayland.enable_insets", true);
+    }
+    SDL_Window *window = SDL_CreateWindowWithProperties(properties);
+    SDL_DestroyProperties(properties);
+    return window;
+}
+
+int kplatform_window_supports_frame_insets(void) {
+    const char *driver = SDL_GetCurrentVideoDriver();
+    if (!driver) return 0;
+    if (std::strcmp(driver, "x11") == 0) return 1;
+    if (std::strcmp(driver, "wayland") != 0) return 0;
+
+    // SDL 3.6 carries the opt-in border-inset contract. Accept its development branch used by
+    // Compose Native integration tests as well, while safely falling back on older stable SDLs.
+    if (SDL_GetVersion() >= SDL_VERSIONNUM(3, 6, 0)) return 1;
+    const char *revision = SDL_GetRevision();
+    return revision && std::strstr(revision, "5783dfb") ? 1 : 0;
+}
+
 int kplatform_window_set_transparent(void *raw_window, int transparent) {
     SDL_Window *window = static_cast<SDL_Window *>(raw_window);
     if (!window) return 0;
     const bool has_transparent_buffer =
         (SDL_GetWindowFlags(window) & SDL_WINDOW_TRANSPARENT) != 0;
     return transparent ? (has_transparent_buffer ? 1 : 0) : 1;
+}
+
+int kplatform_window_set_frame_insets(
+    void *raw_window,
+    int left,
+    int top,
+    int right,
+    int bottom
+) {
+    SDL_Window *window = static_cast<SDL_Window *>(raw_window);
+    if (!window) return 0;
+    left = std::max(left, 0);
+    top = std::max(top, 0);
+    right = std::max(right, 0);
+    bottom = std::max(bottom, 0);
+
+    const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+    SDL_SetNumberProperty(properties, "SDL.window.wayland.border_inset_left", left);
+    SDL_SetNumberProperty(properties, "SDL.window.wayland.border_inset_top", top);
+    SDL_SetNumberProperty(properties, "SDL.window.wayland.border_inset_right", right);
+    SDL_SetNumberProperty(properties, "SDL.window.wayland.border_inset_bottom", bottom);
+
+    Display *display = static_cast<Display *>(SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr));
+    const Window xwindow = static_cast<Window>(SDL_GetNumberProperty(
+        properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+    if (display && xwindow != None) {
+        const Atom frame_extents = XInternAtom(display, "_GTK_FRAME_EXTENTS", False);
+        if (left || top || right || bottom) {
+            const unsigned long values[4] = {
+                static_cast<unsigned long>(left),
+                static_cast<unsigned long>(right),
+                static_cast<unsigned long>(top),
+                static_cast<unsigned long>(bottom),
+            };
+            XChangeProperty(
+                display, xwindow, frame_extents, XA_CARDINAL, 32, PropModeReplace,
+                reinterpret_cast<const unsigned char *>(values), 4);
+        } else {
+            XDeleteProperty(display, xwindow, frame_extents);
+        }
+        XFlush(display);
+    }
+    return 1;
 }
 
 int kplatform_window_allow_drawing_inside_title_bar(void *raw_window, int allow) {
@@ -1076,7 +1328,28 @@ int kplatform_window_allow_drawing_inside_title_bar(void *raw_window, int allow)
     // system title bar while extending client content into it. Use a client-decorated window
     // instead; Compose content and WindowDraggableArea provide the custom title bar.
     if (!SDL_SetWindowBordered(window, allow == 0)) return 0;
-    return allow ? 1 : 0;
+
+    if (!allow && !(SDL_GetWindowFlags(window) & SDL_WINDOW_HIDDEN)) {
+        // KWin/XWayland observes the restored _MOTIF_WM_HINTS on an already mapped window but does
+        // not necessarily recreate its server-side frame. Remapping makes KWin manage the client
+        // again and restores the native title bar. Wayland decorations update without this step.
+        const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+        Display *display = static_cast<Display *>(SDL_GetPointerProperty(
+            properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr));
+        const Window xwindow = static_cast<Window>(SDL_GetNumberProperty(
+            properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+        if (display && xwindow != None) {
+            XWindowAttributes attributes = {};
+            if (XGetWindowAttributes(display, xwindow, &attributes) &&
+                attributes.map_state == IsViewable) {
+                XUnmapWindow(display, xwindow);
+                XSync(display, False);
+                XMapWindow(display, xwindow);
+                XSync(display, False);
+            }
+        }
+    }
+    return 1;
 }
 
 int kplatform_window_get_title_bar_metrics(
@@ -1122,6 +1395,12 @@ int kplatform_window_set_shadow(void *raw_window, int enabled) {
 int kplatform_window_refresh_shadow(void *raw_window) {
     SDL_Window *window = static_cast<SDL_Window *>(raw_window);
     if (!window) return 0;
+    const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
+    Display *x11_display = static_cast<Display *>(SDL_GetPointerProperty(
+        properties, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr));
+    const Window xwindow = static_cast<Window>(SDL_GetNumberProperty(
+        properties, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+    if (x11_display && xwindow != None) return install_window_shadow(window) ? 1 : 0;
     auto iterator = std::find_if(
         window_shadows.begin(), window_shadows.end(),
         [window](const auto &entry) { return entry.first == window; });

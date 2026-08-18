@@ -25,6 +25,30 @@ import kotlin.test.assertTrue
 
 class WindowPlatformFeaturesTest {
     @Test
+    fun clientFrameInsetsLiveOutsideFloatingWindowContent() {
+        val insets = clientFrameInsets(drawingInsideTitleBar = true, WindowPlacement.Floating)
+
+        assertEquals(ClientFrameInsets(6, 6, 6, 6), insets)
+        assertEquals(800, insets.contentWidth(812))
+        assertEquals(600, insets.contentHeight(612))
+        assertEquals(806, insets.contentX(812))
+        assertEquals(606, insets.contentY(612))
+
+        assertEquals(
+            ClientFrameInsets.Zero,
+            clientFrameInsets(drawingInsideTitleBar = true, WindowPlacement.Maximized),
+        )
+        assertEquals(
+            ClientFrameInsets.Zero,
+            clientFrameInsets(drawingInsideTitleBar = true, WindowPlacement.Fullscreen),
+        )
+        assertEquals(
+            ClientFrameInsets.Zero,
+            clientFrameInsets(drawingInsideTitleBar = false, WindowPlacement.Floating),
+        )
+    }
+
+    @Test
     fun titleBarInsetIsOnlyPresentForExtendedNonFullscreenWindows() {
         assertEquals(
             54,

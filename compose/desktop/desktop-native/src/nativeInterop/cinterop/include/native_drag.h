@@ -1,6 +1,8 @@
 #ifndef KTNATIVE_LINUX_DRAG_H
 #define KTNATIVE_LINUX_DRAG_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -21,8 +23,27 @@ void kdrag_pointer_release(void *drag);
 void kdrag_handle_syswm(void *drag, const void *sdl_syswm_message);
 int kdrag_active(void *drag);
 
+/* Creates an SDL window and opts its Wayland toplevel into client-frame insets. */
+void *kplatform_create_window(
+    const char *title,
+    int width,
+    int height,
+    uint64_t flags,
+    int enable_wayland_insets);
+
+/* Returns whether the active SDL backend understands client-frame inset geometry. */
+int kplatform_window_supports_frame_insets(void);
+
 /* Configures per-pixel top-level transparency for the active SDL backend. */
 int kplatform_window_set_transparent(void *sdl_window, int transparent);
+
+/* Declares transparent client-frame margins around the visible window content. */
+int kplatform_window_set_frame_insets(
+    void *sdl_window,
+    int left,
+    int top,
+    int right,
+    int bottom);
 
 /* Extends the client area into the system title bar when the backend supports it. */
 int kplatform_window_allow_drawing_inside_title_bar(void *sdl_window, int allow);

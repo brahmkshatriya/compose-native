@@ -9,7 +9,6 @@ import cnames.structs.SDL_GLContextState
 import cnames.structs.SDL_Renderer
 import cnames.structs.SDL_Window
 import kotlinx.cinterop.ByteVar
-import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.alloc
@@ -19,11 +18,11 @@ import kotlinx.cinterop.nativeNullPtr
 import kotlinx.cinterop.pointed
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.rawValue
-import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.value
 import nativedesktop.kgl_context_is_lost
 import nativedesktop.kgl_renderer
+import nativedesktop.kgl_skia_gl_get_proc_resolver
 import org.jetbrains.skia.PixelGeometry
 import org.jetbrains.skia.impl.NativePointer
 import org.jetbrains.skiko.FrameBuffering
@@ -41,7 +40,6 @@ import sdl3.SDL_GLAttr
 import sdl3.SDL_GL_CreateContext
 import sdl3.SDL_GL_DestroyContext
 import sdl3.SDL_GL_GetAttribute
-import sdl3.SDL_GL_GetProcAddress
 import sdl3.SDL_GL_MakeCurrent
 import sdl3.SDL_GL_SetAttribute
 import sdl3.SDL_GL_SetSwapInterval
@@ -62,13 +60,6 @@ import sdl3.SDL_Texture
 import sdl3.SDL_TextureAccess
 import sdl3.SDL_UpdateTexture
 import sdl3.SDL_WINDOW_TRANSPARENT
-
-private fun resolveSdlOpenGlFunction(
-    @Suppress("UNUSED_PARAMETER") context: COpaquePointer?,
-    name: CPointer<ByteVar>?,
-): COpaquePointer? = SDL_GL_GetProcAddress(name?.toKString())
-
-private val SdlOpenGlResolver = staticCFunction(::resolveSdlOpenGlFunction)
 
 internal class SdlSkiaLayerComponent(
     private val window: CPointer<SDL_Window>,
@@ -132,7 +123,7 @@ internal class SdlSkiaLayerComponent(
         get() = nativeNullPtr
 
     override val openGlResolver: NativePointer
-        get() = SdlOpenGlResolver.rawValue
+        get() = kgl_skia_gl_get_proc_resolver()?.rawValue ?: nativeNullPtr
 
     override fun createOpenGlContext(): NativePointer =
         (SDL_GL_CreateContext(window)
