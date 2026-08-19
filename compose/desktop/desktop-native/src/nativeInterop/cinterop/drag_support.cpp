@@ -14,7 +14,6 @@
 #include <cerrno>
 #include <cmath>
 #include <csignal>
-#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -420,7 +419,6 @@ bool install_x11_window_shadow(SDL_Window *window, Display *display, Window xwin
     );
     XFlush(display);
     x11_window_shadows.emplace_back(window, window_shadow);
-    std::fprintf(stderr, "[shadow] install_x11_window_shadow OK (window=0x%lx)\n", xwindow);
     return true;
 }
 
@@ -435,7 +433,6 @@ void remove_window_shadow(SDL_Window *window) {
 }
 
 bool install_window_shadow(SDL_Window *window) {
-    std::fprintf(stderr, "[shadow] install_window_shadow(window=%p)\n", static_cast<void *>(window));
     remove_window_shadow(window);
     const SDL_PropertiesID properties = SDL_GetWindowProperties(window);
     Display *x11_display = static_cast<Display *>(SDL_GetPointerProperty(
@@ -450,22 +447,16 @@ bool install_window_shadow(SDL_Window *window) {
     wl_surface *surface = static_cast<wl_surface *>(SDL_GetPointerProperty(
         properties, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr));
     if (!display || !surface) {
-        std::fprintf(stderr, "[shadow] FAIL: no display(%p)/surface(%p)\n",
-            static_cast<void *>(display), static_cast<void *>(surface));
         return false;
     }
     auto context_iterator = std::find_if(
         wayland_contexts.begin(), wayland_contexts.end(),
         [display](WaylandContext *context) { return context->display == display; });
     if (context_iterator == wayland_contexts.end()) {
-        std::fprintf(stderr, "[shadow] FAIL: no wayland context for display=%p (contexts=%zu)\n",
-            static_cast<void *>(display), wayland_contexts.size());
         return false;
     }
     WaylandContext *context = *context_iterator;
     if (!context->shadow_manager || !context->shm) {
-        std::fprintf(stderr, "[shadow] FAIL: shadow_manager=%p shm=%p\n",
-            static_cast<void *>(context->shadow_manager), static_cast<void *>(context->shm));
         return false;
     }
 
@@ -482,8 +473,6 @@ bool install_window_shadow(SDL_Window *window) {
         if (!window_shadow->shadow || !create_shadow_buffer(
                 context, &window_shadow->buffers[index], widths[index], heights[index],
                 horizontal[index], vertical[index])) {
-            std::fprintf(stderr, "[shadow] FAIL: shadow=%p or buffer[%d] failed\n",
-                static_cast<void *>(window_shadow->shadow), index);
             destroy_window_shadow(window_shadow, false);
             return false;
         }
@@ -499,8 +488,6 @@ bool install_window_shadow(SDL_Window *window) {
     wl_surface_commit(surface);
     wl_display_flush(display);
     window_shadows.emplace_back(window, window_shadow);
-    std::fprintf(stderr, "[shadow] install_window_shadow OK (surface=%p)\n",
-        static_cast<void *>(surface));
     return true;
 }
 
@@ -712,8 +699,6 @@ void registry_global(void *data, wl_registry *registry, uint32_t name, const cha
                 name,
                 &org_kde_kwin_shadow_manager_interface,
                 std::min(version, 2u)));
-        std::fprintf(stderr, "[shadow] registry_global bound shadow_manager name=%u version=%u\n",
-            name, version);
     }
 }
 void registry_remove(void *, wl_registry *, uint32_t) {}
@@ -1376,8 +1361,6 @@ int kplatform_window_set_caption_button_bounds(
 
 int kplatform_window_set_shadow(void *raw_window, int enabled) {
     SDL_Window *window = static_cast<SDL_Window *>(raw_window);
-    std::fprintf(stderr, "[shadow] kplatform_window_set_shadow(window=%p, enabled=%d)\n",
-        static_cast<void *>(window), enabled);
     if (!window) return 0;
     if (!enabled) {
         remove_window_shadow(window);

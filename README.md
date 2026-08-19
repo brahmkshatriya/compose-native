@@ -1,94 +1,26 @@
 # Compose Native
 
-Compose Native adds Linux and Windows Kotlin/Native targets to Compose Multiplatform. It produces
-native executables with no JVM requirement while allowing the same project to keep using official
-JetBrains Compose on Android, JVM, Apple, JS, and Wasm.
+Compose Multiplatform for Linux and Windows Kotlin/Native. It produces native executables with no
+JVM requirement and can be added to an existing multiplatform project without replacing official
+Compose on unsupported targets.
 
-The Gradle plugin works alongside `org.jetbrains.compose`: the official plugin continues to provide
-Compose resources and application tasks, while Compose Native adds the desktop-native target DSL
-and supports a dependency overlay for those targets. It never adds a Compose dependency or chooses
-a version; every official and fork version remains explicit in the consumer's dependency block.
+Supported native targets: Linux x64, Linux arm64, and Windows x64.
 
-> Compose Native is experimental. Pin its version and test upgrades before shipping them.
+## Installation
 
-## What you get
-
-- Compose Runtime, UI, Animation, Foundation, Material, and Material 3 on Kotlin/Native desktop
-- Linux x64, Linux arm64, and Windows x64 executables
-- SDL3 windows, dialogs, menus, trays, notifications, clipboard, drag-and-drop, and IME input
-- Skia GPU rendering with software fallback and renderer recovery
-- Compose resources, packaged fonts, native views, and native Compose UI test hosts
-- A `desktopNative` target group and shared `desktopNativeMain` source set
-
-## Fork-specific Compose changes
-
-These changes are included whenever you declare the corresponding fork artifacts. When those
-artifacts are declared in `commonMain`, the plugin also keeps matching transitive JetBrains Compose
-and AndroidX Android requests on the fork.
-
-### Foundation: stackable sticky headers
-
-`LazyColumn`, `LazyRow`, and lazy grids gain an `isSlidable` argument on `stickyHeader`:
+The Gradle plugin is published to Maven Central, so add it to plugin resolution in
+`settings.gradle.kts`:
 
 ```kotlin
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun Contacts(contacts: List<Contact>) {
-    LazyColumn(contentPadding = PaddingValues(top = 16.dp)) {
-        stickyHeader(isSlidable = false) {
-            Text("Contacts")
-        }
-
-        contacts.groupBy(Contact::firstLetter).forEach { (letter, group) ->
-            stickyHeader(isSlidable = true) {
-                Text(letter.toString())
-            }
-            items(group) { contact ->
-                Text(contact.name)
-            }
-        }
+pluginManagement {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
     }
 }
 ```
 
-- `isSlidable = true` preserves the usual behavior: the next sticky header pushes this one away.
-- `isSlidable = false` keeps the header pinned, allowing later sticky headers to stack after it.
-- Sticky-header positioning accounts for the lazy container's top content padding.
-
-The parameter defaults to `true`, so existing `stickyHeader` calls retain their normal behavior.
-
-### Material 3: better desktop bottom sheets
-
-The fork changes `BottomSheetScaffold` behavior without requiring a new public API:
-
-- A nested vertically scrollable child no longer causes the bottom sheet to make an extra bounce.
-- Mouse dragging does not accidentally open or move the bottom sheet; direct sheet dragging remains
-  touch-oriented.
-- When a nested child reaches its scroll boundary, remaining mouse-wheel delta is not passed to the
-  bottom sheet.
-- Sheet placement and anchor movement are handled separately, avoiding duplicate visual movement.
-
-Touch dragging and nested touch scrolling continue to settle the sheet through its normal anchors.
-
-## Supported targets
-
-| Target | Published fork artifacts |
-| --- | --- |
-| Linux x64 | Yes |
-| Linux arm64 | Yes |
-| Windows x64 | Yes |
-| Android | Yes |
-| JS | Yes |
-| Wasm JS | Yes |
-| JVM desktop | No |
-| iOS / macOS | No |
-| Windows arm64 | No |
-
-The native Compose artifacts depend on `dev.brahmkshatriya.skiko:skiko:0.151.4` in their published
-metadata, so Gradle selects the matching Linux or Windows artifact automatically. JS and Wasm fork
-metadata use official JetBrains Skiko `0.150.1`; Android Compose does not use Skiko.
-
-## Installation
+Apply the plugin alongside the official Compose plugin:
 
 ```kotlin
 plugins {
@@ -99,9 +31,16 @@ plugins {
 }
 ```
 
-### Fork only on desktop native
+Then choose how broadly you want to use the fork.
+
+### Native only
+
+Use official Compose in `commonMain` and the fork only in `desktopNativeMain`. Android, JVM, Apple,
+JS, and Wasm continue using official Compose.
 
 ```kotlin
+val composeNativeVersion = "1.12.10-alpha09"
+
 kotlin {
     desktopNative {
         binaries.executable {
@@ -117,151 +56,163 @@ kotlin {
         }
 
         desktopNativeMain.dependencies {
-            implementation("dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha09")
-            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha09")
-            implementation("dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha09")
-            implementation("dev.brahmkshatriya.skiko:skiko:0.151.4")
+            implementation("dev.brahmkshatriya.compose.ui:ui:$composeNativeVersion")
+            implementation("dev.brahmkshatriya.compose.foundation:foundation:$composeNativeVersion")
+            implementation("dev.brahmkshatriya.compose.material3:material3:$composeNativeVersion")
+            implementation(
+                "dev.brahmkshatriya.compose.desktop:desktop-native:$composeNativeVersion"
+            )
         }
     }
 }
 ```
 
-The dependencies in `commonMain` remain official on Android, JVM, Apple, JS, and Wasm. For Linux
-and Windows configurations, the plugin sees the explicitly versioned fork modules in
-`desktopNativeMain` and replaces the matching official module coordinates with those fork
-coordinates. The same scoped rule selects the explicitly declared Skiko fork. No version comes
-from plugin configuration.
+This is the option to use when the same project also targets JVM desktop or Apple, where fork
+artifacts are not currently published.
 
-Add `dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha09` to
-`desktopNativeMain` as well when the project needs the native application/window APIs.
-The artifact publishes a real `desktopNativeMain` metadata fragment, so Android Studio resolves
-`androidx.compose.ui.window` through Kotlin's normal KMP model rather than an IDE-only substitute.
+### Full fork
 
-### Fork changes on every target
-
-Put the fork coordinates in `commonMain` instead. Their Gradle metadata selects the matching fork
-variant for every published target, and the plugin aligns matching transitive Compose requests:
+Put the fork dependencies in `commonMain` to use them on every published fork target: Android, JS,
+Wasm JS, Linux, and Windows.
 
 ```kotlin
+val composeNativeVersion = "1.12.10-alpha09"
+
 kotlin {
+    desktopNative {
+        binaries.executable {
+            entryPoint = "com.example.main"
+        }
+    }
+
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha09")
-            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha09")
-            implementation("dev.brahmkshatriya.compose.material3:material3:1.12.10-alpha09")
+            implementation("dev.brahmkshatriya.compose.ui:ui:$composeNativeVersion")
+            implementation("dev.brahmkshatriya.compose.foundation:foundation:$composeNativeVersion")
+            implementation("dev.brahmkshatriya.compose.material3:material3:$composeNativeVersion")
+        }
+
+        desktopNativeMain.dependencies {
+            implementation(
+                "dev.brahmkshatriya.compose.desktop:desktop-native:$composeNativeVersion"
+            )
         }
     }
 }
 ```
 
-This applies the fork-specific UI, Foundation, and Material 3 changes to Android, JS, Wasm, Linux,
-and Windows. Only targets with published fork variants can use this form in the current release;
-JVM desktop and Apple must stay on official Compose until those fork variants are published.
+Do not use the full-fork setup in a project that also targets JVM desktop or Apple until fork
+variants for those platforms are published.
 
-### Transitive Compose dependencies
+<details>
+<summary><strong>Fork-specific Compose changes</strong></summary>
 
-No manual substitution block is needed for full-fork modules. For every explicitly versioned fork
-module in `commonMain`, the plugin substitutes the matching transitive
-`org.jetbrains.compose.<family>:<module>` request throughout that project. On Android it also
-substitutes `androidx.compose.<family>:<module>-android` with the fork's Android artifact.
+### Foundation: stackable sticky headers
 
-For example, declaring
-`dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha09` makes both
-`org.jetbrains.compose.foundation:foundation` and
-`androidx.compose.foundation:foundation-android` resolve to Foundation `1.12.10-alpha09` from the
-fork. The same applies independently to each Runtime, UI, Animation, Foundation, Material, or
-Material 3 module explicitly declared in `commonMain`.
+`LazyColumn`, `LazyRow`, and lazy grids add an `isSlidable` argument to `stickyHeader`:
 
-AndroidX Compose coordinates are substituted only in Android configurations and only when the
-corresponding fork module is published. JetBrains AndroidX support modules use fork artifacts on
-Linux and Windows, while Android, JS, and Wasm retain their official platform artifacts.
+```kotlin
+LazyColumn {
+    stickyHeader(isSlidable = false) {
+        Text("Always pinned")
+    }
 
-The plugin does not infer a fork version or enable unlisted modules. The declaration remains the
-single visible source of the selected version. Substitution affects configurations in the project
-where the plugin is applied; apply the plugin and declare the required fork modules in each
-independently resolving subproject that should use the full fork.
+    stickyHeader(isSlidable = true) {
+        Text("Pushed away by the next header")
+    }
+}
+```
 
-JVM desktop and Apple variants are not published in this release, so projects containing those
-targets cannot put these fork coordinates in `commonMain` yet.
+`isSlidable = true` keeps the normal sticky-header behavior. With `false`, the header stays pinned
+and later sticky headers stack after it. The default is `true`, so existing calls keep their normal
+behavior. Sticky-header positioning also accounts for the lazy container's top content padding.
 
-## Native system requirements
+### Material 3: desktop bottom-sheet behavior
 
-All builds require JDK 21 and the Kotlin/Native toolchain downloaded by Gradle.
+The fork adjusts `BottomSheetScaffold` without adding public API:
 
-Linux applications need SDL3, Fontconfig, D-Bus, and OpenGL/EGL development libraries while
-linking, and the corresponding shared libraries at runtime. For example:
+- nested scrollable content no longer causes an extra sheet bounce;
+- mouse-wheel delta is not handed to the sheet when a nested child reaches its scroll boundary;
+- mouse dragging does not move/open the sheet, while touch dragging continues to work normally;
+- sheet anchor updates and placement no longer apply duplicate visual movement.
+
+</details>
+
+`desktopNative` creates `linuxX64`, `linuxArm64`, and `mingwX64` plus a shared
+`desktopNativeMain` source set. `desktop-native` provides the native window/application APIs and
+brings in the native Skiko dependency.
+
+## System requirements
+
+JDK 21 and the Kotlin/Native toolchain are required.
+
+On Linux, install SDL3, Fontconfig, D-Bus, and OpenGL/EGL development libraries. For example:
 
 ```shell
 # Arch Linux
 sudo pacman -S jdk21-openjdk gcc pkgconf sdl3 fontconfig dbus mesa
 
-# Debian or Ubuntu, where SDL3 packages are available
+# Debian / Ubuntu with SDL3 packages available
 sudo apt install openjdk-21-jdk g++ pkg-config libsdl3-dev \
     libfontconfig1-dev libdbus-1-dev libegl-dev libgl-dev
 ```
 
-Windows applications must package `SDL3.dll` beside the executable. The repository's Windows demo
-shows a complete distribution setup, including the required runtime files.
+Windows x64 builds do not require a separately installed SDL3 SDK. The Gradle plugin downloads the
+matching SDL3 bundle for linking and includes the runtime in its Windows distribution tasks.
 
-## Native platform capabilities
+## Published targets
 
-| Capability | Linux x64 / arm64 | Windows x64 |
-| --- | --- | --- |
-| GPU renderer | OpenGL | Direct3D 12 or OpenGL |
-| Software fallback | Yes | Yes |
-| Multiple windows and dialogs | Yes | Yes |
-| Clipboard, URI, keyboard, IME, mouse, and touch | Yes | Yes |
-| Text and file drag-and-drop | Yes | Yes |
-| Menu bars, tray menus, and notifications | Yes | Yes |
-| Transparent and undecorated windows | Yes, compositor dependent | Yes |
-| System theme and accent color | Yes | Yes |
-| Accessibility | AT-SPI | Native events; complete UI Automation provider pending |
-| CPU framebuffer and OpenGL native views | Yes | Yes |
+| Target | Fork artifacts |
+| --- | --- |
+| Linux x64 | Yes |
+| Linux arm64 | Yes |
+| Windows x64 | Yes |
+| Android | Yes |
+| JS | Yes |
+| Wasm JS | Yes |
+| JVM desktop | No |
+| iOS / macOS | No |
+| Windows arm64 | No |
 
-Renderer behavior can be configured with environment variables:
+JVM desktop and Apple projects can still use official JetBrains Compose alongside the native fork.
 
-```shell
-SKIKO_RENDER_API=OPENGL
-SKIKO_FRAME_BUFFERING=TRIPLE
-SKIKO_VSYNC_ENABLED=true
-SKIKO_GPU_PRIORITY=discrete
-SKIKO_FPS_ENABLED=true
+
+
+## Packaging
+
+When an executable is configured, the plugin also uses `src/main/kotlin` as native desktop source
+and `src/main/composeResources` as native Compose resources. Linux builds get AppDir/AppImage tasks;
+Windows x64 gets a self-contained distribution directory and zip task.
+
+Application metadata can be customized with `composeNativeApplication`:
+
+```kotlin
+composeNativeApplication {
+    applicationName.set("Example")
+    packageName.set("com.example.app")
+    executableName.set("example")
+}
 ```
 
-Linux supports `OPENGL`, `SOFTWARE_FAST`, and `SOFTWARE_COMPAT`. Windows supports `DIRECT3D`,
-`OPENGL`, `SOFTWARE_FAST`, and `SOFTWARE_COMPAT`. See the
-[Skiko Native documentation](https://github.com/brahmkshatriya/skiko-native) for all settings.
-
-## Version compatibility
+## Versions
 
 | Component | Version |
 | --- | --- |
-| Compose Native plugin and fork artifacts | `1.12.10-alpha09` |
+| Compose Native plugin / fork | `1.12.10-alpha09` |
 | JetBrains Compose plugin | `1.12.0-rc01` |
-| Kotlin and Compose compiler plugin | `2.3.20` |
-| Native Skiko fork | `0.151.4` |
-| Official Skiko used by non-native targets | `0.150.1` |
+| Kotlin / Compose compiler | `2.3.20` |
+| Native Skiko | `0.151.4` |
 
-These are the versions used by the example and current fork publication. Dependency versions are
-visible in the build script and are never inferred by the plugin.
+## Limitations
 
-## Examples and limitations
-
-The `demo` and `windows-native-demo` modules demonstrate native windows, Material controls,
-resources, graphics, menus, trays, notifications, drag-and-drop, native views, web content, and
-video playback.
-
-Current limitations:
-
+- JVM desktop and Apple fork artifacts are not published yet.
 - Windows arm64 is not supported.
-- JVM desktop and Apple fork artifacts are not published in this release.
 - Windows accessibility does not yet expose a complete UI Automation provider.
 - Transparent windows depend on compositor support.
-- Linux arm64 cross-linking from x64 requires an arm64 sysroot containing the application's native
-  dependencies.
+- Linux arm64 cross-linking from x64 requires an arm64 sysroot with the native dependencies.
 - SVG files are not currently supported by the native Compose resource reader.
 
-For publication and release-maintainer instructions, see [PUBLISHING.md](PUBLISHING.md).
+See [PUBLISHING.md](PUBLISHING.md) for release and publication details.
 
 ## License
 
