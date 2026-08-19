@@ -279,6 +279,8 @@ internal data class ClientFrameInsets(
     }
 }
 
+internal fun titleBarWindowRecreationKey(titleBar: TitleBar): Boolean = titleBar is TitleBar.Native
+
 internal fun clientFrameInsets(
     drawingInsideTitleBar: Boolean,
     placement: WindowPlacement,
@@ -693,8 +695,9 @@ private fun WindowImpl(
     val parentComposition = rememberCompositionContext()
     val currentContent = rememberUpdatedState(content)
     val currentCloseRequest = rememberUpdatedState(onCloseRequest)
+    val titleBarWindowKey = titleBarWindowRecreationKey(titleBar)
     val host =
-        remember(application, state, owner, modalityType, transparent) {
+        remember(application, state, owner, modalityType, transparent, titleBarWindowKey) {
             NativeWindowHost(application, state, owner, modalityType)
         }
     val requestedPlacement = state.placement

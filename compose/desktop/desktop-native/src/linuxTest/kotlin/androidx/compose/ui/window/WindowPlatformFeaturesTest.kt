@@ -25,6 +25,15 @@ import kotlin.test.assertTrue
 
 class WindowPlatformFeaturesTest {
     @Test
+    fun titleBarWindowRecreationKeyOnlyChangesAtNativeBoundary() {
+        val custom = TitleBar.Custom { _, _, _ -> }
+
+        assertTrue(titleBarWindowRecreationKey(TitleBar.Native))
+        assertFalse(titleBarWindowRecreationKey(TitleBar.Auto()))
+        assertFalse(titleBarWindowRecreationKey(custom))
+    }
+
+    @Test
     fun clientFrameInsetsLiveOutsideFloatingWindowContent() {
         val insets = clientFrameInsets(drawingInsideTitleBar = true, WindowPlacement.Floating)
 
