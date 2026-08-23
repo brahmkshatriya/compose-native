@@ -2526,6 +2526,15 @@ internal class NativeWindowHost(
     }
 
     fun hitTest(x: Int, y: Int): SDL_HitTestResult {
+        // SDL's Wayland backend runs the window hit test again for button-up events. If a
+        // Compose-owned drag crosses a resize border, SDL can interpret the release as a native
+        // resize action and swallow it. Native move/resize presses are decided before Compose
+        // receives button-down, so keep the result normal only while Compose owns the press.
+        if (
+            primaryPressed || secondaryPressed || tertiaryPressed || backPressed || forwardPressed
+        ) {
+            return SDL_HitTestResult.SDL_HITTEST_NORMAL
+        }
         val currentMetrics = metrics ?: return SDL_HitTestResult.SDL_HITTEST_NORMAL
         val point = currentMetrics.contentPoint(x, y)
         // Maximized and fullscreen windows fill the workspace and are resized by the window
