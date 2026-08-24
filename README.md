@@ -158,7 +158,8 @@ sudo apt install openjdk-21-jdk g++ pkg-config libsdl3-dev \
 ```
 
 Windows x64 builds do not require a separately installed SDL3 SDK. The Gradle plugin downloads the
-matching SDL3 bundle for linking and includes the runtime in its Windows distribution tasks.
+matching SDL3 bundle for linking and stages SDL3, Skia ICU data, and the MinGW runtime DLLs for
+executable run tasks and Windows distributions.
 
 ## Published targets
 

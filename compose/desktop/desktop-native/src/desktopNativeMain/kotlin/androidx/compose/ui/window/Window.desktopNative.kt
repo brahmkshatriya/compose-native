@@ -245,6 +245,8 @@ internal val NativeTitleBarHeight = 36.dp
 private val NativeWindowCornerRadius = 6.dp
 private const val NativeResizeBorder = 6
 private val IsLinuxHost = NativePlatform.osFamily == OsFamily.LINUX
+private val IsWindowsHost = NativePlatform.osFamily == OsFamily.WINDOWS
+private const val LiveResizeFramesPerSecond = 60
 
 internal data class ClientFrameInsets(
     val left: Int,
@@ -1178,7 +1180,9 @@ internal class NativeApplication : ApplicationScope {
         if (!isHostThread()) return
         val value = event.pointed
         if (value.type != SDL_EVENT_WINDOW_EXPOSED.toUInt()) return
-        windows.firstOrNull { it.owns(value) }?.renderExposedFrame(0, 0)
+        windows
+            .firstOrNull { it.owns(value) }
+            ?.renderExposedFrame(isLiveResize = value.window.data1 != 0)
     }
 
     private fun dispatchSdlEvent(event: SDL_Event) {
@@ -1615,6 +1619,8 @@ internal class NativeWindowHost(
     private var dropAccepted = false
     private val accessibility = createNativeAccessibility(application::dispatchToHost)
     private val damageTracker = FrameDamageTracker()
+    private val liveResizeFrameThrottle =
+        LiveResizeFrameThrottle(SDL_GetPerformanceFrequency(), LiveResizeFramesPerSecond)
     private val platformContext =
         SdlPlatformContext(accessibility, damageTracker) { SkiaGraphicsContext() }
 
@@ -1753,31 +1759,35 @@ internal class NativeWindowHost(
                     forcedRenderScheduled.value ||
                     scene?.hasInvalidations() == true)
 
-    fun renderExposedFrame(widthHint: Int, heightHint: Int) {
+    fun renderExposedFrame(isLiveResize: Boolean) {
         if (!exposedFrameRendering.compareAndSet(expect = false, update = true)) return
         try {
             val window = sdlWindow ?: return
-            if (widthHint > 1 && heightHint > 1) {
+            memScoped {
+                val width = alloc<IntVar>()
+                val height = alloc<IntVar>()
+                kgl_get_window_size(window, width.ptr, height.ptr)
                 val insets = activeClientFrameInsets()
-                windowWidth = insets.contentWidth(widthHint)
-                windowHeight = insets.contentHeight(heightHint)
-            } else {
-                memScoped {
-                    val width = alloc<IntVar>()
-                    val height = alloc<IntVar>()
-                    kgl_get_window_size(window, width.ptr, height.ptr)
-                    val insets = activeClientFrameInsets()
-                    windowWidth = insets.contentWidth(width.value)
-                    windowHeight = insets.contentHeight(height.value)
+                windowWidth = insets.contentWidth(width.value)
+                windowHeight = insets.contentHeight(height.value)
+            }
+            val throttleLiveResize = IsWindowsHost && isLiveResize
+            if (!isLiveResize) liveResizeFrameThrottle.reset()
+            renderScheduled.value = true
+            if (
+                !throttleLiveResize ||
+                    liveResizeFrameThrottle.shouldRender(SDL_GetPerformanceCounter())
+            ) {
+                try {
+                    // SDL invokes expose watchers from the platform's blocking live-resize loop.
+                    render(forceDraw = true)
+                } finally {
+                    if (throttleLiveResize) {
+                        liveResizeFrameThrottle.onFrameRendered(SDL_GetPerformanceCounter())
+                    }
                 }
             }
-            renderScheduled.value = true
-            // Wayland uses expose callbacks to request a buffer commit while an interactive
-            // resize is in progress. The published dimensions may still match the previous
-            // frame here, but presenting is required for the compositor to advance the resize.
-            render(forceDraw = true)
-            // SDL's Wayland backend applies pending configure acknowledgements from a frame
-            // callback. Present once more from the normal event-loop turn after that callback.
+            // Always retain the latest dimensions for a final full-quality event-loop frame.
             forcedRenderScheduled.value = true
             renderScheduled.value = true
             application.requestFrame()

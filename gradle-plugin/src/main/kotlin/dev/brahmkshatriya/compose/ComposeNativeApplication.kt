@@ -12,6 +12,7 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.FileCollection
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.plugins.ExtensionAware
@@ -567,6 +568,7 @@ private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTa
         }
     configureWindowsSdlLinker(target, sdl)
     val icu = configureWindowsIcuData()
+    configureWindowsExecutableRuntimeCopyTasks(target, extension, sdl, icu)
     val linkTaskName = "linkReleaseExecutable${target.taskSuffix}"
     val copyTaskName = "copyRelease${target.taskSuffix}ExecutableResources"
     val prepare =
@@ -601,6 +603,51 @@ private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTa
         task.archiveVersion.set(extension.packageVersion)
         task.archiveClassifier.set("windows-x86_64")
         task.destinationDirectory.set(extension.distributionDirectory)
+    }
+}
+
+private fun Project.configureWindowsExecutableRuntimeCopyTasks(
+    target: DesktopNativeApplicationTarget,
+    extension: ComposeNativeApplicationExtension,
+    sdl: org.gradle.api.tasks.TaskProvider<PrepareWindowsSdlRuntimeTask>,
+    icu: FileCollection,
+) {
+    listOf("debug", "release").forEach { buildType ->
+        val capitalizedBuildType = buildType.replaceFirstChar(Char::uppercaseChar)
+        val linkTaskName = "link${capitalizedBuildType}Executable${target.taskSuffix}"
+        val linkTask = tasks.findByName(linkTaskName) ?: return@forEach
+        val copyTaskName =
+            "copy${capitalizedBuildType}${target.taskSuffix}ExecutableRuntime"
+        val copyTask =
+            tasks.register(copyTaskName, Copy::class.java) { task ->
+                task.group = "build"
+                task.description =
+                    "Stages the ${target.displayName} $buildType executable runtime files."
+                task.dependsOn(linkTask)
+                task.from(extension.windowsX64RuntimeFiles)
+                if (extension.bundleSdl.get()) {
+                    task.from(sdl.map { it.outputDirectory.file("SDL3.dll") })
+                }
+                task.from(icu)
+                task.into(
+                    layout.buildDirectory.dir(
+                        "bin/${target.sourceSetPrefix}/${buildType}Executable"
+                    )
+                )
+                task.rename { fileName ->
+                    if (
+                        fileName.endsWith(".dat", ignoreCase = true) &&
+                            fileName.contains("icudtl", ignoreCase = true)
+                    ) {
+                        "icudtl.dat"
+                    } else {
+                        fileName
+                    }
+                }
+            }
+        tasks
+            .findByName("run${capitalizedBuildType}Executable${target.taskSuffix}")
+            ?.dependsOn(copyTask)
     }
 }
 

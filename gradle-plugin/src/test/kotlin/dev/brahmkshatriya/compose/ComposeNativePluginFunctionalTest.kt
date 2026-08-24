@@ -187,6 +187,8 @@ class ComposeNativePluginFunctionalTest {
                             "linkDebugExecutableLinuxX64",
                             "linkDebugExecutableLinuxArm64",
                             "linkDebugExecutableMingwX64",
+                            "copyDebugMingwX64ExecutableRuntime",
+                            "copyReleaseMingwX64ExecutableRuntime",
                             "prepareLinuxX64ReleaseAppDir",
                             "packageLinuxX64ReleaseAppImage",
                             "prepareLinuxArm64ReleaseAppDir",
@@ -199,6 +201,23 @@ class ComposeNativePluginFunctionalTest {
                         val runTask = tasks.getByName("runDebugExecutableLinuxX64")
                         val copyTask = tasks.getByName("copyDebugLinuxX64ExecutableResources")
                         check(copyTask in runTask.taskDependencies.getDependencies(runTask))
+
+                        listOf("Debug", "Release").forEach { buildType ->
+                            val windowsRunTask =
+                                tasks.getByName("run${'$'}{buildType}ExecutableMingwX64")
+                            val runtimeCopyTask =
+                                tasks.getByName("copy${'$'}{buildType}MingwX64ExecutableRuntime")
+                            val windowsLinkTask =
+                                tasks.getByName("link${'$'}{buildType}ExecutableMingwX64")
+                            check(
+                                runtimeCopyTask in
+                                    windowsRunTask.taskDependencies.getDependencies(windowsRunTask)
+                            )
+                            check(
+                                windowsLinkTask in
+                                    runtimeCopyTask.taskDependencies.getDependencies(runtimeCopyTask)
+                            )
+                        }
                     }
                 }
                 """
