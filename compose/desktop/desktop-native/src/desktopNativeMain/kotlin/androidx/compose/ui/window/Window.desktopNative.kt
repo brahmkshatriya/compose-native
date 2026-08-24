@@ -246,7 +246,6 @@ private val NativeWindowCornerRadius = 6.dp
 private const val NativeResizeBorder = 6
 private val IsLinuxHost = NativePlatform.osFamily == OsFamily.LINUX
 private val IsWindowsHost = NativePlatform.osFamily == OsFamily.WINDOWS
-private const val LiveResizeFramesPerSecond = 60
 
 internal data class ClientFrameInsets(
     val left: Int,
@@ -1032,6 +1031,8 @@ internal class NativeApplication : ApplicationScope {
     private val running = atomic(true)
     private val frameRequested = atomic(true)
     private val applicationLayoutDirty = atomic(true)
+    private val performanceFrequency = SDL_GetPerformanceFrequency().coerceAtLeast(1uL)
+    private val performanceStart = SDL_GetPerformanceCounter()
     private val hostTaskLock = SynchronizedObject()
     private val hostTasks = ArrayDeque<() -> Unit>()
     private val eventWatchReference = StableRef.create(this)
@@ -1121,6 +1122,13 @@ internal class NativeApplication : ApplicationScope {
         }
     }
 
+    fun performFrame(counter: ULong = SDL_GetPerformanceCounter()) {
+        val elapsed = counter - performanceStart
+        val nanoTime =
+            (elapsed.toDouble() * 1_000_000_000.0 / performanceFrequency.toDouble()).toLong()
+        frameRecomposer.performFrame(nanoTime)
+    }
+
     fun dispatchToHost(block: () -> Unit) {
         synchronized(hostTaskLock) { hostTasks.addLast(block) }
         requestFrame()
@@ -1180,9 +1188,7 @@ internal class NativeApplication : ApplicationScope {
         if (!isHostThread()) return
         val value = event.pointed
         if (value.type != SDL_EVENT_WINDOW_EXPOSED.toUInt()) return
-        windows
-            .firstOrNull { it.owns(value) }
-            ?.renderExposedFrame(isLiveResize = value.window.data1 != 0)
+        windows.firstOrNull { it.owns(value) }?.renderExposedFrame(0, 0)
     }
 
     private fun dispatchSdlEvent(event: SDL_Event) {
@@ -1236,9 +1242,6 @@ internal class NativeApplication : ApplicationScope {
             }
         }
 
-        val performanceFrequency = SDL_GetPerformanceFrequency().coerceAtLeast(1uL)
-        val frequency = performanceFrequency.toDouble()
-        val start = SDL_GetPerformanceCounter()
         val configuredFramesPerSecond =
             nativeGetEnvironmentVariable("KTNATIVE_MAX_FPS")
                 ?.toIntOrNull()
@@ -1292,9 +1295,7 @@ internal class NativeApplication : ApplicationScope {
                     val counter = SDL_GetPerformanceCounter()
                     framePacer?.onFrameStarted(counter)
                     if (recomposerPending) {
-                        val nanoTime =
-                            ((counter - start).toDouble() * 1_000_000_000.0 / frequency).toLong()
-                        frameRecomposer.performFrame(nanoTime)
+                        performFrame(counter)
                     }
                     if (
                         applicationLayoutDirty.getAndSet(false) ||
@@ -1619,8 +1620,6 @@ internal class NativeWindowHost(
     private var dropAccepted = false
     private val accessibility = createNativeAccessibility(application::dispatchToHost)
     private val damageTracker = FrameDamageTracker()
-    private val liveResizeFrameThrottle =
-        LiveResizeFrameThrottle(SDL_GetPerformanceFrequency(), LiveResizeFramesPerSecond)
     private val platformContext =
         SdlPlatformContext(accessibility, damageTracker) { SkiaGraphicsContext() }
 
@@ -1759,35 +1758,30 @@ internal class NativeWindowHost(
                     forcedRenderScheduled.value ||
                     scene?.hasInvalidations() == true)
 
-    fun renderExposedFrame(isLiveResize: Boolean) {
+    fun renderExposedFrame(widthHint: Int, heightHint: Int) {
         if (!exposedFrameRendering.compareAndSet(expect = false, update = true)) return
         try {
             val window = sdlWindow ?: return
-            memScoped {
-                val width = alloc<IntVar>()
-                val height = alloc<IntVar>()
-                kgl_get_window_size(window, width.ptr, height.ptr)
+            if (widthHint > 1 && heightHint > 1) {
                 val insets = activeClientFrameInsets()
-                windowWidth = insets.contentWidth(width.value)
-                windowHeight = insets.contentHeight(height.value)
-            }
-            val throttleLiveResize = IsWindowsHost && isLiveResize
-            if (!isLiveResize) liveResizeFrameThrottle.reset()
-            renderScheduled.value = true
-            if (
-                !throttleLiveResize ||
-                    liveResizeFrameThrottle.shouldRender(SDL_GetPerformanceCounter())
-            ) {
-                try {
-                    // SDL invokes expose watchers from the platform's blocking live-resize loop.
-                    render(forceDraw = true)
-                } finally {
-                    if (throttleLiveResize) {
-                        liveResizeFrameThrottle.onFrameRendered(SDL_GetPerformanceCounter())
-                    }
+                windowWidth = insets.contentWidth(widthHint)
+                windowHeight = insets.contentHeight(heightHint)
+            } else {
+                memScoped {
+                    val width = alloc<IntVar>()
+                    val height = alloc<IntVar>()
+                    kgl_get_window_size(window, width.ptr, height.ptr)
+                    val insets = activeClientFrameInsets()
+                    windowWidth = insets.contentWidth(width.value)
+                    windowHeight = insets.contentHeight(height.value)
                 }
             }
-            // Always retain the latest dimensions for a final full-quality event-loop frame.
+            renderScheduled.value = true
+            // Windows dispatches expose events from its blocking live-resize loop. Advance the
+            // recomposer here so state derived from LocalWindowInfo is applied before this frame.
+            render(forceDraw = true, advanceComposition = IsWindowsHost)
+            // Wayland applies pending configure acknowledgements from a frame callback. Present
+            // once more from the normal event-loop turn after that callback.
             forcedRenderScheduled.value = true
             renderScheduled.value = true
             application.requestFrame()
@@ -2776,7 +2770,7 @@ internal class NativeWindowHost(
         }
     }
 
-    fun render(forceDraw: Boolean = false) {
+    fun render(forceDraw: Boolean = false, advanceComposition: Boolean = false) {
         if (!isRenderable) return
         val window = sdlWindow ?: return
         val nativeLayer = skiaLayer ?: return
@@ -2800,6 +2794,17 @@ internal class NativeWindowHost(
                 clearPointerButtons()
                 updateWindowInfo(nextMetrics)
                 if (densityChanged) println("$currentTitle: ${nextMetrics.description()}")
+            }
+            if (advanceComposition && application.frameRecomposer.hasPendingWork()) {
+                application.performFrame()
+                if (
+                    !isRenderable ||
+                        sdlWindow !== window ||
+                        skiaLayer !== nativeLayer ||
+                        scene !== nativeScene
+                ) {
+                    return
+                }
             }
             platformContext.updateTextInputRect(nextMetrics)
             if (hasTransparentWindowBuffer && metricsChanged) {
