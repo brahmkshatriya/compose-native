@@ -1,14 +1,19 @@
 package dev.brahmkshatriya.compose
 
+import java.io.Serializable
 import org.gradle.api.Action
+import org.gradle.api.GradleException
 import org.gradle.api.NamedDomainObjectContainer
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.Task
 import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ModuleComponentSelector
+import org.gradle.api.attributes.Attribute
 import org.gradle.api.plugins.ExtensionAware
+import org.gradle.api.publish.tasks.GenerateModuleMetadata
 
 class ComposeNativePlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -16,9 +21,11 @@ class ComposeNativePlugin : Plugin<Project> {
         project.addDesktopNativeSourceSets()
         project.createComposeNativeApplicationExtension()
         project.configureDesktopNativeApplicationConventions()
+        project.configureSharedNativeMetadataTarget()
         project.configureIdeDependencyResolution()
         project.configureSkikoCapabilityResolution()
         project.configureDependencySubstitutions()
+        project.configureNativeSkikoPublicationMetadata()
     }
 }
 
@@ -42,6 +49,16 @@ internal fun String?.requiresRequestedCoordinateMatchingFlag(): Boolean {
     val major = components.getOrNull(0)?.toIntOrNull() ?: return true
     val minor = components.getOrNull(1)?.toIntOrNull() ?: return true
     return major < 2 || major == 2 && minor < 4
+}
+
+private fun Project.configureSharedNativeMetadataTarget() {
+    configurations.configureEach { configuration ->
+        if (!configuration.name.isSharedNativeMetadataConfiguration()) return@configureEach
+        configuration.attributes.attribute(
+            Attribute.of(KOTLIN_NATIVE_TARGET_ATTRIBUTE, String::class.java),
+            DESKTOP_NATIVE_METADATA_TARGET,
+        )
+    }
 }
 
 private fun Project.configureSkikoCapabilityResolution() {
@@ -187,6 +204,71 @@ private fun Project.configureLocalDependencySubstitutions(
         }
     }
 }
+
+private fun Project.configureNativeSkikoPublicationMetadata() {
+    afterEvaluate {
+        val nativeSkikoVersion = nativeSkikoPublicationVersion()
+        tasks.withType(GenerateModuleMetadata::class.java).configureEach { task ->
+            if (!task.name.isDesktopNativePublicationMetadataTask()) return@configureEach
+            task.doLast(RewriteNativeSkikoPublicationMetadataAction(nativeSkikoVersion))
+        }
+    }
+}
+
+internal fun Project.nativeSkikoPublicationVersion(): String {
+    val declaredVersions =
+        configurations
+            .matching { configuration ->
+                configuration.name.startsWith(
+                    DESKTOP_NATIVE_MAIN_CONFIGURATION_PREFIX,
+                    ignoreCase = true,
+                )
+            }
+            .flatMap { it.dependencies }
+            .filter { dependency ->
+                dependency.group == FORK_SKIKO_GROUP && dependency.name == SKIKO_MODULE
+            }
+            .mapNotNull { it.version?.takeIf(String::isNotBlank) }
+            .distinct()
+    if (declaredVersions.size > 1) {
+        throw GradleException(
+            "Compose Native found multiple desktop Native Skiko fork versions: " +
+                declaredVersions.joinToString()
+        )
+    }
+    return declaredVersions.singleOrNull() ?: DEFAULT_NATIVE_SKIKO_VERSION
+}
+
+private class RewriteNativeSkikoPublicationMetadataAction(
+    private val nativeSkikoVersion: String,
+) : Action<Task>, Serializable {
+    override fun execute(task: Task) {
+        val metadataTask = task as GenerateModuleMetadata
+        val metadataFile = metadataTask.outputFile.get().asFile
+        val original = metadataFile.readText()
+        val rewritten = rewriteNativeSkikoPublicationMetadata(original, nativeSkikoVersion)
+        if (rewritten != original) metadataFile.writeText(rewritten)
+    }
+}
+
+internal fun rewriteNativeSkikoPublicationMetadata(
+    metadata: String,
+    nativeSkikoVersion: String,
+): String =
+    OFFICIAL_SKIKO_DEPENDENCY_REGEX.replace(metadata) { match ->
+        buildString {
+            append(match.groupValues[1])
+            append(FORK_SKIKO_GROUP)
+            append(match.groupValues[2])
+            append(nativeSkikoVersion)
+            append(match.groupValues[3])
+        }
+    }
+
+internal fun String.isDesktopNativePublicationMetadataTask(): Boolean =
+    DESKTOP_NATIVE_TARGET_SOURCE_SETS.values.any { targetName ->
+        contains(targetName, ignoreCase = true)
+    }
 
 private fun Project.configureAndroidApplicationConsumers(
     fullForkSubstitutions: Map<String, ModuleSubstitution>
@@ -485,6 +567,8 @@ private const val KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multipl
 private const val ANDROID_APPLICATION_PLUGIN_ID = "com.android.application"
 private const val KMP_MATCH_REQUESTED_COORDINATES_PROPERTY =
     "kotlin.internal.kmp.allowMatchingByRequestedCoordinatesInMetadataTransformations"
+private const val KOTLIN_NATIVE_TARGET_ATTRIBUTE = "org.jetbrains.kotlin.native.target"
+private const val DESKTOP_NATIVE_METADATA_TARGET = "linux_x64"
 private const val KOTLIN_NATIVE_BINARY_CONTAINER_CLASS =
     "org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer"
 private const val COMMON_MAIN_CONFIGURATION_PREFIX = "commonMain"
@@ -497,6 +581,8 @@ private const val FORK_COMPOSE_GROUP_PREFIX = "dev.brahmkshatriya.compose."
 private const val FORK_ANDROIDX_GROUP_PREFIX = "dev.brahmkshatriya.androidx."
 private const val OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 private const val FORK_SKIKO_GROUP = "dev.brahmkshatriya.skiko"
+private const val SKIKO_MODULE = "skiko"
+private const val DEFAULT_NATIVE_SKIKO_VERSION = "0.151.5"
 private val ANDROIDX_COMPOSE_FAMILIES =
     setOf("animation", "foundation", "material", "material3", "runtime", "ui")
 private val ANDROIDX_COMPOSE_FORK_MODULES =
@@ -524,6 +610,10 @@ private val COMPOSE_FAMILIES = ANDROIDX_COMPOSE_FAMILIES + setOf("components", "
 private val NATIVE_ONLY_COMPOSE_FAMILIES = setOf("components", "desktop")
 private val FORK_ANDROIDX_FAMILIES =
     setOf("lifecycle", "navigation", "navigation3", "navigationevent", "savedstate")
+private val OFFICIAL_SKIKO_DEPENDENCY_REGEX =
+    Regex(
+        """(?s)("group"\s*:\s*")org\.jetbrains\.skiko("\s*,\s*"module"\s*:\s*"skiko"\s*,\s*"version"\s*:\s*\{\s*"(?:requires|strictly)"\s*:\s*")[^"]+(")"""
+    )
 private val DEFAULT_LINUX_LINKER_OPTIONS = listOf("-L/usr/lib")
 private val DESKTOP_NATIVE_CONFIGURATION_MARKERS =
     listOf("desktopnative", "linuxx64", "linuxarm64", "mingwx64")

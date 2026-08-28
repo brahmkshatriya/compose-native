@@ -3,6 +3,7 @@ package dev.brahmkshatriya.compose
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import org.gradle.api.attributes.Attribute
 import org.gradle.testfixtures.ProjectBuilder
 
 class ComposeNativePluginTest {
@@ -27,6 +28,19 @@ class ComposeNativePluginTest {
             false,
             "commonMainResolvableDependenciesMetadata".isDesktopNativeConfiguration(),
         )
+    }
+
+    @Test
+    fun configuresSharedDesktopNativeMetadataWithRepresentativeNativeTarget() {
+        val project = ProjectBuilder.builder().build()
+        ComposeNativePlugin().apply(project)
+        val sharedMetadata =
+            project.configurations.create("desktopNativeMainResolvableDependenciesMetadata")
+        val commonMetadata = project.configurations.create("commonMainResolvableDependenciesMetadata")
+        val nativeTarget = Attribute.of("org.jetbrains.kotlin.native.target", String::class.java)
+
+        assertEquals("linux_x64", sharedMetadata.attributes.getAttribute(nativeTarget))
+        assertNull(commonMetadata.attributes.getAttribute(nativeTarget))
     }
 
     @Test
@@ -113,6 +127,68 @@ class ComposeNativePluginTest {
                 forkCoordinate = "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha02",
             ),
             overlaySubstitutionFor(dependency),
+        )
+    }
+
+    @Test
+    fun usesCompatibleSkikoPublicationVersionUnlessLibraryDeclaresOne() {
+        val project = ProjectBuilder.builder().build()
+        val desktopNative = project.configurations.create("desktopNativeMainImplementation")
+
+        assertEquals("0.151.5", project.nativeSkikoPublicationVersion())
+
+        desktopNative.dependencies.add(
+            project.dependencies.create("dev.brahmkshatriya.skiko:skiko:0.151.6")
+        )
+        assertEquals("0.151.6", project.nativeSkikoPublicationVersion())
+    }
+
+    @Test
+    fun rewritesOnlyOfficialSkikoInNativePublicationMetadata() {
+        val metadata =
+            """
+            {
+              "dependencies": [
+                {
+                  "group": "org.jetbrains.skiko",
+                  "module": "skiko",
+                  "version": { "requires": "0.150.1" }
+                },
+                {
+                  "group": "org.jetbrains.skiko",
+                  "module": "skiko-awt",
+                  "version": { "requires": "0.150.1" }
+                }
+              ]
+            }
+            """
+                .trimIndent()
+
+        val rewritten = rewriteNativeSkikoPublicationMetadata(metadata, "0.151.5")
+
+        assertEquals(true, "dev.brahmkshatriya.skiko" in rewritten)
+        assertEquals(true, "\"requires\": \"0.151.5\"" in rewritten)
+        assertEquals(true, "\"module\": \"skiko-awt\"" in rewritten)
+        assertEquals(true, "\"requires\": \"0.150.1\"" in rewritten)
+    }
+
+    @Test
+    fun identifiesOnlyDesktopNativePublicationMetadataTasks() {
+        assertEquals(
+            true,
+            "generateMetadataFileForLinuxX64Publication".isDesktopNativePublicationMetadataTask(),
+        )
+        assertEquals(
+            true,
+            "generateMetadataFileForLinuxArm64Publication".isDesktopNativePublicationMetadataTask(),
+        )
+        assertEquals(
+            true,
+            "generateMetadataFileForMingwX64Publication".isDesktopNativePublicationMetadataTask(),
+        )
+        assertEquals(
+            false,
+            "generateMetadataFileForJvmPublication".isDesktopNativePublicationMetadataTask(),
         )
     }
 

@@ -6,7 +6,9 @@ dependencies or choose dependency versions.
 
 - Apply `org.jetbrains.compose` normally so it owns Compose resources and application integration.
 - Declare fork artifacts and their versions directly in the source sets that should use them.
-- Declare the native Skiko fork explicitly when required.
+- Declare the native Skiko fork explicitly when required. When a library is published, the plugin
+  automatically rewrites leaked `org.jetbrains.skiko:skiko` dependencies in Linux and Windows
+  Gradle module metadata to that native fork version.
 - Explicit fork dependencies in `desktopNativeMain` replace their matching official Compose or
   Skiko modules only in Linux and Windows configurations.
 - Explicit fork Compose dependencies in `commonMain` replace matching transitive JetBrains Compose
@@ -15,7 +17,9 @@ dependencies or choose dependency versions.
   depends on the multiplatform project. Android configurations target the fork's published
   `-android` artifact directly instead of relying on root-module variant selection.
 - The plugin creates `desktopNativeMain` and connects it to configured Linux and Windows native
-  targets so native desktop dependencies can be declared once.
+  targets so native desktop dependencies can be declared once. Its shared metadata resolver uses
+  `linux_x64` as the representative native variant when a native-only dependency exposes separate
+  Linux x64, Linux ARM64, and MinGW variants, avoiding ambiguous variant selection.
 - Add all three desktop-native targets without repeating target blocks:
 
 ```kotlin
@@ -39,9 +43,12 @@ kotlin {
 Library modules use plain `desktopNative()`, which creates no executable binaries.
 
 Dependency substitution remains driven only by explicitly versioned fork dependencies; the
-declared dependency remains the source of both scope and version. The `composeNativeApplication`
-extension configures application packaging only. See the root README for native-overlay and full-fork
-examples.
+declared dependency remains the source of both scope and version. Publication metadata repair is
+separate: native target publications replace stale official `org.jetbrains.skiko:skiko` entries with
+the Skiko fork version declared under `desktopNativeMain`, falling back to the version compatible
+with this plugin release. The plugin does not add an unconditional Skiko substitution to downstream
+applications. The `composeNativeApplication` extension configures application packaging only. See
+the root README for native-overlay and full-fork examples.
 
 ## Native application conventions
 
