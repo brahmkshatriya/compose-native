@@ -27,7 +27,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.12.0-rc01"
-    id("dev.brahmkshatriya.compose") version "1.12.10-alpha10"
+    id("dev.brahmkshatriya.compose") version "1.12.10-alpha11"
 }
 ```
 
@@ -39,7 +39,7 @@ Use official Compose in `commonMain` and the fork only in `desktopNativeMain`. A
 JS, and Wasm continue using official Compose.
 
 ```kotlin
-val composeNativeVersion = "1.12.10-alpha10"
+val composeNativeVersion = "1.12.10-alpha11"
 
 kotlin {
     desktopNative {
@@ -76,7 +76,7 @@ Put the fork dependencies in `commonMain` to use them on every published fork ta
 Wasm JS, Linux, and Windows.
 
 ```kotlin
-val composeNativeVersion = "1.12.10-alpha10"
+val composeNativeVersion = "1.12.10-alpha11"
 
 kotlin {
     desktopNative {
@@ -199,10 +199,10 @@ composeNativeApplication {
 
 | Component | Version |
 | --- | --- |
-| Compose Native plugin / fork | `1.12.10-alpha10` |
+| Compose Native plugin / fork | `1.12.10-alpha11` |
 | JetBrains Compose plugin | `1.12.0-rc01` |
 | Kotlin / Compose compiler | `2.3.20` |
-| Native Skiko | `0.151.4` |
+| Native Skiko | `0.151.5` |
 
 ## Limitations
 

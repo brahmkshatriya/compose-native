@@ -119,12 +119,12 @@ class ComposeNativePluginTest {
     @Test
     fun mapsExplicitSkikoForkDependencyToOfficialCoordinate() {
         val project = ProjectBuilder.builder().build()
-        val dependency = project.dependencies.create("dev.brahmkshatriya.skiko:skiko:0.151.4")
+        val dependency = project.dependencies.create("dev.brahmkshatriya.skiko:skiko:0.151.5")
 
         assertEquals(
             ModuleSubstitution(
                 officialCoordinate = "org.jetbrains.skiko:skiko",
-                forkCoordinate = "dev.brahmkshatriya.skiko:skiko:0.151.4",
+                forkCoordinate = "dev.brahmkshatriya.skiko:skiko:0.151.5",
             ),
             overlaySubstitutionFor(dependency),
         )

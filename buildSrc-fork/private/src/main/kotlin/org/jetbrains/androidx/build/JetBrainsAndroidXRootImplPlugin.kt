@@ -75,7 +75,7 @@ private fun Project.configureComposeNativeSkikoResolution() {
     val nativeSkikoGroup =
         providers.gradleProperty("compose.native.skiko.group").orElse("dev.brahmkshatriya.skiko")
     val nativeSkikoVersion =
-        providers.gradleProperty("compose.native.skiko.version").orElse("0.151.4")
+        providers.gradleProperty("compose.native.skiko.version").orElse("0.151.5")
 
     configurations.configureEach { configuration ->
         val lowerName = configuration.name.lowercase()
