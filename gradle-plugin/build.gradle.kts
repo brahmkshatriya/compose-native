@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "dev.brahmkshatriya.compose"
-version = "1.12.10-alpha12"
+version = "1.12.10-alpha13"
 
 kotlin {
     jvmToolchain(21)
@@ -20,6 +20,8 @@ dependencies {
     compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.20")
     kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
     kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.20")
+    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.3.20")
+    kotlinGradlePluginApiForTests("org.jetbrains.compose:compose-gradle-plugin:1.12.0-rc01")
 
     testImplementation(kotlin("test"))
     testImplementation(gradleTestKit())

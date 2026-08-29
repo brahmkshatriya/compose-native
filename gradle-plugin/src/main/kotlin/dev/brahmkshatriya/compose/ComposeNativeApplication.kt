@@ -12,6 +12,7 @@ import org.gradle.api.Project
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.file.FileCollection
 import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.model.ObjectFactory
@@ -28,6 +29,7 @@ import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.bundling.Zip
 import org.gradle.process.ExecOperations
@@ -427,6 +429,16 @@ private fun Project.addConventionalMainKotlinSources() {
 
 private fun Project.addConventionalMainComposeResources() {
     pluginManager.withPlugin("org.jetbrains.compose") {
+        val mergedDirectory =
+            layout.buildDirectory.dir("generated/composeNative/desktopNativeMain/composeResources")
+        val prepareResources =
+            tasks.register("prepareDesktopNativeComposeResources", Sync::class.java) { task ->
+                task.from(layout.projectDirectory.dir("src/main/composeResources"))
+                task.from(layout.projectDirectory.dir("src/desktopNativeMain/composeResources"))
+                task.into(mergedDirectory)
+                task.includeEmptyDirs = false
+                task.duplicatesStrategy = DuplicatesStrategy.FAIL
+            }
         val compose = extensions.getByName("compose") as ExtensionAware
         val resources = compose.extensions.getByName("resources")
         val customDirectory =
@@ -436,7 +448,7 @@ private fun Project.addConventionalMainComposeResources() {
         customDirectory.invoke(
             resources,
             "desktopNativeMain",
-            providers.provider { layout.projectDirectory.dir("src/main/composeResources") },
+            prepareResources.map { mergedDirectory.get() },
         )
     }
 }
@@ -616,8 +628,7 @@ private fun Project.configureWindowsExecutableRuntimeCopyTasks(
         val capitalizedBuildType = buildType.replaceFirstChar(Char::uppercaseChar)
         val linkTaskName = "link${capitalizedBuildType}Executable${target.taskSuffix}"
         val linkTask = tasks.findByName(linkTaskName) ?: return@forEach
-        val copyTaskName =
-            "copy${capitalizedBuildType}${target.taskSuffix}ExecutableRuntime"
+        val copyTaskName = "copy${capitalizedBuildType}${target.taskSuffix}ExecutableRuntime"
         val copyTask =
             tasks.register(copyTaskName, Copy::class.java) { task ->
                 task.group = "build"

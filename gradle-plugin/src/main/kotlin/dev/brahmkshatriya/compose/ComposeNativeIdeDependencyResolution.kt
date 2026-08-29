@@ -4,6 +4,7 @@ package dev.brahmkshatriya.compose
 
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.Dependency
 import org.gradle.api.attributes.Attribute
 import org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinBinaryCoordinates
@@ -17,14 +18,15 @@ import org.jetbrains.kotlin.gradle.plugin.ide.dependencyResolvers.IdeBinaryDepen
 /**
  * Adds the dependencies from KGP's resolvable metadata configurations to the IDE model.
  *
- * Compose Native deliberately mixes forked and official Compose modules. KGP's transformed
- * metadata resolver can lose transitive official modules when another module in the graph is
- * substituted to the fork. Compilation still works because it uses the complete Gradle
- * configuration, while Android Studio receives the incomplete transformed-metadata model.
- * Resolving the same configuration as ordinary Kotlin compile binaries preserves those modules.
- * The delegate intentionally contributes only official Compose UI metadata and the forked
- * common families used by Foundation and Material. KGP's normal resolvers remain responsible
- * for every other dependency and for platform KLIBs.
+ * Compose Native deliberately mixes forked and official Compose modules. KGP's transformed metadata
+ * resolver can lose transitive official modules when another module in the graph is substituted to
+ * the fork. Compilation still works because it uses the complete Gradle configuration, while
+ * Android Studio receives the incomplete transformed-metadata model. Resolving the same
+ * configuration as ordinary Kotlin compile binaries preserves those modules. The delegate
+ * contributes official Compose UI metadata and the forked common families used by Foundation and
+ * Material. For desktopNativeMain it also contributes the complete shared metadata graph of its
+ * declared dependencies, including exported dependencies of project dependencies. KGP's normal
+ * resolvers remain responsible for project source dependencies and platform KLIBs.
  */
 internal fun Project.configureIdeDependencyResolution() {
     pluginManager.withPlugin(KOTLIN_MULTIPLATFORM_PLUGIN_ID) {
@@ -40,20 +42,22 @@ internal fun Project.configureIdeDependencyResolution() {
                     composeNativeIdeMetadataConfiguration(sourceSet.name)
                 }
             )
-        IdeMultiplatformImport.instance(this).registerDependencyResolver(
-            ComposeNativeIdeDependencyResolver(
-                project = this,
-                officialDelegate =
-                    IdeBinaryDependencyResolver(KOTLIN_COMPILE_BINARY_TYPE, officialStrategy),
-                forkDelegate = IdeBinaryDependencyResolver(KOTLIN_COMPILE_BINARY_TYPE, forkStrategy),
-            ),
-            IdeMultiplatformImport.SourceSetConstraint { sourceSet ->
-                sourceSet.name == COMMON_MAIN_SOURCE_SET ||
-                    sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET
-            },
-            IdeMultiplatformImport.DependencyResolutionPhase.PostDependencyResolution,
-            IdeMultiplatformImport.Priority.high,
-        )
+        IdeMultiplatformImport.instance(this)
+            .registerDependencyResolver(
+                ComposeNativeIdeDependencyResolver(
+                    project = this,
+                    officialDelegate =
+                        IdeBinaryDependencyResolver(KOTLIN_COMPILE_BINARY_TYPE, officialStrategy),
+                    forkDelegate =
+                        IdeBinaryDependencyResolver(KOTLIN_COMPILE_BINARY_TYPE, forkStrategy),
+                ),
+                IdeMultiplatformImport.SourceSetConstraint { sourceSet ->
+                    sourceSet.name == COMMON_MAIN_SOURCE_SET ||
+                        sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET
+                },
+                IdeMultiplatformImport.DependencyResolutionPhase.PostDependencyResolution,
+                IdeMultiplatformImport.Priority.high,
+            )
     }
 }
 
@@ -68,8 +72,10 @@ private class ComposeNativeIdeDependencyResolver(
             officialDelegate.resolve(sourceSet).filterTo(result, ::isOfficialCommonIdeDependency)
             forkDelegate.resolve(sourceSet).filterTo(result, ::isForkCommonComposeDependency)
         }
-        if (sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET && project.composeForkVersion() != null) {
-            forkDelegate.resolve(sourceSet).filterTo(result, ::isDesktopComposeDependency)
+        if (
+            sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET && project.composeForkVersion() != null
+        ) {
+            forkDelegate.resolve(sourceSet).filterTo(result, ::isResolvedBinaryDependency)
         }
         return result
     }
@@ -97,12 +103,8 @@ internal fun isOfficialCommonIdeDependency(group: String, module: String): Boole
 private fun isForkCommonComposeDependency(dependency: IdeaKotlinDependency): Boolean =
     dependency.binaryCoordinates()?.group in FORK_COMMON_COMPOSE_GROUPS
 
-private fun isDesktopComposeDependency(dependency: IdeaKotlinDependency): Boolean {
-    val coordinates = dependency.binaryCoordinates() ?: return false
-    return coordinates.group.startsWith(COMPOSE_FORK_GROUP_PREFIX) ||
-        (coordinates.group == OFFICIAL_COMPOSE_COMPONENTS_GROUP &&
-            coordinates.module == COMPONENTS_RESOURCES_MODULE)
-}
+private fun isResolvedBinaryDependency(dependency: IdeaKotlinDependency): Boolean =
+    dependency is IdeaKotlinResolvedBinaryDependency
 
 private fun IdeaKotlinDependency.binaryCoordinates(): IdeaKotlinBinaryCoordinates? =
     (this as? IdeaKotlinResolvedBinaryDependency)?.coordinates
@@ -112,28 +114,47 @@ private fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String)
     val modules =
         if (sourceSetName == COMMON_MAIN_SOURCE_SET) FORK_COMMON_IDE_MODULES
         else FORK_DESKTOP_IDE_MODULES
-    val dependencyNotations =
-        modules.map { (family, module) ->
-            "$COMPOSE_FORK_GROUP_PREFIX$family:$module:$version"
-        } +
-            if (sourceSetName == DESKTOP_NATIVE_MAIN_SOURCE_SET) {
-                officialComposeVersion()?.let { officialVersion ->
+    val desktopDependencyNotations =
+        if (sourceSetName == DESKTOP_NATIVE_MAIN_SOURCE_SET) {
+            officialComposeVersion()
+                ?.let { officialVersion ->
                     listOf(
                         "$OFFICIAL_COMPOSE_COMPONENTS_GROUP:$COMPONENTS_RESOURCES_MODULE:$officialVersion"
                     )
-                }.orEmpty()
-            } else {
-                emptyList()
-            }
+                }
+                .orEmpty()
+        } else {
+            emptyList()
+        }
+    val dependencyNotations =
+        (modules.map { (family, module) -> "$COMPOSE_FORK_GROUP_PREFIX$family:$module:$version" } +
+                desktopDependencyNotations)
+            .distinct()
     val configuration =
         configurations.detachedConfiguration(
-            *dependencyNotations.map(dependencies::create).toTypedArray()
+            *(dependencyNotations.map(dependencies::create) +
+                    if (sourceSetName == DESKTOP_NATIVE_MAIN_SOURCE_SET) {
+                        desktopNativeDirectDependencies()
+                    } else {
+                        emptyList()
+                    })
+                .toTypedArray()
         )
     val commonMetadata =
         configurations.getByName("${COMMON_MAIN_SOURCE_SET}ResolvableDependenciesMetadata")
     copyAttributes(from = commonMetadata, to = configuration)
     return configuration
 }
+
+private fun Project.desktopNativeDirectDependencies(): List<Dependency> =
+    configurations
+        .matching { configuration ->
+            configuration.name == "${DESKTOP_NATIVE_MAIN_SOURCE_SET}Api" ||
+                configuration.name == "${DESKTOP_NATIVE_MAIN_SOURCE_SET}Implementation" ||
+                configuration.name == "${DESKTOP_NATIVE_MAIN_SOURCE_SET}CompileOnly"
+        }
+        .flatMap { configuration -> configuration.dependencies }
+        .map(Dependency::copy)
 
 private fun Project.officialComposeVersion(): String? =
     rootProject.allprojects
@@ -150,9 +171,7 @@ private fun Project.composeForkVersion(): String? {
     val sourceSetPrefixes =
         listOf(COMMON_MAIN_DEPENDENCY_CONFIGURATION_PREFIX, DESKTOP_NATIVE_MAIN_SOURCE_SET)
     return configurations
-        .matching { configuration ->
-            sourceSetPrefixes.any(configuration.name::startsWith)
-        }
+        .matching { configuration -> sourceSetPrefixes.any(configuration.name::startsWith) }
         .flatMap { it.dependencies }
         .mapNotNull { dependency ->
             dependency.version?.takeIf(String::isNotBlank)?.takeIf {
@@ -168,11 +187,7 @@ private fun copyAttributes(from: Configuration, to: Configuration) {
 }
 
 @Suppress("UNCHECKED_CAST")
-private fun copyAttribute(
-    attribute: Attribute<*>,
-    from: Configuration,
-    to: Configuration,
-) {
+private fun copyAttribute(attribute: Attribute<*>, from: Configuration, to: Configuration) {
     val typedAttribute = attribute as Attribute<Any>
     from.attributes.getAttribute(typedAttribute)?.let { value ->
         to.attributes.attribute(typedAttribute, value)
@@ -214,6 +229,7 @@ private val FORK_DESKTOP_IDE_MODULES =
     FORK_COMMON_IDE_MODULES +
         setOf(
             "components" to "components-resources",
+            "desktop" to "desktop-native",
             "runtime" to "runtime",
             "runtime" to "runtime-saveable",
             "ui" to "ui",
