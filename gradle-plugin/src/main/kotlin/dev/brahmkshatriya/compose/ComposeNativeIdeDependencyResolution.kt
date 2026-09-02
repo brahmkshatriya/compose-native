@@ -5,6 +5,7 @@ package dev.brahmkshatriya.compose
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.Dependency
+import org.gradle.api.artifacts.component.ModuleComponentSelector
 import org.gradle.api.attributes.Attribute
 import org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinBinaryCoordinates
@@ -100,6 +101,8 @@ internal fun isOfficialCommonIdeDependency(group: String, module: String): Boole
         else -> false
     }
 
+
+internal fun isForkCommonComposeGroup(group: String): Boolean = group in FORK_COMMON_COMPOSE_GROUPS
 private fun isForkCommonComposeDependency(dependency: IdeaKotlinDependency): Boolean =
     dependency.binaryCoordinates()?.group in FORK_COMMON_COMPOSE_GROUPS
 
@@ -109,7 +112,7 @@ private fun isResolvedBinaryDependency(dependency: IdeaKotlinDependency): Boolea
 private fun IdeaKotlinDependency.binaryCoordinates(): IdeaKotlinBinaryCoordinates? =
     (this as? IdeaKotlinResolvedBinaryDependency)?.coordinates
 
-private fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String): Configuration {
+internal fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String): Configuration {
     val version = composeForkVersion() ?: return configurations.detachedConfiguration()
     val modules =
         if (sourceSetName == COMMON_MAIN_SOURCE_SET) FORK_COMMON_IDE_MODULES
@@ -143,6 +146,21 @@ private fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String)
     val commonMetadata =
         configurations.getByName("${COMMON_MAIN_SOURCE_SET}ResolvableDependenciesMetadata")
     copyAttributes(from = commonMetadata, to = configuration)
+    configuration.resolutionStrategy.eachDependency { details ->
+        if (details.requested.group.startsWith(COMPOSE_FORK_GROUP_PREFIX)) {
+            details.useVersion(version)
+            details.because("Keep Compose Native IDE metadata modules on one release")
+        }
+    }
+    val nativeMetadataSubstitutions = nativeMetadataSubstitutionsFor(version)
+    configuration.resolutionStrategy.dependencySubstitution { rules ->
+        rules.all { details ->
+            val selector = details.requested as? ModuleComponentSelector ?: return@all
+            nativeMetadataSubstitutions["${selector.group}:${selector.module}"]?.let { substitution ->
+                details.useTarget(substitution.forkCoordinate)
+            }
+        }
+    }
     return configuration
 }
 
@@ -207,7 +225,7 @@ private const val OFFICIAL_NAVIGATION_EVENT_GROUP = "androidx.navigationevent"
 private const val COMPONENTS_RESOURCES_MODULE = "components-resources"
 private const val NAVIGATION_EVENT_COMPOSE_MODULE = "navigationevent-compose"
 private val PLATFORM_ONLY_COMPOSE_UI_MODULES = setOf("ui-uikit", "ui-skiko")
-private val FORK_COMMON_COMPOSE_GROUPS =
+internal val FORK_COMMON_COMPOSE_GROUPS =
     setOf(
         "dev.brahmkshatriya.compose.animation",
         "dev.brahmkshatriya.compose.foundation",

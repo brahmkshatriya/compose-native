@@ -22,6 +22,7 @@ class ComposeNativePlugin : Plugin<Project> {
         project.createComposeNativeApplicationExtension()
         project.configureDesktopNativeApplicationConventions()
         project.configureSharedNativeMetadataTarget()
+        project.configureMetadataCompilation()
         project.configureIdeDependencyResolution()
         project.configureSkikoCapabilityResolution()
         project.configureDependencySubstitutions()
@@ -175,6 +176,21 @@ private fun Project.configureLocalDependencySubstitutions(
                 null
             }
         if (substitutions.isEmpty() && composeForkVersion == null) return@configureEach
+
+        val selectedForkVersion =
+            if (usesNativeOverlay) {
+                nativeOverlayComposeVersion ?: fullForkComposeVersion
+            } else {
+                fullForkComposeVersion ?: nativeOverlayComposeVersion
+            }
+        if (selectedForkVersion != null) {
+            configuration.resolutionStrategy.eachDependency { details ->
+                if (details.requested.group.startsWith(FORK_COMPOSE_GROUP_PREFIX)) {
+                    details.useVersion(selectedForkVersion)
+                    details.because("Keep Compose Native fork modules on one release")
+                }
+            }
+        }
 
         configuration.resolutionStrategy.dependencySubstitution { rules ->
             rules.all { details ->
