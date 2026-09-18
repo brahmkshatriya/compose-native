@@ -27,6 +27,9 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -78,6 +81,7 @@ import kotlinx.cinterop.UIntVar
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.set
 import kotlinx.cinterop.toKString
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.skiko.OS
 import org.jetbrains.skiko.hostOs
@@ -519,7 +523,7 @@ private fun TextInputsPage() {
 
 @Composable
 private fun CardsListsPage() {
-    val contacts =
+    val baseContacts =
         listOf(
             "Ada Lovelace" to "Computing",
             "Linus Torvalds" to "Linux",
@@ -528,6 +532,27 @@ private fun CardsListsPage() {
             "James Gosling" to "Java",
             "Radia Perlman" to "Networks",
         )
+    var refreshCount by remember { mutableIntStateOf(0) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    val refreshState = rememberPullToRefreshState()
+    val scope = rememberCoroutineScope()
+    val contacts =
+        if (refreshCount == 0) {
+            baseContacts
+        } else {
+            listOf("New contact #$refreshCount" to "Just refreshed") + baseContacts
+        }
+    val onRefresh: () -> Unit = {
+        if (!isRefreshing) {
+            isRefreshing = true
+            scope.launch {
+                delay(900)
+                refreshCount++
+                isRefreshing = false
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize().padding(28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CircleGlyph("Contacts illustration")
@@ -539,37 +564,56 @@ private fun CardsListsPage() {
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    "A contacts screen using a real lazy list.",
+                    "Pull down at the top to try Material 3 Expressive refresh.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
         Spacer(Modifier.height(14.dp))
-        AccessibleRuntimeTable()
-        Spacer(Modifier.height(18.dp))
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            state = refreshState,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            indicator = {
+                PullToRefreshDefaults.LoadingIndicator(
+                    state = refreshState,
+                    isRefreshing = isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+            },
         ) {
-            items(contacts) { (name, role) ->
-                Card(Modifier.fillMaxWidth()) {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.secondaryContainer,
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item {
+                    AccessibleRuntimeTable()
+                    Spacer(Modifier.height(10.dp))
+                }
+                items(contacts) { (name, role) ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                name.take(1),
-                                Modifier.padding(14.dp),
-                                fontWeight = FontWeight.Bold,
-                            )
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.secondaryContainer,
+                            ) {
+                                Text(
+                                    name.take(1),
+                                    Modifier.padding(14.dp),
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            Spacer(Modifier.width(14.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(name, fontWeight = FontWeight.Medium)
+                                Text(role, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Badge { Text("${name.length}") }
                         }
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(name, fontWeight = FontWeight.Medium)
-                            Text(role, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        Badge { Text("${name.length}") }
                     }
                 }
             }
