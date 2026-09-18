@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.draganddrop.dragAndDropSource
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -349,6 +350,48 @@ private fun ControlsPage() {
             FloatingActionButton({}) { CircleGlyph("Add") }
         }
     }
+    DemoSection("Material 3 ripple") {
+        Text(
+            "Press, hover, or keyboard-focus these targets to exercise the new Material 3 " +
+                "ripple implementation.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RippleDemoTarget(
+                label = "Bounded",
+                detail = "Touch origin · theme color",
+                indication = ripple(bounded = true),
+                modifier = Modifier.weight(1f),
+            )
+            RippleDemoTarget(
+                label = "Unbounded",
+                detail = "Centered · 42 dp radius",
+                indication =
+                    ripple(
+                        bounded = false,
+                        radius = 42.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                    ),
+                modifier = Modifier.weight(1f),
+            )
+            RippleDemoTarget(
+                label = "Press only",
+                detail = "No hover / focus layer",
+                indication =
+                    ripple(
+                        bounded = true,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        enableFocusIndication = false,
+                        enableHoverIndication = false,
+                        enableDragIndication = false,
+                    ),
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
     DemoSection("Choices") {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked, { checked = it })
@@ -383,6 +426,45 @@ private fun ControlsPage() {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RippleDemoTarget(
+    label: String,
+    detail: String,
+    indication: androidx.compose.foundation.Indication,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    var clicks by remember { mutableIntStateOf(0) }
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier
+            .height(104.dp)
+            .clip(shape)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = indication,
+                onClick = { clicks++ },
+            )
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(label, fontWeight = FontWeight.SemiBold)
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "Clicks: $clicks",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }
 
