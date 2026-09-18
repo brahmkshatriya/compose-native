@@ -24,7 +24,7 @@ Do not perform this operation in the sibling `skiko-native` checkout.
 
 - Flattened local snapshot base: `c1f04f0b9b7acda3849d76fe0d271f7255ad827c`
 - Last integrated upstream tip: `098d5e3f6e158397b96327c15d35dad59afae445`
-- Local single-parent integration commit: `b418ec78099`
+- Local single-parent integration commit: `3811ec987bd16ac6b21000d48ea5d69258cc9298`
 
 Update the last two values in this section whenever a later upstream tip is integrated.
 
