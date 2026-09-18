@@ -25,12 +25,12 @@ import androidx.compose.runtime.retain.ForgetfulRetainedValuesStore
 import androidx.compose.runtime.retain.RetainedValuesStore
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.ComposeUiFlags
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.ExperimentalMediaQueryApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.SessionMutex
-import androidx.compose.ui.areWindowInsetsRulersEnabled
+import androidx.compose.ui.UiMediaScope
 import androidx.compose.ui.autofill.AutofillManager
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusOwner
@@ -62,15 +62,17 @@ import androidx.compose.ui.input.pointer.PositionCalculator
 import androidx.compose.ui.input.rotary.RotaryScrollEvent
 import androidx.compose.ui.layout.RootMeasurePolicy
 import androidx.compose.ui.layout.RulerProviderModifierElement
+import androidx.compose.ui.layout.areWindowInsetsRulersEnabled
 import androidx.compose.ui.modifier.ModifierLocalManager
-import androidx.compose.ui.platform.DefaultAccessibilityManager
 import androidx.compose.ui.platform.DelegatingSoftwareKeyboardController
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformRootForTest
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformTextInputSessionScope
 import androidx.compose.ui.platform.PlatformWindowInsets
-import androidx.compose.ui.platform.createPlatformClipboard
+import androidx.compose.ui.platform.SoundEffect
+import androidx.compose.ui.platform.TaskDispatchers
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.createPlatformClipboardManager
 import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.scene.ComposeSceneInputHandler
@@ -82,7 +84,7 @@ import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.spatial.RectManager
 import androidx.compose.ui.text.InternalTextApi
-import androidx.compose.ui.text.font.createFontFamilyResolver
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextInputService
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -466,8 +468,8 @@ internal class RootNodeOwner(
         override val hapticFeedBack get() = platformContext.hapticFeedback
         override val inputModeManager get() = platformContext.inputModeManager
         override val clipboardManager = createPlatformClipboardManager()
-        override val clipboard = createPlatformClipboard()
-        override val accessibilityManager = DefaultAccessibilityManager()
+        override val clipboard get() = platformContext.clipboard
+        override val accessibilityManager get() = platformContext.accessibilityManager
         override val graphicsContext get() = this@RootNodeOwner.graphicsContext
         override val textToolbar get() = platformContext.textToolbar
 
@@ -478,8 +480,8 @@ internal class RootNodeOwner(
         override val autofill: androidx.compose.ui.autofill.Autofill?
             get() = null
 
-        // TODO https://youtrack.jetbrains.com/issue/CMP-1572
-        override val autofillManager: AutofillManager? get() = null
+        // TODO https://youtrack.jetbrains.com/issue/CMP-7485
+        override val autofillManager: AutofillManager? get() = platformContext.autofillManager
         override val density get() = this@RootNodeOwner.density
         override val textInputService by lazy(LazyThreadSafetyMode.NONE) {
             TextInputService(platformContext.textInputService)
@@ -534,8 +536,13 @@ internal class RootNodeOwner(
             PointerIconServiceImpl()
         }
 
+        override val uriHandler: UriHandler get() = platformContext.uriHandler
+        override val soundEffect: SoundEffect get() = platformContext.soundEffect
         override val semanticsOwner = SemanticsOwner(root, rootSemanticsNode, layoutNodes)
         override val windowInfo get() = platformContext.windowInfo
+        override val taskDispatchers: TaskDispatchers get() = platformContext.taskDispatchers
+        @ExperimentalMediaQueryApi
+        override val uiMediaScope: UiMediaScope get() = platformContext.mediaScope
         override val retainedValuesStore: RetainedValuesStore get() = ForgetfulRetainedValuesStore
         override val rectManager = RectManager(layoutNodes)
 
@@ -543,7 +550,7 @@ internal class RootNodeOwner(
         override val fontLoader = object : androidx.compose.ui.text.font.Font.ResourceLoader {
             override fun load(font: androidx.compose.ui.text.font.Font): Any = Unit
         }
-        override val fontFamilyResolver = createFontFamilyResolver()
+        override val fontFamilyResolver: FontFamily.Resolver get() = platformContext.fontFamilyResolver
         override val layoutDirection get() = _layoutDirection
         override val localeList get() = platformContext.localeList
         override var showLayoutBounds by mutableStateOf(false)
@@ -998,4 +1005,4 @@ private object IdentityPositionCalculator : PositionCalculator {
 }
 
 private fun Modifier.rulerProvider(windowInsets: PlatformWindowInsets) =
-    if (ComposeUiFlags.areWindowInsetsRulersEnabled) then(RulerProviderModifierElement(windowInsets)) else this
+    if (areWindowInsetsRulersEnabled) then(RulerProviderModifierElement(windowInsets)) else this

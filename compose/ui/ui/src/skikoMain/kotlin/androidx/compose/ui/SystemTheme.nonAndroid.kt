@@ -28,7 +28,9 @@ enum class SystemTheme {
     Unknown,
 }
 
-internal val LocalSystemTheme = staticCompositionLocalOf { SystemTheme.Unknown }
+@Deprecated("This property was made public by mistake and will be removed in a future release")
+@InternalComposeUiApi
+val LocalSystemTheme = staticCompositionLocalOf { SystemTheme.Unknown }
 
 /** Host hook for supplying the system appearance to [isUiSystemInDarkTheme]. */
 @InternalComposeUiApi
