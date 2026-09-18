@@ -1033,6 +1033,11 @@ internal class NativeApplication : ApplicationScope {
     private val applicationLayoutDirty = atomic(true)
     private val performanceFrequency = SDL_GetPerformanceFrequency().coerceAtLeast(1uL)
     private val performanceStart = SDL_GetPerformanceCounter()
+    internal val prefetchScheduler =
+        NativePrefetchScheduler(
+            currentTimeNanos = ::currentTimeNanos,
+            requestHostWork = ::requestFrame,
+        )
     private val hostTaskLock = SynchronizedObject()
     private val hostTasks = ArrayDeque<() -> Unit>()
     private val eventWatchReference = StableRef.create(this)
@@ -1079,6 +1084,7 @@ internal class NativeApplication : ApplicationScope {
     }
 
     fun close() {
+        prefetchScheduler.dispose()
         eventWatchHandle?.let(::kgl_event_watch_remove)
         eventWatchHandle = null
         eventWatchReference.dispose()
@@ -1122,11 +1128,13 @@ internal class NativeApplication : ApplicationScope {
         }
     }
 
-    fun performFrame(counter: ULong = SDL_GetPerformanceCounter()) {
+    private fun currentTimeNanos(counter: ULong = SDL_GetPerformanceCounter()): Long {
         val elapsed = counter - performanceStart
-        val nanoTime =
-            (elapsed.toDouble() * 1_000_000_000.0 / performanceFrequency.toDouble()).toLong()
-        frameRecomposer.performFrame(nanoTime)
+        return (elapsed.toDouble() * 1_000_000_000.0 / performanceFrequency.toDouble()).toLong()
+    }
+
+    fun performFrame(counter: ULong = SDL_GetPerformanceCounter()) {
+        frameRecomposer.performFrame(currentTimeNanos(counter))
     }
 
     fun dispatchToHost(block: () -> Unit) {
@@ -1182,7 +1190,8 @@ internal class NativeApplication : ApplicationScope {
             frameRecomposer.hasPendingWork() ||
             applicationLayoutDirty.value ||
             applicationScene.hasPendingMeasureOrLayout ||
-            windows.any { it.hasPendingRender }
+            windows.any { it.hasPendingRender } ||
+            prefetchScheduler.hasWorkScheduled
 
     internal fun handleWatchedEvent(event: CPointer<SDL_Event>) {
         if (!isHostThread()) return
@@ -1307,6 +1316,17 @@ internal class NativeApplication : ApplicationScope {
                     windows.toList().filter { it.hasPendingRender }.forEach { it.render() }
                 }
 
+                if (
+                    prefetchScheduler.hasWorkScheduled &&
+                        !hasHostTasks() &&
+                        !frameRecomposer.hasPendingWork() &&
+                        !applicationLayoutDirty.value &&
+                        !applicationScene.hasPendingMeasureOrLayout &&
+                        windows.none { it.hasPendingRender }
+                ) {
+                    prefetchScheduler.executePending()
+                }
+
                 if (composed && windows.isEmpty() && !NativeTrayRegistry.hasRegistrations) {
                     running.value = false
                 }
@@ -1402,6 +1422,7 @@ private class NativeWindowInsets : PlatformWindowInsets {
 private class SdlPlatformContext(
     private val accessibility: NativeAccessibility,
     private val damageTracker: FrameDamageTracker,
+    private val nativePrefetchScheduler: NativePrefetchScheduler,
     private val graphicsContextFactory: () -> PlatformGraphicsContext,
 ) : PlatformContext by PlatformContext.Empty() {
     var window: CPointer<SDL_Window>? = null
@@ -1421,6 +1442,9 @@ private class SdlPlatformContext(
 
     override val dragAndDropManager: PlatformDragAndDropManager
         get() = nativeDragAndDropManager
+
+    override val prefetchScheduler
+        get() = nativePrefetchScheduler
 
     fun updateTitleBarInset(top: Int) {
         nativeWindowInsets.titleBarTop = top
@@ -1621,7 +1645,9 @@ internal class NativeWindowHost(
     private val accessibility = createNativeAccessibility(application::dispatchToHost)
     private val damageTracker = FrameDamageTracker()
     private val platformContext =
-        SdlPlatformContext(accessibility, damageTracker) { SkiaGraphicsContext() }
+        SdlPlatformContext(accessibility, damageTracker, application.prefetchScheduler) {
+            SkiaGraphicsContext()
+        }
 
     var rootForTestListener: PlatformContext.RootForTestListener?
         get() = platformContext.externalRootForTestListener
