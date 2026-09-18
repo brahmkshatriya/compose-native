@@ -179,7 +179,7 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         name: Set up Android SDK
 
       - name: Install Android platform and export JDK
