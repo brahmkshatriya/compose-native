@@ -9,6 +9,7 @@
 
 package androidx.compose.ui.window
 
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.toPixelMap
@@ -24,6 +25,20 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class WindowPlatformFeaturesTest {
+    @Test
+    fun contentScreenOriginUsesClientInsetsAndPixelScale() {
+        assertEquals(
+            Offset(1515f, 915f),
+            calculateContentScreenOriginInPixels(
+                windowX = 1000,
+                windowY = 600,
+                frameInsets = ClientFrameInsets(10, 10, 6, 6),
+                inputScaleX = 1.5f,
+                inputScaleY = 1.5f,
+            ),
+        )
+    }
+
     @Test
     fun titleBarWindowRecreationKeyOnlyChangesAtNativeBoundary() {
         val custom = TitleBar.Custom { _, _, _ -> }

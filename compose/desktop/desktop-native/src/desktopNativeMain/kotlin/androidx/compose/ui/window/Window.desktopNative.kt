@@ -96,6 +96,7 @@ import androidx.compose.ui.viewinterop.LocalGpuInteropRegistry
 import androidx.compose.ui.viewinterop.LocalNativeViewInvalidationDispatcher
 import cnames.structs.SDL_Cursor
 import cnames.structs.SDL_Window
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
@@ -127,15 +128,16 @@ import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import nativedesktop.*
 import org.jetbrains.skiko.SkiaLayer
 import org.jetbrains.skiko.SkikoRenderDelegate
-import sdl3.SDLK_ESCAPE
 import sdl3.SDL_BUTTON_LEFT
 import sdl3.SDL_BUTTON_MIDDLE
 import sdl3.SDL_BUTTON_RIGHT
@@ -178,6 +180,8 @@ import sdl3.SDL_EVENT_WINDOW_RESIZED
 import sdl3.SDL_EVENT_WINDOW_RESTORED
 import sdl3.SDL_EVENT_WINDOW_SHOWN
 import sdl3.SDL_Event
+import sdl3.SDL_GetCurrentDisplayMode
+import sdl3.SDL_GetDisplayForWindow
 import sdl3.SDL_GetError
 import sdl3.SDL_GetModState
 import sdl3.SDL_GetMouseState
@@ -464,7 +468,9 @@ open class ComposeWindow internal constructor(internal val host: NativeWindowHos
 
     fun toggleMaximized() = host.toggleMaximized()
 
-    fun requestFocus() = host.requestFocus()
+    fun requestFocus() {
+        host.requestFocus()
+    }
 
     fun close() = host.requestClose()
 
@@ -838,7 +844,6 @@ fun application(
     exitProcessOnExit: Boolean = true,
     content: @Composable ApplicationScope.() -> Unit,
 ) {
-    PlatformDispatcherRegistry.installPostDelayedDispatcher(Dispatchers.Default)
     if (nativeGetEnvironmentVariable("KTNATIVE_INPUT_SELF_TEST") != null) {
         runNativeInputSelfTests()
         return
@@ -846,6 +851,7 @@ fun application(
     registerSkikoComposeImplementation()
     configureNativeComposeUiFlags()
     configureNativeSdlEnvironment()
+    NativeScreenSaverManager.configureDefaultPolicy()
     check(SDL_Init(sdl3.SDL_INIT_VIDEO)) {
         "SDL initialization failed: ${SDL_GetError()?.toKString()}"
     }
@@ -853,6 +859,9 @@ fun application(
     val isWindowSelfTest = nativeGetEnvironmentVariable("KTNATIVE_WINDOW_SELF_TEST") != null
     if (isWindowSelfTest) NativeWindowSelfTestRootListener.reset()
     val nativeApplication = NativeApplication()
+    PlatformDispatcherRegistry.installPostDelayedDispatcher(
+        NativeApplicationDispatcher(nativeApplication)
+    )
     try {
         nativeApplication.run(
             when {
@@ -1019,6 +1028,13 @@ private class NativeSystemThemeObserver(colorSchemeEventType: UInt, accentColorE
     }
 }
 
+private class NativeApplicationDispatcher(private val application: NativeApplication) :
+    CoroutineDispatcher() {
+    override fun dispatch(context: CoroutineContext, block: Runnable) {
+        application.dispatchToHost { block.run() }
+    }
+}
+
 internal class NativeApplication : ApplicationScope {
     private companion object {
         const val IdleWaitTimeoutMillis = 50
@@ -1033,11 +1049,21 @@ internal class NativeApplication : ApplicationScope {
     private val applicationLayoutDirty = atomic(true)
     private val performanceFrequency = SDL_GetPerformanceFrequency().coerceAtLeast(1uL)
     private val performanceStart = SDL_GetPerformanceCounter()
+    private val configuredMaximumFramesPerSecond =
+        nativeGetEnvironmentVariable("KTNATIVE_MAX_FPS")
+            ?.toIntOrNull()
+            ?.coerceIn(1, MaximumConfiguredFramesPerSecond)
+    internal val frameRateManager =
+        NativeFrameRateManager(
+            performanceFrequency = performanceFrequency,
+            configuredMaximumFramesPerSecond = configuredMaximumFramesPerSecond,
+        )
     internal val prefetchScheduler =
         NativePrefetchScheduler(
             currentTimeNanos = ::currentTimeNanos,
             requestHostWork = ::requestFrame,
         )
+    internal val screenSaverManager = NativeScreenSaverManager()
     private val hostTaskLock = SynchronizedObject()
     private val hostTasks = ArrayDeque<() -> Unit>()
     private val eventWatchReference = StableRef.create(this)
@@ -1085,6 +1111,7 @@ internal class NativeApplication : ApplicationScope {
 
     fun close() {
         prefetchScheduler.dispose()
+        screenSaverManager.close()
         eventWatchHandle?.let(::kgl_event_watch_remove)
         eventWatchHandle = null
         eventWatchReference.dispose()
@@ -1251,12 +1278,6 @@ internal class NativeApplication : ApplicationScope {
             }
         }
 
-        val configuredFramesPerSecond =
-            nativeGetEnvironmentVariable("KTNATIVE_MAX_FPS")
-                ?.toIntOrNull()
-                ?.coerceIn(1, MaximumConfiguredFramesPerSecond)
-        val framePacer =
-            configuredFramesPerSecond?.let { NativeFramePacer(performanceFrequency, it) }
         var composed = false
         memScoped {
             val event = alloc<SDL_Event>()
@@ -1264,7 +1285,7 @@ internal class NativeApplication : ApplicationScope {
                 val immediateWork = hasImmediateWork(applicationScene)
                 val frameDelay =
                     if (immediateWork) {
-                        framePacer?.delayMillis(SDL_GetPerformanceCounter()) ?: 0
+                        frameRateManager.delayMillis(SDL_GetPerformanceCounter())
                     } else {
                         0
                     }
@@ -1290,7 +1311,7 @@ internal class NativeApplication : ApplicationScope {
 
                 if (
                     hasImmediateWork(applicationScene) &&
-                        (framePacer?.delayMillis(SDL_GetPerformanceCounter()) ?: 0) > 0
+                        frameRateManager.delayMillis(SDL_GetPerformanceCounter()) > 0
                 ) {
                     continue
                 }
@@ -1302,7 +1323,7 @@ internal class NativeApplication : ApplicationScope {
                 val windowPending = windows.any { it.hasPendingRender }
                 if (requested || recomposerPending || layoutPending || windowPending) {
                     val counter = SDL_GetPerformanceCounter()
-                    framePacer?.onFrameStarted(counter)
+                    frameRateManager.onFrameStarted(counter)
                     if (recomposerPending) {
                         performFrame(counter)
                     }
@@ -1314,6 +1335,7 @@ internal class NativeApplication : ApplicationScope {
                     }
                     composed = true
                     windows.toList().filter { it.hasPendingRender }.forEach { it.render() }
+                    frameRateManager.applyPendingVote()
                 }
 
                 if (
@@ -1354,6 +1376,15 @@ private class BlockingHostTaskResult<T> {
     var value: T? = null
     var failure: Throwable? = null
 }
+
+internal fun calculateContentScreenOriginInPixels(
+    windowX: Int,
+    windowY: Int,
+    frameInsets: ClientFrameInsets,
+    inputScaleX: Float,
+    inputScaleY: Float,
+): Offset =
+    Offset((windowX + frameInsets.left) * inputScaleX, (windowY + frameInsets.top) * inputScaleY)
 
 private data class RenderMetrics(
     val windowWidth: Int,
@@ -1423,12 +1454,41 @@ private class SdlPlatformContext(
     private val accessibility: NativeAccessibility,
     private val damageTracker: FrameDamageTracker,
     private val nativePrefetchScheduler: NativePrefetchScheduler,
+    private val screenSaverManager: NativeScreenSaverManager,
+    private val screenOriginInPixels: () -> Offset?,
+    private val requestWindowFocus: () -> Boolean,
+    private val isWindowTransparentProvider: () -> Boolean,
+    private val voteFrameRateCallback: (Float, Float) -> Unit,
     private val graphicsContextFactory: () -> PlatformGraphicsContext,
 ) : PlatformContext by PlatformContext.Empty() {
     var window: CPointer<SDL_Window>? = null
     private val testRootListener = SdlRootForTestListener()
     private val nativeWindowInsets = NativeWindowInsets()
     internal val nativeDragAndDropManager = SdlDragAndDropManager()
+
+    override val isWindowTransparent: Boolean
+        get() = isWindowTransparentProvider()
+
+    override fun convertLocalToScreenPosition(localPosition: Offset): Offset =
+        screenOriginInPixels()?.let { localPosition + it } ?: Offset.Unspecified
+
+    override fun convertScreenToLocalPosition(positionOnScreen: Offset): Offset =
+        screenOriginInPixels()?.let { positionOnScreen - it } ?: Offset.Unspecified
+
+    override fun requestFocus(): Boolean = requestWindowFocus()
+
+    override fun voteFrameRate(frameRate: Float, frameRateCategory: Float) {
+        voteFrameRateCallback(frameRate, frameRateCategory)
+    }
+
+    private var keepScreenOnEnabled = false
+    override var isKeepScreenOnEnabled: Boolean
+        get() = keepScreenOnEnabled
+        set(value) {
+            if (keepScreenOnEnabled == value) return
+            keepScreenOnEnabled = value
+            screenSaverManager.setKeepScreenOn(this, value)
+        }
 
     override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener
         get() = accessibility
@@ -1541,6 +1601,8 @@ private class SdlPlatformContext(
     }
 
     fun close() {
+        screenSaverManager.release(this)
+        keepScreenOnEnabled = false
         windowLifecycle.destroy()
         cursors.values.forEach(::SDL_DestroyCursor)
         cursors.clear()
@@ -1645,7 +1707,22 @@ internal class NativeWindowHost(
     private val accessibility = createNativeAccessibility(application::dispatchToHost)
     private val damageTracker = FrameDamageTracker()
     private val platformContext =
-        SdlPlatformContext(accessibility, damageTracker, application.prefetchScheduler) {
+        SdlPlatformContext(
+            accessibility = accessibility,
+            damageTracker = damageTracker,
+            nativePrefetchScheduler = application.prefetchScheduler,
+            screenSaverManager = application.screenSaverManager,
+            screenOriginInPixels = ::contentScreenOriginInPixels,
+            requestWindowFocus = ::requestFocus,
+            isWindowTransparentProvider = { hasTransparentWindowBuffer },
+            voteFrameRateCallback = { frameRate, frameRateCategory ->
+                application.frameRateManager.voteFrameRate(
+                    frameRate = frameRate,
+                    frameRateCategory = frameRateCategory,
+                    maximumFramesPerSecond = displayRefreshRate(),
+                )
+            },
+        ) {
             SkiaGraphicsContext()
         }
 
@@ -2405,9 +2482,6 @@ internal class NativeWindowHost(
                         },
                     modifiers = event.key.mod.toInt(),
                 )
-                if (event.type == SDL_EVENT_KEY_DOWN.toUInt() && event.key.key == SDLK_ESCAPE) {
-                    requestClose()
-                }
             }
             SDL_EVENT_TEXT_INPUT.toUInt() ->
                 if (currentEnabled && currentFocusable) {
@@ -2503,8 +2577,45 @@ internal class NativeWindowHost(
         requestRender()
     }
 
-    fun requestFocus() {
-        sdlWindow?.let { SDL_RaiseWindow(it) }
+    fun requestFocus(): Boolean {
+        val window = sdlWindow ?: return false
+        if (
+            !currentVisible ||
+                !windowShown ||
+                currentMinimized ||
+                !currentEnabled ||
+                !currentFocusable
+        ) {
+            return false
+        }
+        if (platformContext.windowInfo.isWindowFocused) return true
+        return SDL_RaiseWindow(window)
+    }
+
+    private fun contentScreenOriginInPixels(): Offset? {
+        val window = sdlWindow ?: return null
+        val currentMetrics = metrics ?: return null
+        if (!currentVisible || !windowShown || currentMinimized) return null
+        return memScoped {
+            val x = alloc<IntVar>()
+            val y = alloc<IntVar>()
+            if (!SDL_GetWindowPosition(window, x.ptr, y.ptr)) return@memScoped null
+            calculateContentScreenOriginInPixels(
+                windowX = x.value,
+                windowY = y.value,
+                frameInsets = currentMetrics.frameInsets,
+                inputScaleX = currentMetrics.inputScaleX,
+                inputScaleY = currentMetrics.inputScaleY,
+            )
+        }
+    }
+
+    private fun displayRefreshRate(): Float {
+        val window = sdlWindow ?: return 60f
+        val display = SDL_GetDisplayForWindow(window)
+        if (display == 0u) return 60f
+        val mode = SDL_GetCurrentDisplayMode(display) ?: return 60f
+        return mode.pointed.refresh_rate.takeIf { it.isFinite() && it > 0f } ?: 60f
     }
 
     fun updateDraggableArea(key: Any, bounds: Rect) {

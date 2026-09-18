@@ -360,10 +360,7 @@ private fun ControlsPage() {
                 "ripple implementation.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             RippleDemoTarget(
                 label = "Bounded",
                 detail = "Touch origin · theme color",
@@ -557,16 +554,20 @@ private fun CardsListsPage() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CircleGlyph("Contacts illustration")
             Spacer(Modifier.width(12.dp))
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text(
                     "Cards & Lists",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    "Pull down at the top to try Material 3 Expressive refresh.",
+                    "Pull with touch/trackpad, or use Refresh with a mouse.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            Spacer(Modifier.width(12.dp))
+            FilledTonalButton(onClick = onRefresh, enabled = !isRefreshing) {
+                Text(if (isRefreshing) "Refreshing…" else "Refresh")
             }
         }
         Spacer(Modifier.height(14.dp))
