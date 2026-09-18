@@ -72,7 +72,7 @@ private suspend fun pollCurrentSystemTheme() {
 internal fun ProvideSystemTheme(content: @Composable () -> Unit) {
     CompositionLocalProvider(
         @Suppress("DEPRECATION")
-        LocalSystemTheme provides currentSystemTheme.value.asComposeSystemTheme(),
+        LocalSystemTheme provides currentSystemTheme.value,
         content = content
     )
 

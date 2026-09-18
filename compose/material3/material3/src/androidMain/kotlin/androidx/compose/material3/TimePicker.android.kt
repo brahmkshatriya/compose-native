@@ -28,11 +28,11 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 
-internal actual val defaultTimePickerLayoutType
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    @ReadOnlyComposable
-    get() = with(LocalConfiguration.current) {
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+@ReadOnlyComposable
+internal actual fun defaultTimePickerLayoutType(): TimePickerLayoutType =
+    with(LocalConfiguration.current) {
         if (screenHeightDp < screenWidthDp) {
             TimePickerLayoutType.Horizontal
         } else {

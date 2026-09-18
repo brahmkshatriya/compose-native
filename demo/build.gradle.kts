@@ -3,7 +3,7 @@
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
-    id("org.jetbrains.compose") version "1.12.0-alpha01"
+    id("org.jetbrains.compose") version "1.13.0-alpha01"
     id("org.jetbrains.compose.linux.application")
 }
 

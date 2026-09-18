@@ -69,6 +69,13 @@ androidXMultiplatform {
             api("androidx.graphics:graphics-shapes:1.1.0")
         }
 
+        androidMain.dependencies {
+            api("androidx.annotation:annotation:1.8.1")
+            api("androidx.annotation:annotation-experimental:1.4.1")
+            implementation("androidx.activity:activity-compose:1.8.2")
+            implementation("androidx.lifecycle:lifecycle-common-java8:2.6.1")
+        }
+
         // TODO: Align naming: nonAndroidMain
         skikoMain {
             dependsOn(commonMain)
