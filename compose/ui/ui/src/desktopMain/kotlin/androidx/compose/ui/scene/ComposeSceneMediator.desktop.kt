@@ -49,6 +49,7 @@ import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.isClearFocusOnMouseDownEnabled
 import androidx.compose.ui.navigationevent.BackNavigationEventInput
 import androidx.compose.ui.platform.AwtDragAndDropManager
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.DefaultInputModeManager
 import androidx.compose.ui.platform.DelegateRootForTestListener
 import androidx.compose.ui.platform.DesktopTextInputService
@@ -60,11 +61,17 @@ import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformDragAndDropManager
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.PlatformWindowContext
+import androidx.compose.ui.platform.UriHandler
+import androidx.compose.ui.platform.TaskDispatchers
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.a11y.ComposeSceneAccessibility
+import androidx.compose.ui.platform.createPlatformClipboard
+import androidx.compose.ui.platform.createPlatformUriHandler
 import androidx.compose.ui.scene.skia.SkiaLayerComponent
 import androidx.compose.ui.semantics.SemanticsOwner
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntRect
@@ -108,6 +115,7 @@ import javax.swing.JComponent
 import javax.swing.SwingUtilities
 import javax.swing.SwingUtilities.isEventDispatchThread
 import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.Dispatchers
 import org.jetbrains.skia.Canvas as SkCanvas
 import org.jetbrains.skia.Surface
 import org.jetbrains.skiko.ClipRectangle
@@ -739,6 +747,7 @@ internal class ComposeSceneMediator(
         interopContainer.postponingExecutingScheduledUpdates {
             canvas.withSceneOffset {
                 with(sceneRenderingScope) {
+                    scene.size = IntSize(width, height)
                     scene.render(frameRecomposer, asComposeCanvas(), nanoTime)
                 }
             }
@@ -832,6 +841,12 @@ internal class ComposeSceneMediator(
 
     private inner class DesktopPlatformContext : PlatformContext {
         override val windowInfo: WindowInfo get() = windowContext.windowInfo
+
+        override val taskDispatchers: TaskDispatchers = object : TaskDispatchers {
+            override val Default = Dispatchers.Default
+            override val IO = Dispatchers.IO
+        }
+
         override val architectureComponentsOwner get() = this@ComposeSceneMediator.architectureComponentsOwner
         override val isWindowTransparent: Boolean get() = windowContext.isWindowTransparent
 
@@ -860,6 +875,18 @@ internal class ComposeSceneMediator(
 
         override val inputModeManager: InputModeManager by lazy(LazyThreadSafetyMode.NONE) {
             DefaultInputModeManager()
+        }
+
+        override val clipboard: Clipboard by lazy(LazyThreadSafetyMode.NONE) {
+            createPlatformClipboard()
+        }
+
+        override val uriHandler: UriHandler by lazy(LazyThreadSafetyMode.NONE) {
+            createPlatformUriHandler()
+        }
+
+        override val fontFamilyResolver: FontFamily.Resolver by lazy(LazyThreadSafetyMode.NONE) {
+            createFontFamilyResolver()
         }
 
         override val textInputService get() = this@ComposeSceneMediator.textInputService

@@ -126,7 +126,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 @ExperimentalMaterial3Api
-fun BottomSheetScaffold(
+public fun BottomSheetScaffold(
     sheetContent: @Composable ColumnScope.() -> Unit,
     modifier: Modifier = Modifier,
     scaffoldState: BottomSheetScaffoldState = rememberBottomSheetScaffoldState(),
@@ -233,9 +233,9 @@ private fun Modifier.touchAnchoredDraggable(
  */
 @ExperimentalMaterial3Api
 @Stable
-class BottomSheetScaffoldState(
-    val bottomSheetState: SheetState,
-    val snackbarHostState: SnackbarHostState,
+public class BottomSheetScaffoldState(
+    public val bottomSheetState: SheetState,
+    public val snackbarHostState: SnackbarHostState,
 )
 
 /**
@@ -247,7 +247,7 @@ class BottomSheetScaffoldState(
  */
 @Composable
 @ExperimentalMaterial3Api
-fun rememberBottomSheetScaffoldState(
+public fun rememberBottomSheetScaffoldState(
     bottomSheetState: SheetState =
         rememberBottomSheetState(
             initialValue = PartiallyExpanded,
@@ -287,11 +287,11 @@ fun rememberBottomSheetScaffoldState(
 )
 @Composable
 @ExperimentalMaterial3Api
-fun rememberStandardBottomSheetState(
+public fun rememberStandardBottomSheetState(
     initialValue: SheetValue = PartiallyExpanded,
     confirmValueChange: (SheetValue) -> Boolean = { true },
     skipHiddenState: Boolean = true,
-) =
+): SheetState =
     rememberSheetState(
         initialValue = initialValue,
         enabledValues =

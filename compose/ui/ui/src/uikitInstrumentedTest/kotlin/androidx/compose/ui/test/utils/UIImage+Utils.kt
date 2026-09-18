@@ -17,6 +17,7 @@
 package androidx.compose.ui.test.utils
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.IntRect
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
@@ -28,9 +29,75 @@ import platform.CoreGraphics.CGImageGetHeight
 import platform.CoreGraphics.CGImageGetWidth
 import platform.CoreGraphics.CGRectMake
 import platform.UIKit.UIImage
+import kotlin.math.ceil
+import kotlin.math.sqrt
+
+internal fun UIImage.forEachPixel(step: Int = 1, onPixel: (x: Int, y: Int, color: Color) -> Unit) {
+    require(step > 0) { "step must be positive" }
+
+    withPixelReader { width, height, colorAt ->
+        for (y in 0 until height step step) {
+            for (x in 0 until width step step) {
+                onPixel(x, y, colorAt(x, y))
+            }
+        }
+    }
+}
+
+/**
+ * Visits pixels in [rect], whose coordinates are relative to this image.
+ */
+internal fun UIImage.forEachPixelInRect(
+    rect: IntRect,
+    step: Int = 1,
+    onPixel: (x: Int, y: Int, color: Color) -> Unit,
+) {
+    require(step > 0) { "step must be positive" }
+
+    withPixelReader { width, height, colorAt ->
+        require(rect.left >= 0 && rect.top >= 0 && rect.right <= width && rect.bottom <= height) {
+            "Rectangle $rect is outside the image bounds 0, 0, $width, $height"
+        }
+        for (y in rect.top until rect.bottom step step) {
+            for (x in rect.left until rect.right step step) {
+                onPixel(x, y, colorAt(x, y))
+            }
+        }
+    }
+}
+
+/**
+ * Visits at most [maxSamples] points in an aspect-ratio-aware grid spanning the entire image.
+ */
+internal fun UIImage.forEachSampledPixel(
+    maxSamples: Int,
+    onPixel: (x: Int, y: Int, color: Color) -> Unit,
+) {
+    require(maxSamples > 0) { "maxSamples must be positive" }
+
+    withPixelReader { width, height, colorAt ->
+        val samples = minOf(maxSamples.toLong(), width.toLong() * height).toInt()
+        val columns = minOf(
+            width,
+            samples,
+            ceil(sqrt(samples.toDouble() * width / height)).toInt(),
+        )
+        val rows = minOf(height, samples / columns)
+
+        for (row in 0 until rows) {
+            for (column in 0 until columns) {
+                val x = ((column + 0.5) * width / columns).toInt()
+                val y = ((row + 0.5) * height / rows).toInt()
+                onPixel(x, y, colorAt(x, y))
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalForeignApi::class)
-internal fun UIImage.forEachPixel(step: Int = 1, onPixel: (x: Int, y: Int, color: Color) -> Unit) {
+private fun UIImage.withPixelReader(
+    block: (width: Int, height: Int, colorAt: (x: Int, y: Int) -> Color) -> Unit,
+) {
     val cgImage = this.CGImage
     val width = CGImageGetWidth(cgImage).toInt()
     val height = CGImageGetHeight(cgImage).toInt()
@@ -52,16 +119,13 @@ internal fun UIImage.forEachPixel(step: Int = 1, onPixel: (x: Int, y: Int, color
 
         CGContextDrawImage(context, CGRectMake(0.0, 0.0, width.toDouble(), height.toDouble()), cgImage)
 
-        for (y in 0 until height step step) {
-            for (x in 0 until width step step) {
-                val offset = (y * bytesPerRow) + (x * bytesPerPixel)
-                val r = pinned.get()[offset].toUByte().toInt()
-                val g = pinned.get()[offset + 1].toUByte().toInt()
-                val b = pinned.get()[offset + 2].toUByte().toInt()
-                val a = pinned.get()[offset + 3].toUByte().toInt()
-
-                onPixel(x, y, Color(r, g, b, a))
-            }
+        block(width, height) { x, y ->
+            val offset = (y * bytesPerRow) + (x * bytesPerPixel)
+            val r = pinned.get()[offset].toUByte().toInt()
+            val g = pinned.get()[offset + 1].toUByte().toInt()
+            val b = pinned.get()[offset + 2].toUByte().toInt()
+            val a = pinned.get()[offset + 3].toUByte().toInt()
+            Color(r, g, b, a)
         }
     }
 }

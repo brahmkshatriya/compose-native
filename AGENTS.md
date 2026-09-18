@@ -23,7 +23,7 @@ Do not perform this operation in the sibling `skiko-native` checkout.
 ## Current synchronization point
 
 - Flattened local snapshot base: `c1f04f0b9b7acda3849d76fe0d271f7255ad827c`
-- Last integrated upstream tip: `cfa2ff11278d46f385a098eefaa7429362bfc514`
+- Last integrated upstream tip: `098d5e3f6e158397b96327c15d35dad59afae445`
 - Local single-parent integration commit: `b418ec78099`
 
 Update the last two values in this section whenever a later upstream tip is integrated.
@@ -41,7 +41,7 @@ git remote add upstream https://github.com/JetBrains/compose-multiplatform-core.
 
 git fetch upstream --prune
 
-agent_previous_upstream=cfa2ff11278d46f385a098eefaa7429362bfc514
+agent_previous_upstream=098d5e3f6e158397b96327c15d35dad59afae445
 agent_new_upstream=$(git rev-parse upstream/jb-main)
 
 # The new tip should descend from the previously integrated tip.

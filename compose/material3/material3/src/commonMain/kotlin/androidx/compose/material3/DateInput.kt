@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+@file:Suppress("DEPRECATION") // b/553982004
+
 package androidx.compose.material3
 
 import androidx.compose.foundation.layout.PaddingValues
@@ -367,13 +369,16 @@ internal value class InputIdentifier internal constructor(internal val value: In
 
     companion object {
         /** Single date input */
-        val SingleDateInput = InputIdentifier(0)
+        val SingleDateInput
+            get() = InputIdentifier(0)
 
         /** A start date input */
-        val StartDateInput = InputIdentifier(1)
+        val StartDateInput
+            get() = InputIdentifier(1)
 
         /** An end date input */
-        val EndDateInput = InputIdentifier(2)
+        val EndDateInput
+            get() = InputIdentifier(2)
     }
 
     override fun toString() =
@@ -442,4 +447,5 @@ internal val InputTextFieldPadding = PaddingValues(start = 24.dp, end = 24.dp, t
 
 // An optional padding that will only be added to the bottom of the date input text field when it's
 // not showing an error message.
-private val InputTextNonErroneousBottomPadding = 16.dp
+private val InputTextNonErroneousBottomPadding
+    get() = 16.dp

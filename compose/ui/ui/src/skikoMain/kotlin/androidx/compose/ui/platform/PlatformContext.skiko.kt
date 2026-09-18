@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package androidx.compose.ui.platform
 
 import androidx.compose.runtime.getValue
@@ -20,8 +21,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ComposeUiFlags
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.ExperimentalMediaQueryApi
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.autofill.AutofillManager
+import androidx.compose.ui.UiMediaScope
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.geometry.Offset
@@ -29,6 +33,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.platform.PlatformGraphicsContext
 import androidx.compose.ui.graphics.platform.PlatformGraphicsRegistry
 import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -42,16 +47,20 @@ import androidx.compose.ui.scene.CanvasLayersComposeScene
 import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsOwner
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.text.input.EditCommand
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.intl.LocaleList
+import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.enableSavedStateHandles
 import kotlin.reflect.KProperty
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 
 /**
@@ -63,6 +72,11 @@ interface PlatformContext {
      * The value that will be provided to [LocalWindowInfo] by default.
      */
     val windowInfo: WindowInfo
+
+    /**
+     * Provide [TaskDispatchers] for coroutines running within a Compose hierarchy.
+     */
+    val taskDispatchers: TaskDispatchers
 
     /**
      * The value that will be provided to [LocalPlatformScreenReader] by default.
@@ -175,7 +189,7 @@ interface PlatformContext {
     }
 
     val textToolbar: TextToolbar get() = EmptyTextToolbar
-    val hapticFeedback: HapticFeedback get() = DefaultHapticFeedback
+    val hapticFeedback: HapticFeedback get() = NoOpHapticFeedback
     fun setPointerIcon(pointerIcon: PointerIcon) = Unit
 
     val parentFocusManager: FocusManager get() = EmptyFocusManager
@@ -236,6 +250,32 @@ interface PlatformContext {
      */
     val prefetchScheduler: PlatformPrefetchScheduler get() = NoOpPlatformPrefetchScheduler
 
+    val accessibilityManager: AccessibilityManager get() = NoOpAccessibilityManager
+
+    val clipboard : Clipboard
+
+    // TODO https://youtrack.jetbrains.com/issue/CMP-7485
+    val autofillManager: AutofillManager?
+        get() = null
+
+    val uriHandler : UriHandler
+    /**
+     * Media-related information exposed to the composition.
+     *
+     * This provides platform-specific environment details such as window posture,
+     * pointer precision, keyboard type, and device capabilities. The default
+     * implementation is a no-op environment that reports neutral values so code
+     * using media state remains safe on platforms that do not provide a richer
+     * implementation.
+     */
+    @ExperimentalMediaQueryApi
+    val mediaScope: UiMediaScope get() = EmptyMediaScope
+
+    val fontFamilyResolver: FontFamily.Resolver
+
+    val soundEffect: SoundEffect
+        get() = NoSoundEffect
+
     interface RootForTestListener {
         fun onRootForTestCreated(root: PlatformRootForTest)
         fun onRootForTestDisposed(root: PlatformRootForTest)
@@ -283,8 +323,19 @@ interface PlatformContext {
             isWindowFocused = true
         }
 
+        override val taskDispatchers: TaskDispatchers = DefaultTaskDispatchers
+
         override val inputModeManager: InputModeManager by lazy(LazyThreadSafetyMode.NONE) {
             DefaultInputModeManager()
+        }
+        override val clipboard: Clipboard by lazy(LazyThreadSafetyMode.NONE) {
+            createPlatformClipboard()
+        }
+        override val uriHandler: UriHandler by lazy(LazyThreadSafetyMode.NONE) {
+            createPlatformUriHandler()
+        }
+        override val fontFamilyResolver: FontFamily.Resolver by lazy(LazyThreadSafetyMode.NONE) {
+            createFontFamilyResolver()
         }
     }
 
@@ -309,6 +360,16 @@ interface PlatformContext {
 
 private object EmptyPlatformScreenReader : PlatformScreenReader {
     override val isActive: Boolean = false
+}
+
+private object NoOpAccessibilityManager : AccessibilityManager {
+    override fun calculateRecommendedTimeoutMillis(
+        originalTimeoutMillis: Long,
+        containsIcons: Boolean,
+        containsText: Boolean,
+        containsControls: Boolean
+    ): Long = originalTimeoutMillis
+
 }
 
 private object NoOpPlatformPrefetchScheduler : PlatformPrefetchScheduler {
@@ -407,4 +468,33 @@ internal class DelegateRootForTestListener : PlatformContext.RootForTestListener
             listener?.onRootForTestCreated(root)
         }
     }
+}
+
+private object NoOpHapticFeedback : HapticFeedback {
+    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) = Unit
+}
+
+@ExperimentalMediaQueryApi
+private object EmptyMediaScope : UiMediaScope {
+    override val windowPosture: UiMediaScope.Posture
+        get() = UiMediaScope.Posture.Flat
+    override val windowWidth: Dp
+        get() = Dp.Unspecified
+    override val windowHeight: Dp
+        get() = Dp.Unspecified
+    override val pointerPrecision: UiMediaScope.PointerPrecision
+        get() = UiMediaScope.PointerPrecision.None
+    override val keyboardKind: UiMediaScope.KeyboardKind
+        get() = UiMediaScope.KeyboardKind.None
+    override val hasMicrophone: Boolean
+        get() = false
+    override val hasCamera: Boolean
+        get() = false
+    override val viewingDistance: UiMediaScope.ViewingDistance
+        get() = UiMediaScope.ViewingDistance.Near
+}
+
+private object DefaultTaskDispatchers: TaskDispatchers {
+    override val Default = Dispatchers.Default
+    override val IO = Dispatchers.Default
 }
