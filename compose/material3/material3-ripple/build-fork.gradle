@@ -39,10 +39,12 @@ androidXMultiplatform {
     desktop()
     mac()
     ios()
+    linux()
+    mingwX64()
     js()
     wasmJs()
 
-    defaultPlatform(PlatformIdentifier.ANDROID)
+    defaultPlatform(PlatformIdentifier.LINUX_X_64)
 
     sourceSets {
         commonMain.dependencies {
