@@ -67,13 +67,14 @@ kotlin {
 }
 ```
 
-This is the option to use when the same project also targets JVM desktop or Apple, where fork
-artifacts are not currently published.
+This is the option to use when the same project also targets JVM desktop or macOS, where fork
+artifacts are not currently published. iOS can use either this official-Compose path or the full
+fork path below.
 
 ### Full fork
 
 Put the fork dependencies in `commonMain` to use them on every published fork target: Android, JS,
-Wasm JS, Linux, and Windows.
+Wasm JS, iOS, Linux, and Windows.
 
 ```kotlin
 val composeNativeVersion = "1.13.0-alpha01"
@@ -101,8 +102,9 @@ kotlin {
 }
 ```
 
-Do not use the full-fork setup in a project that also targets JVM desktop or Apple until fork
-variants for those platforms are published.
+Do not use the full-fork setup for JVM desktop or macOS yet; those fork variants are not
+published. iOS device (`iosArm64`) and Apple Silicon simulator (`iosSimulatorArm64`) variants are
+published and continue to use official Skiko.
 
 <details>
 <summary><strong>Fork-specific Compose changes</strong></summary>

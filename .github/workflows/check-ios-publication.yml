@@ -1,0 +1,189 @@
+name: Check iOS publication
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/check-ios-publication.yml'
+      - '.github/workflows/publish-compose-native-central.yml'
+      - 'buildSrc-fork/**'
+      - 'compose/**'
+      - 'lifecycle/**'
+      - 'navigation3/**'
+      - 'navigationevent/**'
+      - 'savedstate/**'
+      - 'mpp/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'scripts/publish-ios-to-maven-local.sh'
+      - 'scripts/write-linux-native-root-metadata.py'
+
+permissions:
+  contents: read
+
+jobs:
+  ios-publication:
+    name: Compile iOS and verify metadata
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        name: Set up JDK 21
+        with:
+          distribution: corretto
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify Xcode and export JDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Compile and publish iOS to an isolated repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
+          repository="$GITHUB_WORKSPACE/release/maven-local"
+          ./gradlew \
+            --no-daemon \
+            --stacktrace \
+            --no-configuration-cache \
+            --no-configure-on-demand \
+            "-Dmaven.repo.local=$repository" \
+            -Pcompose.platforms=IosArm64,IosSimulatorArm64 \
+            -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
+            "-Pjetbrains.publication.version.COMPOSE=$version" \
+            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
+            "-Pjetbrains.publication.version.NAVIGATION_3=$version" \
+            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
+            "-Pjetbrains.publication.version.LIFECYCLE=$version" \
+            "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
+            :mpp:publishComposeIosToMavenLocal \
+            :mpp:publishComposeForkRootsToMavenLocal
+
+      - name: Generate aggregate iOS KMP metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
+          repository="$GITHUB_WORKSPACE/release/maven-local"
+          read_property() {
+            sed -n "s/^$1=//p" gradle.properties | tail -n1
+          }
+          python3 scripts/write-linux-native-root-metadata.py \
+            --repository "$repository" \
+            --version "$version" \
+            --group-prefix dev.brahmkshatriya \
+            --upstream-compose-version "$(read_property compose.native.upstream.version.COMPOSE)" \
+            --upstream-material3-version "$(read_property compose.native.upstream.version.COMPOSE_MATERIAL3)" \
+            --upstream-lifecycle-version "$(read_property compose.native.upstream.version.LIFECYCLE)" \
+            --upstream-navigation3-version "$(read_property compose.native.upstream.version.NAVIGATION_3)" \
+            --upstream-navigationevent-version "$(read_property compose.native.upstream.version.NAVIGATION_EVENT)" \
+            --upstream-savedstate-version "$(read_property compose.native.upstream.version.SAVEDSTATE)" \
+            --native-skiko-group "$(read_property compose.native.skiko.group)" \
+            --native-skiko-version "$(read_property compose.native.skiko.version)" \
+            --all-platforms
+
+      - name: Verify iOS publications and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
+          official_skiko_version="$(sed -n 's/^skiko = "\([^"]*\)"/\1/p' gradle/libs.versions.toml | head -n1)"
+          group_root="$GITHUB_WORKSPACE/release/maven-local/dev/brahmkshatriya"
+          ui_root="$group_root/compose/ui/ui/$version/ui-$version.module"
+
+          test -s "$ui_root"
+          test -s "$group_root/compose/ui/ui/$version/ui-$version.jar"
+          jq -e '.variants[] | select(.name == "metadataApiElements")' "$ui_root" >/dev/null
+
+          expected_targets=$'ios_arm64\nios_simulator_arm64'
+          actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$ui_root" | sort -u)"
+          test "$actual_targets" = "$expected_targets"
+
+          for module in \
+            ui-iosarm64 \
+            ui-iossimulatorarm64 \
+            foundation-iosarm64 \
+            foundation-iossimulatorarm64 \
+            material3-iosarm64 \
+            material3-iossimulatorarm64 \
+            ui-uikit-iosarm64 \
+            ui-uikit-iossimulatorarm64; do
+            test -d "$group_root/compose/${module%%-*}/$module/$version" || \
+              test -d "$group_root/compose/ui/$module/$version" || \
+              test -d "$group_root/compose/foundation/$module/$version" || \
+              test -d "$group_root/compose/material3/$module/$version"
+          done
+
+          uikit_root="$group_root/compose/ui/ui-uikit/$version"
+          test -s "$uikit_root/ui-uikit-$version.module"
+          test -s "$uikit_root/ui-uikit-$version.jar"
+
+          ios_module_count="$(find "$group_root" \
+            \( -path "*-iosarm64/$version/*.module" \
+            -o -path "*-iossimulatorarm64/$version/*.module" \) | wc -l | tr -d ' ')"
+          test "$ios_module_count" -gt 10
+
+          skiko_dependencies=0
+          while IFS= read -r -d '' module_file; do
+            if jq -e --arg version "$official_skiko_version" '
+              .variants[] |
+              (.dependencies[]?, .dependencyConstraints[]?) |
+              select(.module == "skiko") |
+              select(
+                .group != "org.jetbrains.skiko" or
+                ([.version.requires?, .version.strictly?, .version.prefers?] |
+                  map(select(. != null)) |
+                  length == 0 or any(. != $version))
+              )
+            ' "$module_file" >/dev/null; then
+              echo "Incorrect iOS Skiko dependency in $module_file" >&2
+              exit 1
+            fi
+            if jq -e '
+              .variants[] |
+              (.dependencies[]?, .dependencyConstraints[]?) |
+              select(.group == "org.jetbrains.skiko" and .module == "skiko")
+            ' "$module_file" >/dev/null; then
+              skiko_dependencies=$((skiko_dependencies + 1))
+            fi
+            if jq -e '
+              .variants[] |
+              (.dependencies[]?, .dependencyConstraints[]?) |
+              select(
+                (.group // "") | startswith("dev.brahmkshatriya.compose.") or
+                  startswith("dev.brahmkshatriya.androidx.") or
+                  startswith("dev.brahmkshatriya.skiko")
+              )
+            ' "$module_file" >/dev/null; then
+              echo "Fork-internal dependency coordinate leaked into $module_file" >&2
+              exit 1
+            fi
+          done < <(
+            find "$group_root" \
+              \( -path "*-iosarm64/$version/*.module" \
+              -o -path "*-iossimulatorarm64/$version/*.module" \) \
+              -print0
+          )
+          test "$skiko_dependencies" -gt 0
+          echo "Verified $ios_module_count iOS module metadata files with official Skiko $official_skiko_version"
+
+      - uses: actions/upload-artifact@v4
+        name: Upload checked iOS Maven repository
+        if: always()
+        with:
+          name: compose-native-ios-publication-check
+          path: release/maven-local/dev/brahmkshatriya
+          if-no-files-found: warn
+          retention-days: 5

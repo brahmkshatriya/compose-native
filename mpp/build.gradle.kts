@@ -55,6 +55,23 @@ tasks.register("publishComposeForkPlatformsToMavenLocal", ComposePublishingTask:
     }
 }
 
+tasks.register("publishComposeIosToMavenLocal", ComposePublishingTask::class) {
+    group = "Compose Multiplatform"
+    description = "Publishes the complete fork iOS target graph to Maven Local"
+    repository = "MavenLocal"
+    composeProperties = parsedComposeProperties
+
+    JetBrainsPublication.iosComponents.forEach { component ->
+        if (component.path == ":compose:ui:ui-uikit") {
+            // ui-uikit exists only on iOS in this fork, so its KMP root cannot be supplied by
+            // the Linux root-publication job. Publish that root alongside its iOS variants.
+            publishAvailablePlatforms(rootProject, component)
+        } else {
+            publishAvailablePlatformsOnly(rootProject, component)
+        }
+    }
+}
+
 tasks.register("publishComposeForkRootsToMavenLocal") {
     group = "Compose Multiplatform"
     description = "Publishes fork KMP roots, including their common metadata artifacts"

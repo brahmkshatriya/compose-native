@@ -52,6 +52,25 @@ open class ComposePublishingTask : DefaultTask() {
         }
     }
 
+    /** Publishes only requested target publications that the project actually declares. */
+    fun publishAvailablePlatformsOnly(rootProject: Project, component: ComposeComponent) {
+        val project =
+            rootProject.findProject(component.path)
+                ?: throw IllegalArgumentException("Cannot find project ${component.path}")
+
+        for (platform in component.supportedPlatforms) {
+            if (platform !in targetPlatforms) continue
+            resolvePublicationNameOrNull(project, platform, repository)?.let { publicationName ->
+                dependsOnComposeTask(
+                    "${component.path}:publish${publicationName}PublicationTo$repository"
+                )
+            }
+        }
+        project.tasks.findByName("jbVerifyDependencyVersions")?.let { verificationTask ->
+            dependsOn(verificationTask)
+        }
+    }
+
     /** Publishes a KMP root and every requested target publication that the project declares. */
     fun publishAvailablePlatforms(rootProject: Project, component: ComposeComponent) {
         val project =

@@ -77,14 +77,20 @@ private fun Project.configureComposeNativeSkikoResolution() {
     val nativeSkikoVersion =
         providers.gradleProperty("compose.native.skiko.version").orElse("0.151.5")
 
+    val desktopNativeRequested =
+        ComposeProperties(this).targetPlatforms.any { platform ->
+            platform in ComposePlatforms.LINUX_NATIVE ||
+                platform in ComposePlatforms.WINDOWS_NATIVE
+        }
+
     configurations.configureEach { configuration ->
         val lowerName = configuration.name.lowercase()
-        if (
-            "linuxx64" !in lowerName &&
-                "linuxarm64" !in lowerName &&
-                "mingwx64" !in lowerName &&
-                "nativemain" !in lowerName
-        ) {
+        val desktopNativeTarget =
+            "linuxx64" in lowerName ||
+                "linuxarm64" in lowerName ||
+                "mingwx64" in lowerName
+        val sharedDesktopNativeMetadata = desktopNativeRequested && "nativemain" in lowerName
+        if (!desktopNativeTarget && !sharedDesktopNativeMetadata) {
             return@configureEach
         }
         configuration.resolutionStrategy.dependencySubstitution { substitutions ->

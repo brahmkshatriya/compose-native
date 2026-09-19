@@ -235,12 +235,83 @@ jobs:
           if-no-files-found: error
           retention-days: 5
 
+  ios:
+    name: Build iOS
+    needs: prepare
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        name: Set up JDK 21
+        with:
+          distribution: corretto
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Verify Xcode and export JDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
+
+      - name: Publish iOS targets to an isolated Maven repository
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          repository="$GITHUB_WORKSPACE/release/maven-local"
+          ./gradlew \
+            --no-daemon \
+            --stacktrace \
+            --no-configuration-cache \
+            --no-configure-on-demand \
+            "-Dmaven.repo.local=$repository" \
+            -Pcompose.platforms=IosArm64,IosSimulatorArm64 \
+            -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
+            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.NAVIGATION_3=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            :mpp:publishComposeIosToMavenLocal
+
+      - name: Export only fork publications
+        shell: bash
+        run: |
+          set -euo pipefail
+          repository="$GITHUB_WORKSPACE/release/maven-local/dev/brahmkshatriya"
+          export_root="$GITHUB_WORKSPACE/release/export/dev/brahmkshatriya"
+          mkdir -p "$export_root"
+          for namespace in compose androidx; do
+            if [[ -d "$repository/$namespace" ]]; then
+              cp -R "$repository/$namespace" "$export_root/"
+            fi
+          done
+          test -d "$export_root/compose"
+
+      - uses: actions/upload-artifact@v4
+        name: Upload iOS repository
+        with:
+          name: compose-native-repo-ios-${{ needs.prepare.outputs.version }}
+          path: release/export
+          if-no-files-found: error
+          retention-days: 5
+
   publish:
     name: Sign and publish one Central deployment
     needs:
       - prepare
       - native
       - android-web
+      - ios
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -355,12 +426,23 @@ jobs:
           unzip -p "$desktop_metadata" 'desktopNativeMain-cinterop/*/default/manifest' > "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt"
           test "$(grep -c '^commonizer_native_targets=linux_arm64 linux_x64 mingw_x64$' "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt")" -eq 2
           test "$(grep -c '^commonizer_target=(linux_arm64, linux_x64, mingw_x64)$' "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt")" -eq 2
-          expected_targets=$'linux_arm64\nlinux_x64\nmingw_x64'
+          expected_targets=$'ios_arm64\nios_simulator_arm64\nlinux_arm64\nlinux_x64\nmingw_x64'
           actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$ui_root" | sort -u)"
           test "$actual_targets" = "$expected_targets"
-          for module in ui-linuxx64 ui-linuxarm64 ui-mingwx64; do
+          for module in ui-linuxx64 ui-linuxarm64 ui-mingwx64 ui-iosarm64 ui-iossimulatorarm64; do
             test -d "$group_root/compose/ui/$module/$RELEASE_VERSION"
           done
+          for module in foundation-iosarm64 foundation-iossimulatorarm64; do
+            test -d "$group_root/compose/foundation/$module/$RELEASE_VERSION"
+          done
+          for module in material3-iosarm64 material3-iossimulatorarm64; do
+            test -d "$group_root/compose/material3/$module/$RELEASE_VERSION"
+          done
+          uikit_root="$group_root/compose/ui/ui-uikit/$RELEASE_VERSION"
+          test -s "$uikit_root/ui-uikit-$RELEASE_VERSION.module"
+          test -s "$uikit_root/ui-uikit-$RELEASE_VERSION.jar"
+          test -d "$group_root/compose/ui/ui-uikit-iosarm64/$RELEASE_VERSION"
+          test -d "$group_root/compose/ui/ui-uikit-iossimulatorarm64/$RELEASE_VERSION"
           for module in foundation-android foundation-js foundation-wasm-js; do
             test -d "$group_root/compose/foundation/$module/$RELEASE_VERSION"
           done
@@ -400,6 +482,40 @@ jobs:
               -print0
           )
           test "$native_skiko_dependencies" -gt 0
+          official_skiko_version="$(sed -n 's/^skiko = "\([^"]*\)"/\1/p' gradle/libs.versions.toml | head -n1)"
+          test -n "$official_skiko_version"
+          ios_skiko_dependencies=0
+          while IFS= read -r -d '' module_file; do
+            if jq -e --arg version "$official_skiko_version" '
+              .variants[] |
+              (.dependencies[]?, .dependencyConstraints[]?) |
+              select(.module == "skiko") |
+              select(
+                .group != "org.jetbrains.skiko" or
+                (
+                  [.version.requires?, .version.strictly?, .version.prefers?] |
+                  map(select(. != null)) |
+                  length == 0 or any(. != $version)
+                )
+              )
+            ' "$module_file" >/dev/null; then
+              echo "Incorrect iOS Skiko dependency in $module_file" >&2
+              exit 1
+            fi
+            if jq -e '
+              .variants[] |
+              (.dependencies[]?, .dependencyConstraints[]?) |
+              select(.group == "org.jetbrains.skiko" and .module == "skiko")
+            ' "$module_file" >/dev/null; then
+              ios_skiko_dependencies=$((ios_skiko_dependencies + 1))
+            fi
+          done < <(
+            find "$group_root" \
+              \( -path "*-iosarm64/$RELEASE_VERSION/*.module" \
+              -o -path "*-iossimulatorarm64/$RELEASE_VERSION/*.module" \) \
+              -print0
+          )
+          test "$ios_skiko_dependencies" -gt 0
           while IFS= read -r -d '' module_file; do
             if jq -e --arg release "$RELEASE_VERSION" '
               .variants[] |

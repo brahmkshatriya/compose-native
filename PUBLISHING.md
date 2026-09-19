@@ -10,7 +10,7 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 | Fork artifacts | `1.13.0-alpha01` |
 | JetBrains Compose upstream | `1.13.0-alpha01` |
 | Maven Central Material 3 upstream | `1.13.0-alpha01` |
-| Official Skiko (desktop/web) | `0.150.1` |
+| Official Skiko (desktop/web/iOS) | `0.152.0-alpha04` |
 | Native Skiko fork | `0.151.5` |
 | Kotlin | `2.3.20` |
 
@@ -66,8 +66,19 @@ To publish the forked Compose Android, JS, and Wasm variants, run:
 This publishes the 18 cross-platform Compose modules through
 `:mpp:publishComposeForkPlatformsToMavenLocal`, regenerates their aggregate KMP roots, and
 republishes the plugin. Android has no Skiko dependency; JS and Wasm deliberately resolve the
-official Skiko `0.150.1` artifacts. Native-only support modules such as `desktop-native` and
+official Skiko `0.152.0-alpha04` artifacts. Native-only support modules such as `desktop-native` and
 `components-resources` are not published for these targets.
+
+To publish the iOS device and Apple Silicon simulator variants on macOS, run:
+
+```bash
+./scripts/publish-ios-to-maven-local.sh
+```
+
+This publishes `iosArm64` and `iosSimulatorArm64` for the full fork dependency closure plus
+`ui-uikit`, publishes the corresponding KMP roots, and republishes the consumer plugin. iOS uses
+the official `org.jetbrains.skiko:skiko:0.152.0-alpha04`; the Linux/Windows Skiko fork is not
+substituted into Apple configurations.
 
 ## Consumer plugin
 
@@ -139,6 +150,7 @@ resolve their own target variants.
 The tag workflow `.github/workflows/publish-compose-native-central.yml` builds and merges:
 
 - Android, JS, and Wasm fork artifacts
+- iOS arm64 device and iOS arm64 simulator fork artifacts
 - Linux x64, Linux arm64, and Windows x64 native artifacts
 - aggregate KMP root metadata
 - the Gradle plugin implementation and plugin marker

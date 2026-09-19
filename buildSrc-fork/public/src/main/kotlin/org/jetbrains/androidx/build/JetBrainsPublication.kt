@@ -267,12 +267,27 @@ object JetBrainsPublication {
                     )
             }
 
+    /** Complete target-level graph required by the existing UIKit Compose host on iOS. */
+    val iosComponents: List<ComposeComponent>
+        get() =
+            iosComponentPaths.map { path ->
+                projectPathToComponent[path]?.copy(supportedPlatforms = ComposePlatforms.IOS)
+                    ?: ComposeComponent(path, supportedPlatforms = ComposePlatforms.IOS)
+            }
+
     /** Modules with fork-specific behavior that must replace upstream on Android, JS, and Wasm. */
     val forkComposeComponents: List<ComposeComponent>
         get() = forkComposeComponentPaths.mapNotNull(projectPathToComponent::get)
 
     private val forkComposeComponentPaths =
         listOf(":compose:foundation:foundation", ":compose:material3:material3")
+
+    private val iosComponentPaths
+        get() =
+            nativeComponentPaths.filterNot {
+                it == ":compose:desktop:desktop-native" ||
+                    it == ":compose:components:components-resources"
+            } + ":compose:ui:ui-uikit"
 
     private val nativeComponentPaths =
         listOf(
