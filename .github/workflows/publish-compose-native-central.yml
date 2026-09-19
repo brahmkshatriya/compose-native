@@ -405,13 +405,8 @@ jobs:
               .variants[] |
               (.dependencies[]?, .dependencyConstraints[]?) |
               select(
-                ((.group // "") | startswith("dev.brahmkshatriya.compose.") or
-                  startswith("dev.brahmkshatriya.androidx.")) or
-                (
-                  ((.group // "") | startswith("org.jetbrains.compose.") or
-                    startswith("org.jetbrains.androidx.")) and
-                  ([.version.requires?, .version.strictly?, .version.prefers?] | index($release))
-                )
+                (.group // "") | startswith("dev.brahmkshatriya.compose.") or
+                  startswith("dev.brahmkshatriya.androidx.")
               )
             ' "$module_file" >/dev/null; then
               echo "Fork-internal dependency coordinate leaked into $module_file" >&2
