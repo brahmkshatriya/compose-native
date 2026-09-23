@@ -30,6 +30,10 @@ plugins {
 
 androidXMultiplatform {
     redirect("androidx.lifecycle") {
+        androidLibrary {
+            compileSdk = 36
+            namespace = "org.jetbrains.lifecycle.common"
+        }
         jvm()
         macosArm64()
         linux()

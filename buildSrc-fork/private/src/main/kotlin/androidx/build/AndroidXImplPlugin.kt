@@ -1273,14 +1273,10 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
     // If this project wants other project in the same group to have the same version,
     // this function configures those constraints.
     private fun Project.configureConstraintsWithinGroup(androidXExtension: AndroidXExtension) {
-        // The filtered Apple-native JetBrains publication graph configures projects lazily under
-        // Gradle's
-        // mutation guard, where evaluation callbacks are forbidden. Same-group constraints are
-        // not required to compile or publish the isolated Apple-native target artifacts.
-        if (
-            project.isJetBrainsAppleNativeOnlyPublication() ||
-                project.isJetBrainsJvmOnlyPublication()
-        ) {
+        // Fork release jobs publish one explicitly filtered platform shard at a time. Same-group
+        // constraints are not required for those isolated artifacts, and their global duplicate
+        // validation can observe configurations from unrelated filtered-out targets.
+        if (project.isJetBrainsPlatformFilteredPublication()) {
             return
         }
         if (
@@ -1557,6 +1553,13 @@ private fun Project.isJetBrainsJvmOnlyPublication(): Boolean {
     val requestedPlatforms = providers.gradleProperty("compose.platforms").orNull ?: return false
     val platforms = requestedPlatforms.split(",").map { it.trim() }.filter { it.isNotEmpty() }
     return platforms == listOf("Desktop")
+}
+
+private fun Project.isJetBrainsPlatformFilteredPublication(): Boolean {
+    if (!isJetBrainsFork(this)) return false
+    val requestedPlatforms = providers.gradleProperty("compose.platforms").orNull ?: return false
+    val platforms = requestedPlatforms.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    return platforms.isNotEmpty() && platforms.none { it.equals("all", ignoreCase = true) }
 }
 
 private fun Project.isJetBrainsAppleNativeOnlyPublication(): Boolean {

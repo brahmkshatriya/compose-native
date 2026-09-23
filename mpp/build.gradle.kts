@@ -6,18 +6,30 @@ import org.jetbrains.androidx.build.JetBrainsPublication
 val parsedComposeProperties = ComposeProperties(project)
 
 // Publication tasks inspect target-specific tasks from the projects they publish. Filtered
-// Desktop/JVM, iOS, and macOS publication modes should evaluate only their publication graph so
-// unrelated platform projects do not get configured or built.
+// Each release shard should evaluate only the projects it actually publishes so unrelated
+// platform projects do not get configured or built.
 val projectsRequiredForPublication =
     when {
         parsedComposeProperties.targetPlatforms == setOf(ComposePlatforms.Desktop) ->
             JetBrainsPublication.jvmComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
+        parsedComposeProperties.targetPlatforms.isNotEmpty() &&
+            parsedComposeProperties.targetPlatforms.all {
+                it in (ComposePlatforms.LINUX_NATIVE + ComposePlatforms.WINDOWS_NATIVE)
+            } ->
+            JetBrainsPublication.nativeComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
         parsedComposeProperties.targetPlatforms.isNotEmpty() &&
             parsedComposeProperties.targetPlatforms.all { it in ComposePlatforms.IOS } ->
             JetBrainsPublication.iosComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
         parsedComposeProperties.targetPlatforms.isNotEmpty() &&
             parsedComposeProperties.targetPlatforms.all { it in ComposePlatforms.MACOS_NATIVE } ->
             JetBrainsPublication.macosComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
+        parsedComposeProperties.targetPlatforms.isNotEmpty() &&
+            parsedComposeProperties.targetPlatforms.all {
+                it in (ComposePlatforms.ANDROID + ComposePlatforms.WEB)
+            } ->
+            JetBrainsPublication.forkComposeComponents
+                .mapNotNull { rootProject.findProject(it.path) }
+                .toSet()
         else -> rootProject.allprojects - project
     }
 projectsRequiredForPublication.forEach { publicationProject ->

@@ -130,7 +130,7 @@ jobs:
             --no-daemon \
             --stacktrace \
             --no-configuration-cache \
-            --no-configure-on-demand \
+            --configure-on-demand \
             "-Dmaven.repo.local=$repository" \
             "-Pcompose.platforms=$COMPOSE_PLATFORM" \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
@@ -200,7 +200,7 @@ jobs:
             --no-daemon \
             --stacktrace \
             --no-configuration-cache \
-            --no-configure-on-demand \
+            --configure-on-demand \
             "-Dmaven.repo.local=$repository" \
             -Pcompose.platforms=Android,Js,WasmJs \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \

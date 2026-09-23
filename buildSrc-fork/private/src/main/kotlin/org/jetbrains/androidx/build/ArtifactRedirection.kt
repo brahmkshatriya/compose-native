@@ -250,7 +250,7 @@ private fun Project.applyParallelRedirectGraphNow(
     // Since redirect targets are excluded from commonMain here, we re-add them explicitly. A
     // project dep publishes as its fork coordinate, which itself redirects onward to androidx.*.
     listOf("Api", "Implementation").forEach { kind ->
-        configurations.findByName("commonMain$kind")?.dependencies?.all { dep ->
+        configurations.findByName("commonMain$kind")?.dependencies?.toList()?.forEach { dep ->
             val target = configurations.getByName("${redirectCommonMain.name}$kind")
             if (
                 target.dependencies.none { existing ->
