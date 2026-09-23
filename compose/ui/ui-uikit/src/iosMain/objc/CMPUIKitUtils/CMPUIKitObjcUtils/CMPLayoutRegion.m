@@ -21,14 +21,21 @@
 // link-time symbol into the prebuilt static library shipped inside the klib. The class only exists
 // in the iOS 26 SDK, so applications linking against older SDKs fail to link (CMP-10200,
 // CMP-10417). Declaring the API locally and resolving the class with `NSClassFromString` leaves
-// only selector references, which the Objective-C runtime resolves. Enum constants and types are
-// resolved at compile time and don't contribute any symbols, so they are used as is.
+// only selector references, which the Objective-C runtime resolves. Keep the iOS 26-only enum
+// local as well so this file can still be compiled with an older SDK. Its raw values match
+// UIViewLayoutRegionAdaptivityAxis.
+typedef NS_ENUM(NSInteger, CMPUIViewLayoutRegionAdaptivityAxis) {
+    CMPUIViewLayoutRegionAdaptivityAxisNone = 0,
+    CMPUIViewLayoutRegionAdaptivityAxisHorizontal = 1,
+    CMPUIViewLayoutRegionAdaptivityAxisVertical = 2,
+};
+
 @protocol CMPUIViewLayoutRegionFactory <NSObject>
-+ (id)marginsLayoutRegionWithCornerAdaptation:(UIViewLayoutRegionAdaptivityAxis)axis
++ (id)marginsLayoutRegionWithCornerAdaptation:(CMPUIViewLayoutRegionAdaptivityAxis)axis
     API_AVAILABLE(ios(26.0));
-+ (id)readableContentLayoutRegionWithCornerAdaptation:(UIViewLayoutRegionAdaptivityAxis)axis
++ (id)readableContentLayoutRegionWithCornerAdaptation:(CMPUIViewLayoutRegionAdaptivityAxis)axis
     API_AVAILABLE(ios(26.0));
-+ (id)safeAreaLayoutRegionWithCornerAdaptation:(UIViewLayoutRegionAdaptivityAxis)axis
++ (id)safeAreaLayoutRegionWithCornerAdaptation:(CMPUIViewLayoutRegionAdaptivityAxis)axis
     API_AVAILABLE(ios(26.0));
 @end
 
@@ -105,16 +112,16 @@ typedef NS_ENUM(NSInteger, CMPLayoutRegionKind) {
         return [self edgeInsetsFallbackInView: view];
     }
 
-    UIViewLayoutRegionAdaptivityAxis axis;
+    CMPUIViewLayoutRegionAdaptivityAxis axis;
     switch (_axis) {
         case CMPLayoutRegionAdaptivityAxisNone:
-            axis = UIViewLayoutRegionAdaptivityAxisNone;
+            axis = CMPUIViewLayoutRegionAdaptivityAxisNone;
             break;
         case CMPLayoutRegionAdaptivityAxisHorizontal:
-            axis = UIViewLayoutRegionAdaptivityAxisHorizontal;
+            axis = CMPUIViewLayoutRegionAdaptivityAxisHorizontal;
             break;
         case CMPLayoutRegionAdaptivityAxisVertical:
-            axis = UIViewLayoutRegionAdaptivityAxisVertical;
+            axis = CMPUIViewLayoutRegionAdaptivityAxisVertical;
             break;
     }
 

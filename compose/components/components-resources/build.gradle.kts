@@ -89,7 +89,7 @@ kotlin {
             }
         }
 
-        val desktopNativeMain by getting {
+        findByName("desktopNativeMain")?.apply {
             dependencies {
                 implementation(project(":compose:desktop:desktop-native"))
             }

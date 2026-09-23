@@ -791,7 +791,7 @@ kotlin {
     }
 
     sourceSets {
-        val desktopNativeMain by getting {
+        findByName("desktopNativeMain")?.apply {
             dependencies {
                 api(project(":compose:ui:ui"))
                 implementation(project(":compose:foundation:foundation"))

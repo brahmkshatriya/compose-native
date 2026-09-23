@@ -5,14 +5,16 @@ import org.jetbrains.androidx.build.JetBrainsPublication
 
 val parsedComposeProperties = ComposeProperties(project)
 
-// Publication tasks inspect target-specific tasks from the projects they publish. Desktop/JVM
-// publication intentionally contains only the two fork-specific modules, so avoid eagerly
-// evaluating the unrelated AndroidX graph in that filtered build. Other publication modes keep
-// the historical all-project evaluation behavior.
+// Publication tasks inspect target-specific tasks from the projects they publish. Filtered
+// Desktop/JVM, iOS, and macOS publication modes should evaluate only their publication graph so
+// unrelated platform projects do not get configured or built.
 val projectsRequiredForPublication =
     when {
         parsedComposeProperties.targetPlatforms == setOf(ComposePlatforms.Desktop) ->
             JetBrainsPublication.jvmComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
+        parsedComposeProperties.targetPlatforms.isNotEmpty() &&
+            parsedComposeProperties.targetPlatforms.all { it in ComposePlatforms.IOS } ->
+            JetBrainsPublication.iosComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
         parsedComposeProperties.targetPlatforms.isNotEmpty() &&
             parsedComposeProperties.targetPlatforms.all { it in ComposePlatforms.MACOS_NATIVE } ->
             JetBrainsPublication.macosComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()

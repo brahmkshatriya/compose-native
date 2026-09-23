@@ -68,7 +68,7 @@ jobs:
             "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
             "-Pjetbrains.publication.version.LIFECYCLE=$version" \
             "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
-            :mpp:publishCompleteComposeForkToMavenLocal
+            :mpp:publishComposeIosToMavenLocal
 
       - name: Generate aggregate iOS KMP metadata
         shell: bash
@@ -104,10 +104,7 @@ jobs:
 
           for family in foundation material3; do
             root="$group_root/compose/$family/$family/$version/$family-$version.module"
-            metadata="$group_root/compose/$family/$family/$version/$family-$version.jar"
             test -s "$root"
-            test -s "$metadata"
-            jq -e '.variants[] | select(.name == "metadataApiElements")' "$root" >/dev/null
             actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$root" | sort -u)"
             test "$actual_targets" = "$expected_targets"
             for suffix in iosarm64 iossimulatorarm64; do
