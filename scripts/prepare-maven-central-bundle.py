@@ -4,7 +4,9 @@ from __future__ import annotations
 import argparse
 import shutil
 import xml.etree.ElementTree as ElementTree
+import zipfile
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 
 IGNORED_SUFFIXES = (".asc", ".md5", ".sha1", ".sha256", ".sha512")
@@ -71,6 +73,8 @@ def main() -> None:
         if version_directory.is_dir() and not list(version_directory.glob("*.pom")):
             raise SystemExit(f"{version_directory} contains artifacts but no POM")
     for pom in poms:
+        ensure_central_metadata(pom)
+        ensure_javadoc_artifact(pom)
         validate_pom(pom)
         validate_primary_artifact(pom)
 
@@ -103,6 +107,82 @@ def validate_pom(pom: Path) -> None:
         version = element_text(dependency, "m:version")
         if version == "unspecified" or group.startswith("compose-multiplatform-core."):
             raise SystemExit(f"{pom} contains an unpublishable dependency: {group}:{version}")
+
+
+def ensure_central_metadata(pom: Path) -> None:
+    root = ElementTree.parse(pom).getroot()
+    required_paths = (
+        "m:name",
+        "m:description",
+        "m:url",
+        "m:licenses/m:license/m:name",
+        "m:licenses/m:license/m:url",
+        "m:developers/m:developer/m:name",
+        "m:scm/m:url",
+        "m:scm/m:connection",
+    )
+    missing = [path for path in required_paths if not element_text(root, path)]
+    if not missing:
+        return
+    if len(missing) != len(required_paths):
+        raise SystemExit(f"{pom} contains partial Central metadata: {missing}")
+
+    group = element_text(root, "m:groupId")
+    artifact = element_text(root, "m:artifactId")
+    if not group or not artifact:
+        return
+
+    metadata = f"""  <name>{escape(group)}:{escape(artifact)}</name>
+  <description>Compose Native publication for {escape(artifact)}</description>
+  <url>https://github.com/brahmkshatriya/compose-native</url>
+  <licenses>
+    <license>
+      <name>The Apache License, Version 2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>brahmkshatriya</id>
+      <name>Shivam Brahmkshatriya</name>
+      <url>https://github.com/brahmkshatriya</url>
+    </developer>
+  </developers>
+  <scm>
+    <url>https://github.com/brahmkshatriya/compose-native</url>
+    <connection>scm:git:https://github.com/brahmkshatriya/compose-native.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/brahmkshatriya/compose-native.git</developerConnection>
+  </scm>
+"""
+    pom_text = pom.read_text(encoding="utf-8")
+    for marker in ("  <dependencyManagement>", "  <dependencies>", "</project>"):
+        if marker in pom_text:
+            pom.write_text(
+                pom_text.replace(marker, metadata + marker, 1),
+                encoding="utf-8",
+            )
+            return
+    raise SystemExit(f"{pom} has no insertion point for Central metadata")
+
+
+def ensure_javadoc_artifact(pom: Path) -> None:
+    root = ElementTree.parse(pom).getroot()
+    packaging = element_text(root, "m:packaging") or "jar"
+    if packaging != "jar":
+        return
+    javadoc = pom.parent / f"{pom.stem}-javadoc.jar"
+    if javadoc.is_file():
+        return
+    with zipfile.ZipFile(javadoc, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        info = zipfile.ZipInfo("META-INF/MANIFEST.MF")
+        info.date_time = (1980, 1, 1, 0, 0, 0)
+        info.compress_type = zipfile.ZIP_DEFLATED
+        archive.writestr(
+            info,
+            "Manifest-Version: 1.0\n"
+            "Created-By: Compose Native Central staging\n\n",
+        )
 
 
 def validate_primary_artifact(pom: Path) -> None:
