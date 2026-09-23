@@ -63,7 +63,7 @@ File getGoldenPath(Project project) {
     }
 }
 
-tasks.findByName("jvmTest").configure {
+tasks.matching { it.name == "jvmTest" }.configureEach {
     systemProperties["GOLDEN_PATH"] = getGoldenPath(project).toString()
 }
 

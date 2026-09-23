@@ -36,6 +36,8 @@ int kplatform_window_supports_frame_insets(void);
 
 /* Configures per-pixel top-level transparency for the active SDL backend. */
 int kplatform_window_set_transparent(void *sdl_window, int transparent);
+int kplatform_window_set_fullscreen(void *sdl_window, int fullscreen);
+int kplatform_window_set_maximized(void *sdl_window, int maximized);
 
 /* Declares transparent client-frame margins around the visible window content. */
 int kplatform_window_set_frame_insets(

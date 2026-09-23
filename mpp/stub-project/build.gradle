@@ -19,13 +19,22 @@ import androidx.build.SoftwareType
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 
 plugins {
+    id("base")
     id("AndroidXPlugin")
 }
 
-androidXMultiplatform {
-    androidLibrary {
-        namespace = "stub-project"
-    }
+def requestedComposePlatforms = project.findProperty("compose.platforms")?.toString()
+def androidRequested = requestedComposePlatforms == null ||
+        requestedComposePlatforms.split(",").any { name ->
+            name.trim().equalsIgnoreCase("all") || name.trim().equalsIgnoreCase("android")
+        }
 
-    defaultPlatform(PlatformIdentifier.ANDROID)
+if (androidRequested) {
+    androidXMultiplatform {
+        androidLibrary {
+            namespace = "stub-project"
+        }
+
+        defaultPlatform(PlatformIdentifier.ANDROID)
+    }
 }

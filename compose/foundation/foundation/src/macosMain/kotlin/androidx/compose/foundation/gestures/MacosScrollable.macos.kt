@@ -19,10 +19,12 @@ package androidx.compose.foundation.gestures
 import androidx.compose.ui.appkit.appkitEventOrNull
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEvent
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastFold
 
 internal actual fun CompositionLocalConsumerModifierNode.platformScrollConfig(): ScrollConfig =
     MacOsScrollConfig
@@ -30,7 +32,22 @@ internal actual fun CompositionLocalConsumerModifierNode.platformScrollConfig():
 private object MacOsScrollConfig : ScrollConfig {
     // See https://developer.apple.com/documentation/appkit/nsevent/1535387-scrollingdeltay
     override fun Density.calculateMouseWheelScroll(event: PointerEvent, bounds: IntSize): Offset {
-        val e = event.appkitEventOrNull ?: return Offset.Zero
+        val e = event.appkitEventOrNull
+        if (e == null) {
+            // Compose Native's SDL macOS host doesn't have an NSEvent to attach to the pointer
+            // event. Its wheel/pan delta is already normalized by the SDL host, so use that
+            // directly and match the native desktop scrolling direction.
+            val delta =
+                event.changes.fastFold(Offset.Zero) { accumulated, change ->
+                    accumulated +
+                        if (event.type == PointerEventType.PanMove) {
+                            change.panOffset
+                        } else {
+                            change.scrollDelta
+                        }
+                }
+            return -delta
+        }
 
         // The multiplier value was derived from desktop MacOSCocoaConfig
         val multiplier = if (e.hasPreciseScrollingDeltas) 1.0F else 10.dp.toPx()

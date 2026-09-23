@@ -38,6 +38,10 @@ internal actual val PlatformCaptionButtonWidth: Dp = 28.dp
 
 internal actual val PlatformCaptionButtonHeight: Dp = 36.dp
 
+internal actual val PlatformCaptionButtonsAtStart: Boolean = false
+
+@Composable internal actual fun PlatformTitleBarStartPadding() {}
+
 @Composable
 internal actual fun PlatformTitleBarEndPadding() {
     Spacer(Modifier.width(4.dp))

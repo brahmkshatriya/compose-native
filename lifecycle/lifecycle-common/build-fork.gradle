@@ -31,7 +31,7 @@ plugins {
 androidXMultiplatform {
     redirect("androidx.lifecycle") {
         jvm()
-        mac()
+        macosArm64()
         linux()
         ios()
         watchos()
@@ -41,7 +41,21 @@ androidXMultiplatform {
         wasmJs()
     }
 
+    // AndroidX no longer publishes this redirect artifact for Intel macOS.
+    macosX64()
+
     defaultPlatform(PlatformIdentifier.JVM)
+
+    sourceSets {
+        commonMain.dependencies {
+            api(libs.kotlinCoroutinesCore)
+            api("androidx.annotation:annotation:1.9.1")
+        }
+
+        nonJvmMain.dependencies {
+            implementation(libs.atomicFu)
+        }
+    }
 
 }
 

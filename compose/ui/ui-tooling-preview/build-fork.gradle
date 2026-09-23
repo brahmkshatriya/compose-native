@@ -71,7 +71,6 @@ androidXMultiplatform {
             dependsOn(nonAndroidMain)
             dependencies {
                 // To comply with Klib resolver until https://youtrack.jetbrains.com/issue/KT-61096 is fixed
-                implementation("org.jetbrains.compose.annotation-internal:annotation:1.10.0")
             }
         }
 

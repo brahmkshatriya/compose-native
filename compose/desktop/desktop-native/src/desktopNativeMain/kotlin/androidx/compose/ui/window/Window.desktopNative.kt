@@ -195,7 +195,6 @@ import sdl3.SDL_GetWindowSizeInPixels
 import sdl3.SDL_HideWindow
 import sdl3.SDL_HitTestResult
 import sdl3.SDL_Init
-import sdl3.SDL_MaximizeWindow
 import sdl3.SDL_MinimizeWindow
 import sdl3.SDL_PIXELFORMAT_ARGB8888
 import sdl3.SDL_Point
@@ -210,7 +209,6 @@ import sdl3.SDL_SetCursor
 import sdl3.SDL_SetTextInputArea
 import sdl3.SDL_SetWindowAlwaysOnTop
 import sdl3.SDL_SetWindowBordered
-import sdl3.SDL_SetWindowFullscreen
 import sdl3.SDL_SetWindowHitTest
 import sdl3.SDL_SetWindowIcon
 import sdl3.SDL_SetWindowMaximumSize
@@ -1762,7 +1760,7 @@ internal class NativeWindowHost(
         val nativeLayer = checkNotNull(skiaLayer) { "The SDL window has no Skia layer" }
         val surfaceImage =
             nativeLayer
-                .snapshot(currentMetrics.surfacePixelWidth, currentMetrics.surfacePixelHeight)
+                .nativeSnapshot(currentMetrics.surfacePixelWidth, currentMetrics.surfacePixelHeight)
                 .asComposeImageBitmap()
         val fullImage =
             if (currentMetrics.frameInsetsPx == ClientFrameInsets.Zero) {
@@ -1834,7 +1832,7 @@ internal class NativeWindowHost(
     private var currentPlacement = WindowPlacement.Floating
     private var placementBeforeFullscreen = WindowPlacement.Floating
     private var maximizeRequestPending = false
-    private var maximizeAfterFullscreenExit = false
+    private var placementAfterFullscreenExit: WindowPlacement? = null
     private var currentMinimized = false
     private var currentPosition: WindowPosition = WindowPosition.PlatformDefault
     private var onPreviewKeyEvent: (KeyEvent) -> Boolean = { false }
@@ -1979,23 +1977,27 @@ internal class NativeWindowHost(
         val initialY =
             (state.position as? WindowPosition.Absolute)?.y?.value?.roundToInt()
                 ?: SDL_WINDOWPOS_CENTERED.toInt()
+        val initialGraphicsFlags = nativeGraphicsWindowFlags(nativeLayer)
         var candidateWindow =
             kplatform_create_window(
                     title,
                     windowWidth + initialClientFrameInsets.horizontal,
                     windowHeight + initialClientFrameInsets.vertical,
-                    baseFlags or nativeGraphicsWindowFlags(nativeLayer),
+                    baseFlags or initialGraphicsFlags,
                     if (clientFrameInsetsSupported) 1 else 0,
                 )
                 ?.reinterpret<SDL_Window>()
-        if (candidateWindow == null && nativeGraphicsWindowFlags(nativeLayer) != 0uL) {
-            nativeLayer.renderApi = org.jetbrains.skiko.GraphicsApi.SOFTWARE_FAST
+        if (
+            candidateWindow == null &&
+                initialGraphicsFlags != 0uL &&
+                fallbackNativeGraphics(nativeLayer)
+        ) {
             candidateWindow =
                 kplatform_create_window(
                         title,
                         windowWidth + initialClientFrameInsets.horizontal,
                         windowHeight + initialClientFrameInsets.vertical,
-                        baseFlags,
+                        baseFlags or nativeGraphicsWindowFlags(nativeLayer),
                         if (clientFrameInsetsSupported) 1 else 0,
                     )
                     ?.reinterpret<SDL_Window>()
@@ -2112,6 +2114,7 @@ internal class NativeWindowHost(
         updateAccessibility(initialMetrics)
         scene = nativeScene
         nativeLayer.renderDelegate = SkikoRenderDelegate { canvas, _, _, _ ->
+            canvas.clear(if (hasTransparentWindowBuffer) 0x00000000 else 0xFF000000.toInt())
             val currentMetrics = metrics
             if (currentMetrics == null || currentMetrics.frameInsetsPx == ClientFrameInsets.Zero) {
                 nativeScene.draw(canvas.asComposeCanvas())
@@ -2185,14 +2188,8 @@ internal class NativeWindowHost(
             }
         }
         println("$title: ${initialMetrics.description()}")
-        println("$title: ${nativeLayer.rendererDescription}")
-        val diagnostics = nativeLayer.diagnostics
-        println(
-            "$title: transparentBuffer=${diagnostics.hasTransparentWindowBuffer} " +
-                "(requested=${diagnostics.transparencyRequested}), " +
-                "frameBuffers=${diagnostics.effectiveFrameBufferCount ?: "unknown"} " +
-                "(requested=${diagnostics.frameBuffering})"
-        )
+        println("$title: ${nativeLayer.nativeRendererDescription}")
+        println("$title: ${nativeLayer.nativeDiagnosticsDescription()}")
     }
 
     fun update(
@@ -2395,7 +2392,7 @@ internal class NativeWindowHost(
             }
             SDL_EVENT_WINDOW_MAXIMIZED.toUInt() -> {
                 maximizeRequestPending = false
-                maximizeAfterFullscreenExit = false
+                placementAfterFullscreenExit = null
                 isMaximized = true
                 currentPlacement = WindowPlacement.Maximized
                 state.placement = WindowPlacement.Maximized
@@ -2424,16 +2421,25 @@ internal class NativeWindowHost(
                 requestRender()
             }
             SDL_EVENT_WINDOW_LEAVE_FULLSCREEN.toUInt() -> {
-                if (maximizeAfterFullscreenExit) {
-                    maximizeAfterFullscreenExit = false
-                    val maximizeAccepted = sdlWindow?.let(::SDL_MaximizeWindow) == true
-                    if (!maximizeAccepted) {
-                        maximizeRequestPending = false
-                        currentPlacement = WindowPlacement.Floating
-                        state.placement = WindowPlacement.Floating
-                        applyResizable()
+                when (placementAfterFullscreenExit) {
+                    WindowPlacement.Maximized -> {
+                        placementAfterFullscreenExit = null
+                        val maximizeAccepted =
+                            sdlWindow?.let { kplatform_window_set_maximized(it, 1) != 0 } == true
+                        if (!maximizeAccepted) {
+                            maximizeRequestPending = false
+                            currentPlacement = WindowPlacement.Floating
+                            state.placement = WindowPlacement.Floating
+                            applyResizable()
+                        }
+                        requestRender()
                     }
-                    requestRender()
+                    WindowPlacement.Floating -> {
+                        placementAfterFullscreenExit = null
+                        sdlWindow?.let { kplatform_window_set_maximized(it, 0) }
+                        requestRender()
+                    }
+                    else -> Unit
                 }
             }
             SDL_EVENT_WINDOW_MOVED.toUInt() -> {
@@ -2502,6 +2508,8 @@ internal class NativeWindowHost(
             }
             SDL_EVENT_MOUSE_WHEEL.toUInt() -> {
                 if (!currentEnabled) return
+                pointerX = event.wheel.mouse_x.roundToInt()
+                pointerY = event.wheel.mouse_y.roundToInt()
                 val direction =
                     if (
                         event.wheel.direction == sdl3.SDL_MouseWheelDirection.SDL_MOUSEWHEEL_FLIPPED
@@ -2956,7 +2964,13 @@ internal class NativeWindowHost(
                     nativeScene.hasInvalidations()
             if (composeNeedsDraw) {
                 if (hadPendingLayout) nativeScene.measureAndLayout()
-                nativeLayer.render(force = true)
+                val rendered = nativeLayer.nativeRender(force = true)
+                if (!rendered && nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.METAL) {
+                    forcedRenderScheduled.value = true
+                    renderScheduled.value = true
+                    application.requestFrame()
+                    return
+                }
                 if (windowShadowRefreshPending) {
                     windowShadowRefreshPending = false
                     if (isDrawingInsideTitleBar && currentPlacement == WindowPlacement.Floating) {
@@ -3146,26 +3160,42 @@ internal class NativeWindowHost(
 
     private fun applyPlacement() {
         val window = sdlWindow ?: return
+        val isFullscreen = SDL_GetWindowFlags(window) and SDL_WINDOW_FULLSCREEN != 0uL
         when (currentPlacement) {
             WindowPlacement.Fullscreen -> {
                 maximizeRequestPending = false
-                maximizeAfterFullscreenExit = false
-                check(SDL_SetWindowFullscreen(window, true)) {
-                    "Could not enter fullscreen: ${SDL_GetError()?.toKString()}"
+                placementAfterFullscreenExit = null
+                if (!isFullscreen) {
+                    check(kplatform_window_set_fullscreen(window, 1) != 0) {
+                        "Could not enter fullscreen: ${SDL_GetError()?.toKString()}"
+                    }
                 }
             }
             WindowPlacement.Maximized -> {
-                val wasFullscreen = SDL_GetWindowFlags(window) and SDL_WINDOW_FULLSCREEN != 0uL
                 maximizeRequestPending = true
-                maximizeAfterFullscreenExit = wasFullscreen
-                SDL_SetWindowFullscreen(window, false)
-                if (!wasFullscreen && !SDL_MaximizeWindow(window)) maximizeRequestPending = false
+                if (isFullscreen) {
+                    placementAfterFullscreenExit = WindowPlacement.Maximized
+                    check(kplatform_window_set_fullscreen(window, 0) != 0) {
+                        "Could not leave fullscreen before maximizing: ${SDL_GetError()?.toKString()}"
+                    }
+                } else {
+                    placementAfterFullscreenExit = null
+                    if (kplatform_window_set_maximized(window, 1) == 0) {
+                        maximizeRequestPending = false
+                    }
+                }
             }
             WindowPlacement.Floating -> {
                 maximizeRequestPending = false
-                maximizeAfterFullscreenExit = false
-                SDL_SetWindowFullscreen(window, false)
-                SDL_RestoreWindow(window)
+                if (isFullscreen) {
+                    placementAfterFullscreenExit = WindowPlacement.Floating
+                    check(kplatform_window_set_fullscreen(window, 0) != 0) {
+                        "Could not leave fullscreen: ${SDL_GetError()?.toKString()}"
+                    }
+                } else {
+                    placementAfterFullscreenExit = null
+                    kplatform_window_set_maximized(window, 0)
+                }
             }
         }
         applyResizable()
@@ -3281,7 +3311,7 @@ internal class NativeWindowHost(
         closed = true
         val nativeLayer = skiaLayer
         if (nativeLayer?.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
-            nativeLayer.withOpenGlContext { scene?.close() }
+            nativeLayer.withNativeOpenGlContext { scene?.close() }
         } else {
             scene?.close()
         }

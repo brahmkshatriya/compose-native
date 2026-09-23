@@ -33,9 +33,9 @@ import org.gradle.kotlin.dsl.apply
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinMultiplatformPluginWrapper
 
-class JetBrainsAndroidXImplPlugin @Inject constructor(
-    val componentFactory: SoftwareComponentFactory
-) : Plugin<Project> {
+class JetBrainsAndroidXImplPlugin
+@Inject
+constructor(val componentFactory: SoftwareComponentFactory) : Plugin<Project> {
 
     @Suppress("UNREACHABLE_CODE", "UNUSED_VARIABLE")
     override fun apply(project: Project) {
@@ -43,7 +43,8 @@ class JetBrainsAndroidXImplPlugin @Inject constructor(
 
         project.configureTests()
         project.changeMavenCoordinatesToJetBrains()
-//        project.configureRedirectionCapability() // TODO CMP-10368 fix old capability mechanism after migration to new artifact redirection
+        //        project.configureRedirectionCapability() // TODO CMP-10368 fix old capability
+        // mechanism after migration to new artifact redirection
         project.configureMavenArtifactUpload(componentFactory)
         project.configureForkDependenciesTasks()
         project.configureDependencyVerification()
@@ -62,20 +63,22 @@ class JetBrainsAndroidXImplPlugin @Inject constructor(
 
         // Parallel-graph back-end: consume `redirect { }` target declarations and re-root each
         // redirect target onto an empty `redirectCommonMain` that depends on the androidx.* coord.
-        project.extensions.findByType(AndroidXMultiplatformExtension::class.java)
-            ?.let { mpe -> project.applyParallelRedirectGraph(multiplatformExtension, mpe) }
+        project.extensions.findByType(AndroidXMultiplatformExtension::class.java)?.let { mpe ->
+            project.applyParallelRedirectGraph(multiplatformExtension, mpe)
+        }
     }
 }
 
 private fun Project.configureTests() {
     tasks.withType(AbstractTestTask::class.java) { task ->
         task.testLogging.apply {
-            events = hashSetOf(
-                TestLogEvent.FAILED,
-                TestLogEvent.SKIPPED,
-                TestLogEvent.STANDARD_OUT,
-                TestLogEvent.PASSED
-            )
+            events =
+                hashSetOf(
+                    TestLogEvent.FAILED,
+                    TestLogEvent.SKIPPED,
+                    TestLogEvent.STANDARD_OUT,
+                    TestLogEvent.PASSED,
+                )
             showExceptions = true
             showCauses = true
             showStackTraces = true
@@ -86,6 +89,7 @@ private fun Project.configureTests() {
 
 @OptIn(ExperimentalBCVApi::class)
 private fun enableBinaryCompatibilityValidator(project: Project) {
+    if (project.isJetBrainsAppleNativeOnlyPublication()) return
     project.afterEvaluate {
         if (JetBrainsPublication.shouldPublish(project)) {
             project.apply(plugin = "org.jetbrains.kotlinx.binary-compatibility-validator")

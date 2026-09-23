@@ -170,6 +170,11 @@ internal actual fun configureNativeGraphics(layer: SkiaLayer) {
     SDL_GL_SetAttribute(SDL_GLAttr.SDL_GL_STENCIL_SIZE, 8)
 }
 
+internal actual fun fallbackNativeGraphics(layer: SkiaLayer): Boolean {
+    layer.renderApi = org.jetbrains.skiko.GraphicsApi.SOFTWARE_FAST
+    return true
+}
+
 internal actual fun nativeGraphicsWindowFlags(layer: SkiaLayer): ULong =
     if (layer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) SDL_WINDOW_OPENGL else 0uL
 

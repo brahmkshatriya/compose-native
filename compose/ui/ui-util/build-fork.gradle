@@ -59,13 +59,6 @@ androidXMultiplatform {
             implementation(project(":kruth:kruth"))
         }
 
-        nonJvmMain {
-            dependencies {
-                // To comply with Klib resolver until https://youtrack.jetbrains.com/issue/KT-61096 is fixed
-                implementation("org.jetbrains.compose.collection-internal:collection:1.10.0")
-            }
-        }
-
         nativeMain {
             dependsOn(nonJvmMain)
         }
@@ -84,12 +77,6 @@ androidXMultiplatform {
 
         mingwX64Main {
             dependsOn(desktopNativeMain)
-        }
-
-        iosMain {
-            dependencies {
-                implementation(project(":compose:ui:ui-uikit"))
-            }
         }
 
         desktopTest {

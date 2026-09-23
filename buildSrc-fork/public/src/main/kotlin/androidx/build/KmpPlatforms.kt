@@ -64,6 +64,7 @@ enum class PlatformIdentifier(val id: String, val group: PlatformGroup) {
     ANDROID_NATIVE_ARM64("androidNativeArm64", PlatformGroup.ANDROID_NATIVE),
     ANDROID_NATIVE_X86("androidNativeX86", PlatformGroup.ANDROID_NATIVE),
     ANDROID_NATIVE_X64("androidNativeX64", PlatformGroup.ANDROID_NATIVE),
+    MAC_X_64("macosx64", PlatformGroup.MAC),
     MAC_ARM_64("macosarm64", PlatformGroup.MAC),
     MINGW_X_64("mingwx64", PlatformGroup.WINDOWS),
     LINUX_ARM_64("linuxarm64", PlatformGroup.LINUX),

@@ -333,7 +333,14 @@ def includeProject(String name, filePath, List<BuildType> filter = []) {
             ":kruth:kruth",
             ":test:screenshot:screenshot",
     ] as Set
-    if (nativeLinuxStubs.contains(name)) {
+    def requestedComposePlatforms =
+            gradle.startParameter.projectProperties.get("compose.platforms") ?: ""
+    def needsRealUIKit =
+            name == ":compose:ui:ui-uikit" &&
+                    requestedComposePlatforms
+                            .split(",")
+                            .any { it.trim().toLowerCase().startsWith("ios") }
+    if (nativeLinuxStubs.contains(name) && !needsRealUIKit) {
         filePath = "mpp/stub-project"
     }
     if (projectPrefixFilter.isConfigured) {
@@ -401,7 +408,14 @@ includeProject(":compose:material:material-lint")
 includeProject(":compose:material:material-navigation")
 includeProject(":compose:material:material-ripple")
 includeProject(":compose:runtime:runtime")
+includeProject(":compose:runtime:runtime-annotation")
 includeProject(":compose:runtime:runtime-lint")
+includeProject(":compose:runtime:runtime-retain")
+includeProject(":compose:runtime:runtime-retain-lint")
+includeProject(
+    ":compose:runtime:runtime-retain:runtime-retain-samples",
+    "compose/runtime/runtime-retain/samples"
+)
 includeProject(":compose:runtime:runtime-saveable")
 includeProject(":compose:runtime:runtime-test-utils")
 includeProject(":compose:ui:ui")
@@ -423,6 +437,8 @@ includeProject(":compose:ui:ui-uikit")
 includeProject(":compose:ui:ui-backhandler")
 includeProject(":compose:test-utils")
 
+includeProject(":collection:collection")
+
 includeProject(":kruth:kruth")
 
 includeProject(":lint-checks")
@@ -431,6 +447,7 @@ includeProject(":navigation:navigation-common")
 includeProject(":navigation:navigation-compose")
 includeProject(":navigation:navigation-runtime")
 includeProject(":navigation:navigation-testing")
+includeProject(":navigationevent:navigationevent")
 includeProject(":navigationevent:navigationevent-compose")
 includeProject(":navigation3:navigation3-runtime")
 includeProject(":navigation3:navigation3-ui")

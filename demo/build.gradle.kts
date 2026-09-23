@@ -1,4 +1,8 @@
-@file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
+@file:OptIn(
+    org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class,
+    org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeCacheApi::class,
+)
+@file:Suppress("DEPRECATION")
 
 plugins {
     id("org.jetbrains.kotlin.multiplatform")
@@ -14,6 +18,8 @@ compose.resources {
 }
 
 val wpePrefix = providers.environmentVariable("KTNATIVE_WPE_PREFIX").orElse("/usr").get()
+val macosX64SdlDylib =
+    providers.environmentVariable("COMPOSE_MACOS_X64_SDL_DYLIB").orNull?.let(::file)
 val appWebViewObject = layout.buildDirectory.file("native-support/app_webview.o")
 val appMpvObject = layout.buildDirectory.file("native-support/app_mpv.o")
 
@@ -61,8 +67,11 @@ kotlin {
             group("desktopNative") {
                 group("linux") { withLinux() }
             }
+            group("macos") { withMacos() }
         }
     }
+
+    jvm("desktop")
 
     val linuxTarget =
         if (System.getProperty("os.arch").equals("aarch64", ignoreCase = true) ||
@@ -119,18 +128,117 @@ kotlin {
         }
     }
 
+    fun org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget.configureMacosDemo() {
+        val targetName = name
+        val outDirectory = System.getenv("OUT_DIR")?.let(::file) ?: rootProject.file("out")
+        val macosSdlDirectory =
+            outDirectory.resolve(
+                "${rootProject.name}/compose/desktop/desktop-native/build/macos-sdl"
+            )
+        val sdlLinkerOpts =
+            if (name == "macosX64" && macosX64SdlDylib != null) {
+                listOf(
+                    macosX64SdlDylib.absolutePath,
+                    "-rpath", macosX64SdlDylib.parentFile.absolutePath,
+                )
+            } else {
+                listOf(
+                    "-F${macosSdlDirectory.absolutePath}",
+                    "-framework", "SDL3",
+                    "-rpath", macosSdlDirectory.absolutePath,
+                )
+            }
+        compilerOptions { freeCompilerArgs.add("-Xbackend-threads=0") }
+        val syncComposeResources =
+            tasks.register<Sync>(
+                "sync${targetName.replaceFirstChar { it.uppercase() }}ComposeResources"
+            ) {
+                from(
+                    layout.buildDirectory.dir(
+                        "generated/compose/resourceGenerator/preparedResources/commonMain/composeResources"
+                    )
+                )
+                from(
+                    layout.buildDirectory.dir(
+                        "generated/compose/resourceGenerator/preparedResources/macosMain/composeResources"
+                    )
+                )
+                from(
+                    layout.buildDirectory.dir(
+                        "generated/compose/resourceGenerator/preparedResources/${targetName}Main/composeResources"
+                    )
+                )
+                into(
+                    layout.buildDirectory.dir(
+                        "bin/$targetName/debugExecutable/composeResources/demo.generated.resources"
+                    )
+                )
+            }
+        binaries {
+            executable {
+                baseName = "compose-macos-sdl"
+                entryPoint = "dev.demo.main"
+                if (targetName == "macosX64") {
+                    disableNativeCache(
+                        org.jetbrains.kotlin.gradle.plugin.mpp.DisableCacheInKotlinVersion.`2_3_20`,
+                        "Work around Kotlin/Native 2.3.20 cache lowering failure for " +
+                            "androidx.graphics:graphics-shapes on macOS x64",
+                    )
+                }
+                linkTaskProvider.configure {
+                    finalizedBy(syncComposeResources)
+                }
+                linkerOpts(
+                    *sdlLinkerOpts.toTypedArray(),
+                    "-framework", "AppKit",
+                    "-framework", "Metal",
+                    "-framework", "QuartzCore",
+                )
+            }
+        }
+    }
+
+    macosX64 { configureMacosDemo() }
+    macosArm64 { configureMacosDemo() }
+
     sourceSets {
+        val commonMain by getting
         commonMain.dependencies {
+            implementation(project(":compose:animation:animation"))
+            implementation(project(":compose:foundation:foundation"))
+            implementation(project(":compose:material3:material3"))
+            implementation(project(":compose:ui:ui"))
+            implementation(project(":navigationevent:navigationevent-compose"))
             implementation(project(":compose:components:components-resources"))
+        }
+        val desktopMain by getting {
+            dependsOn(commonMain)
+            dependencies {
+                implementation(project(":compose:desktop:desktop"))
+            }
         }
         val desktopNativeMain by getting {
             dependencies {
-                implementation(project(":compose:material3:material3"))
+                implementation(project(":compose:desktop:desktop-native"))
+                implementation(project(":compose:ui:ui-backhandler"))
+            }
+        }
+        val macosMain by getting {
+            dependencies {
                 implementation(project(":compose:desktop:desktop-native"))
                 implementation(project(":compose:ui:ui-backhandler"))
             }
         }
     }
+}
+
+tasks.register("runJvmCatalogue", JavaExec::class.java) {
+    dependsOn(":compose:desktop:desktop:jvmJar")
+    group = "application"
+    description = "Runs the shared Compose component catalogue on JVM desktop"
+    mainClass.set("dev.demo.Main_desktopKt")
+    val compilation = kotlin.jvm("desktop").compilations["main"]
+    classpath = compilation.output.allOutputs + compilation.runtimeDependencyFiles
 }
 
 linuxNativeApplication {

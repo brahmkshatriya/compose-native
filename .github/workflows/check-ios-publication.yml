@@ -68,8 +68,7 @@ jobs:
             "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
             "-Pjetbrains.publication.version.LIFECYCLE=$version" \
             "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
-            :mpp:publishComposeIosToMavenLocal \
-            :mpp:publishComposeForkRootsToMavenLocal
+            :mpp:publishCompleteComposeForkToMavenLocal
 
       - name: Generate aggregate iOS KMP metadata
         shell: bash
@@ -99,42 +98,29 @@ jobs:
         run: |
           set -euo pipefail
           version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
-          official_skiko_version="$(sed -n 's/^skiko = "\([^"]*\)"/\1/p' gradle/libs.versions.toml | head -n1)"
+          official_skiko_version="$(sed -n 's/^skiko = "\([^"]*\)"/\1/p' gradle/libs-fork.versions.toml | head -n1)"
           group_root="$GITHUB_WORKSPACE/release/maven-local/dev/brahmkshatriya"
-          ui_root="$group_root/compose/ui/ui/$version/ui-$version.module"
-
-          test -s "$ui_root"
-          test -s "$group_root/compose/ui/ui/$version/ui-$version.jar"
-          jq -e '.variants[] | select(.name == "metadataApiElements")' "$ui_root" >/dev/null
-
           expected_targets=$'ios_arm64\nios_simulator_arm64'
-          actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$ui_root" | sort -u)"
-          test "$actual_targets" = "$expected_targets"
 
-          for module in \
-            ui-iosarm64 \
-            ui-iossimulatorarm64 \
-            foundation-iosarm64 \
-            foundation-iossimulatorarm64 \
-            material3-iosarm64 \
-            material3-iossimulatorarm64 \
-            ui-uikit-iosarm64 \
-            ui-uikit-iossimulatorarm64; do
-            test -d "$group_root/compose/${module%%-*}/$module/$version" || \
-              test -d "$group_root/compose/ui/$module/$version" || \
-              test -d "$group_root/compose/foundation/$module/$version" || \
-              test -d "$group_root/compose/material3/$module/$version"
+          for family in foundation material3; do
+            root="$group_root/compose/$family/$family/$version/$family-$version.module"
+            metadata="$group_root/compose/$family/$family/$version/$family-$version.jar"
+            test -s "$root"
+            test -s "$metadata"
+            jq -e '.variants[] | select(.name == "metadataApiElements")' "$root" >/dev/null
+            actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$root" | sort -u)"
+            test "$actual_targets" = "$expected_targets"
+            for suffix in iosarm64 iossimulatorarm64; do
+              test -d "$group_root/compose/$family/$family-$suffix/$version"
+            done
           done
-
-          uikit_root="$group_root/compose/ui/ui-uikit/$version"
-          test -s "$uikit_root/ui-uikit-$version.module"
-          test -s "$uikit_root/ui-uikit-$version.jar"
 
           ios_module_count="$(find "$group_root" \
             \( -path "*-iosarm64/$version/*.module" \
             -o -path "*-iossimulatorarm64/$version/*.module" \) | wc -l | tr -d ' ')"
-          test "$ios_module_count" -gt 10
+          test "$ios_module_count" -eq 4
 
+          upstream_compose_dependencies=0
           skiko_dependencies=0
           while IFS= read -r -d '' module_file; do
             if jq -e --arg version "$official_skiko_version" '
@@ -161,6 +147,13 @@ jobs:
             if jq -e '
               .variants[] |
               (.dependencies[]?, .dependencyConstraints[]?) |
+              select((.group // "") | startswith("org.jetbrains.compose."))
+            ' "$module_file" >/dev/null; then
+              upstream_compose_dependencies=$((upstream_compose_dependencies + 1))
+            fi
+            if jq -e '
+              .variants[] |
+              (.dependencies[]?, .dependencyConstraints[]?) |
               select(
                 (.group // "") | startswith("dev.brahmkshatriya.compose.") or
                   startswith("dev.brahmkshatriya.androidx.") or
@@ -170,14 +163,19 @@ jobs:
               echo "Fork-internal dependency coordinate leaked into $module_file" >&2
               exit 1
             fi
-          done < <(
-            find "$group_root" \
-              \( -path "*-iosarm64/$version/*.module" \
-              -o -path "*-iossimulatorarm64/$version/*.module" \) \
-              -print0
-          )
-          test "$skiko_dependencies" -gt 0
-          echo "Verified $ios_module_count iOS module metadata files with official Skiko $official_skiko_version"
+          done < <(find "$group_root" -path "*/$version/*.module" -print0)
+
+          for suffix in iosarm64 iossimulatorarm64; do
+            material3_module="$group_root/compose/material3/material3-$suffix/$version/material3-$suffix-$version.module"
+            jq -e '
+              .variants[] |
+              (.dependencies[]?, .dependencyConstraints[]?) |
+              select(.group == "org.jetbrains.compose.foundation" and .module == "foundation")
+            ' "$material3_module" >/dev/null
+          done
+
+          test "$upstream_compose_dependencies" -gt 0
+          echo "Verified exactly four fork iOS platform modules; all non-fork dependencies are upstream (Skiko refs: $skiko_dependencies)"
 
       - uses: actions/upload-artifact@v4
         name: Upload checked iOS Maven repository

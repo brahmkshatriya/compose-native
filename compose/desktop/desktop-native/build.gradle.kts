@@ -1,6 +1,8 @@
 @file:OptIn(org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi::class)
+@file:Suppress("DEPRECATION")
 
 import androidx.build.SoftwareType
+import org.jetbrains.androidx.build.ComposePlatforms
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
@@ -110,6 +112,166 @@ val prepareWindowsSdl by tasks.registering {
         }
     }
 }
+
+val requestedComposePlatforms =
+    providers.gradleProperty("compose.platforms").orNull?.let(ComposePlatforms::parse)
+fun composePlatformEnabled(platform: ComposePlatforms): Boolean =
+    requestedComposePlatforms == null || platform in requestedComposePlatforms
+
+val macosSdlVersion = windowsSdlVersion
+val macosSdlSha256 = "36f78737dcd13a6e47ee066a6e460501a3de7fca678fe97fc3deab7d5ebc8b0f"
+val macosSdlDirectory = layout.buildDirectory.dir("macos-sdl")
+val macosSdlDmg = macosSdlDirectory.map { it.file("SDL3-$macosSdlVersion.dmg") }
+val macosSdlFramework = macosSdlDirectory.map { it.dir("SDL3.framework") }
+
+val prepareMacosSdl by tasks.registering {
+    inputs.property("version", macosSdlVersion)
+    inputs.property("sha256", macosSdlSha256)
+    outputs.dir(macosSdlFramework)
+    doLast {
+        check(System.getProperty("os.name").contains("Mac", ignoreCase = true)) {
+            "Preparing the SDL macOS framework requires macOS"
+        }
+        val directory = macosSdlDirectory.get().asFile
+        directory.mkdirs()
+        val archive = macosSdlDmg.get().asFile
+        if (!archive.exists()) {
+            val temporary = archive.resolveSibling("${archive.name}.download")
+            temporary.delete()
+            URI.create(
+                    "https://github.com/libsdl-org/SDL/releases/download/" +
+                        "release-$macosSdlVersion/SDL3-$macosSdlVersion.dmg"
+                )
+                .toURL()
+                .openStream()
+                .use { input -> temporary.outputStream().use(input::copyTo) }
+            check(temporary.renameTo(archive)) { "Could not move the downloaded SDL macOS image" }
+        }
+        val digest = MessageDigest.getInstance("SHA-256")
+        val actual =
+            archive.inputStream().use { input ->
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+                digest.digest().joinToString("") { "%02x".format(it) }
+            }
+        check(actual == macosSdlSha256) {
+            "SDL $macosSdlVersion macOS checksum mismatch: expected $macosSdlSha256, got $actual"
+        }
+
+        val mount = directory.resolve("mount")
+        mount.deleteRecursively()
+        mount.mkdirs()
+        providers.exec {
+            commandLine(
+                "hdiutil", "attach", archive.absolutePath,
+                "-mountpoint", mount.absolutePath, "-nobrowse", "-readonly",
+            )
+        }.result.get()
+        try {
+            val framework =
+                mount.walkTopDown().firstOrNull { candidate ->
+                    candidate.isDirectory &&
+                        candidate.name == "SDL3.framework" &&
+                        candidate.path.contains("macos", ignoreCase = true)
+                } ?: mount.walkTopDown().firstOrNull { candidate ->
+                    candidate.isDirectory && candidate.name == "SDL3.framework"
+                } ?: error("SDL3.framework was not found in ${archive.name}")
+            sync {
+                from(framework)
+                into(macosSdlFramework.get().asFile)
+            }
+        } finally {
+            providers.exec {
+                isIgnoreExitValue = true
+                commandLine("hdiutil", "detach", mount.absolutePath, "-force")
+            }.result.get()
+            mount.deleteRecursively()
+        }
+    }
+}
+
+val macosNativeSources =
+    listOf(
+        "src/nativeInterop/cinterop/macos_gl_support.cpp",
+        "src/nativeInterop/cinterop/clipper2/clipper.engine.cpp",
+        "src/nativeInterop/cinterop/macos_native_desktop_support.mm",
+        "src/nativeInterop/cinterop/windows_tray_support.cpp",
+    )
+
+fun registerMacosNativeSupport(label: String, arch: String):
+    Pair<
+        org.gradle.api.provider.Provider<org.gradle.api.file.RegularFile>,
+        org.gradle.api.tasks.TaskProvider<Exec>,
+    > {
+    val directory = layout.buildDirectory.dir("native-support-macos-${label.lowercase()}")
+    val archive = directory.map { it.file("libcompose_sdl3_macos.a") }
+    val objects =
+        macosNativeSources.map { source ->
+            directory.map { it.file("${project.file(source).nameWithoutExtension}.o") }
+        }
+    val compileTasks =
+        macosNativeSources.mapIndexed { index, source ->
+            val sourceName =
+                project.file(source).nameWithoutExtension
+                    .replace(Regex("[^A-Za-z0-9_]"), "_")
+                    .replaceFirstChar(Char::uppercaseChar)
+            tasks.register<Exec>("compile${sourceName}Macos${label}Support") {
+                dependsOn(prepareMacosSdl)
+                inputs.file(source)
+                inputs.dir("src/nativeInterop/cinterop/include")
+                inputs.dir(macosSdlFramework)
+                inputs.property("arch", arch)
+                outputs.file(objects[index])
+                doFirst {
+                    val output = objects[index].get().asFile
+                    output.parentFile.mkdirs()
+                    val objcArgs = if (source.endsWith(".mm")) listOf("-fobjc-arc") else emptyList()
+                    commandLine(
+                        "clang++",
+                        "-arch", arch,
+                        "-std=c++17",
+                        "-O3",
+                        "-fPIC",
+                        "-w",
+                        *objcArgs.toTypedArray(),
+                        "-Isrc/nativeInterop/cinterop",
+                        "-Isrc/nativeInterop/cinterop/include",
+                        "-F${macosSdlDirectory.get().asFile.absolutePath}",
+                        "-c",
+                        source,
+                        "-o",
+                        output.absolutePath,
+                    )
+                }
+            }
+        }
+
+    val archiveTask = tasks.register<Exec>("archiveMacos${label}NativeSupport") {
+        dependsOn(compileTasks)
+        inputs.files(objects)
+        inputs.property("arch", arch)
+        outputs.file(archive)
+        doFirst {
+            val output = archive.get().asFile
+            output.parentFile.mkdirs()
+            output.delete()
+            commandLine(
+                "libtool", "-static", "-o", output.absolutePath,
+                *objects.map { it.get().asFile.absolutePath }.toTypedArray(),
+            )
+        }
+    }
+    return archive to archiveTask
+}
+
+val (macosX64NativeSupportArchive, archiveMacosX64NativeSupport) =
+    registerMacosNativeSupport("X64", "x86_64")
+val (macosArm64NativeSupportArchive, archiveMacosArm64NativeSupport) =
+    registerMacosNativeSupport("Arm64", "arm64")
 
 val windowsNativeSupportDirectory = layout.buildDirectory.dir("native-support-windows")
 val windowsNativeSupportArchive =
@@ -476,11 +638,12 @@ kotlin {
             group("desktopNative") {
                 group("linux") { withLinux() }
                 group("mingw") { withMingw() }
+                group("macos") { withMacos() }
             }
         }
     }
 
-    linuxX64 {
+    if (composePlatformEnabled(ComposePlatforms.LinuxX64)) linuxX64 {
         binaries.all { linkerOpts("-L/usr/lib") }
         compilerOptions {
             freeCompilerArgs.add("-Xbackend-threads=0")
@@ -505,7 +668,7 @@ kotlin {
         }
     }
 
-    linuxArm64 {
+    if (composePlatformEnabled(ComposePlatforms.LinuxArm64)) linuxArm64 {
         compilerOptions {
             freeCompilerArgs.add("-Xbackend-threads=0")
             freeCompilerArgs.addAll(
@@ -529,7 +692,74 @@ kotlin {
         }
     }
 
-    mingwX64 {
+    fun org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget.configureMacosDesktopNative(
+        nativeSupportArchive: org.gradle.api.provider.Provider<org.gradle.api.file.RegularFile>,
+        archiveNativeSupport: org.gradle.api.tasks.TaskProvider<Exec>,
+    ) {
+        compilerOptions {
+            freeCompilerArgs.add("-Xbackend-threads=0")
+            freeCompilerArgs.addAll(
+                "-include-binary",
+                nativeSupportArchive.get().asFile.absolutePath,
+            )
+        }
+        binaries.all {
+            linkerOpts(
+                "-F${macosSdlDirectory.get().asFile.absolutePath}",
+                "-framework", "SDL3",
+                "-framework", "AppKit",
+                "-framework", "Metal",
+                "-framework", "OpenGL",
+                "-framework", "QuartzCore",
+                "-lc++",
+                "-rpath", macosSdlDirectory.get().asFile.absolutePath,
+            )
+        }
+        compilations.getByName("main") {
+            compileTaskProvider.configure {
+                dependsOn(archiveNativeSupport, prepareMacosSdl)
+                inputs.file(nativeSupportArchive)
+                inputs.dir(macosSdlFramework)
+            }
+            cinterops {
+                val sdl3 by creating {
+                    defFile(project.file("src/nativeInterop/cinterop/sdl3.macos.def"))
+                    compilerOpts(
+                        "-F${macosSdlDirectory.get().asFile.absolutePath}",
+                    )
+                    linkerOpts(
+                        "-F${macosSdlDirectory.get().asFile.absolutePath}",
+                        "-framework", "SDL3",
+                    )
+                }
+                val nativeDesktop by creating {
+                    defFile(project.file("src/nativeInterop/cinterop/native-desktop.macos.def"))
+                    compilerOpts(
+                        "-Isrc/nativeInterop/cinterop/include",
+                        "-F${macosSdlDirectory.get().asFile.absolutePath}",
+                    )
+                    linkerOpts(
+                        "-F${macosSdlDirectory.get().asFile.absolutePath}",
+                        "-framework", "SDL3",
+                        "-lc++",
+                    )
+                }
+            }
+        }
+    }
+
+    if (composePlatformEnabled(ComposePlatforms.MacosX64)) {
+        macosX64 {
+            configureMacosDesktopNative(macosX64NativeSupportArchive, archiveMacosX64NativeSupport)
+        }
+    }
+    if (composePlatformEnabled(ComposePlatforms.MacosArm64)) {
+        macosArm64 {
+            configureMacosDesktopNative(macosArm64NativeSupportArchive, archiveMacosArm64NativeSupport)
+        }
+    }
+
+    if (composePlatformEnabled(ComposePlatforms.MingwX64)) mingwX64 {
         compilerOptions {
             freeCompilerArgs.add("-Xbackend-threads=0")
             freeCompilerArgs.addAll(
@@ -565,11 +795,12 @@ kotlin {
             dependencies {
                 api(project(":compose:ui:ui"))
                 implementation(project(":compose:foundation:foundation"))
-                implementation(libs.skikoNative)
+                implementation(libs.skiko)
             }
         }
-        linuxTest.dependencies { implementation(kotlin("test")) }
-        mingwX64Test.dependencies { implementation(kotlin("test")) }
+        findByName("linuxTest")?.dependencies { implementation(kotlin("test")) }
+        findByName("macosTest")?.dependencies { implementation(kotlin("test")) }
+        findByName("mingwX64Test")?.dependencies { implementation(kotlin("test")) }
     }
 }
 
@@ -577,6 +808,18 @@ tasks.matching {
     it.name == "cinteropSdl3MingwX64" || it.name == "cinteropNativeDesktopMingwX64"
 }.configureEach {
     dependsOn(prepareWindowsSdl)
+}
+
+tasks.matching {
+    it.name in
+        setOf(
+            "cinteropSdl3MacosX64",
+            "cinteropNativeDesktopMacosX64",
+            "cinteropSdl3MacosArm64",
+            "cinteropNativeDesktopMacosArm64",
+        )
+}.configureEach {
+    dependsOn(prepareMacosSdl)
 }
 
 androidx {

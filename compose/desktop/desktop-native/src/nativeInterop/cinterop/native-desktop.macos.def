@@ -1,0 +1,4 @@
+headers = native_desktop.h native_tray.h native_drag.h native_gl.h
+headerFilter = native_desktop.h native_tray.h native_drag.h native_gl.h
+package = nativedesktop
+compilerOpts = -Isrc/nativeInterop/cinterop/include

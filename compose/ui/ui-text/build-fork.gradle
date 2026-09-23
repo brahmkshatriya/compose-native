@@ -61,6 +61,7 @@ androidXMultiplatform {
 
             // when updating the runtime version please also update the runtime-saveable version
             implementation(project(":compose:runtime:runtime"))
+            implementation("androidx.compose.runtime:runtime-saveable:1.13.0-alpha03")
             implementation(project(":compose:runtime:runtime-saveable"))
 
             implementation(project(":compose:ui:ui-util"))
@@ -114,7 +115,6 @@ androidXMultiplatform {
             dependsOn(nonAndroidMain)
             dependencies {
                 // To comply with Klib resolver until https://youtrack.jetbrains.com/issue/KT-61096 is fixed
-                implementation("org.jetbrains.compose.collection-internal:collection:1.10.0")
             }
         }
 

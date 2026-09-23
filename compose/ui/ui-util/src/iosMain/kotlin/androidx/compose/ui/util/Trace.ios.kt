@@ -14,15 +14,7 @@
  * limitations under the License.
  */
 
-@file:OptIn(ExperimentalForeignApi::class)
-
 package androidx.compose.ui.util
-
-import androidx.compose.ui.uikit.utils.CMPOSAppTraceLogger
-import androidx.compose.ui.uikit.utils.CMPOSInitializeAppTraceLogger
-import kotlinx.cinterop.ExperimentalForeignApi
-
-// TODO: Move it to darwinMain (requires re-organization of obj-c integration)
 
 /**
  * Enables iOS OS logging for the `androidx.compose.ui` APIs.
@@ -30,20 +22,9 @@ import kotlinx.cinterop.ExperimentalForeignApi
  * Tracing allows logging detailed information about the Compose UI framework, which can be further
  * analyzed using the XCode Instruments tool.
  */
-fun enableTraceOSLog() {
-    CMPOSInitializeAppTraceLogger(name = "androidx.compose.ui")
-}
+fun enableTraceOSLog() {}
 
-actual inline fun <T> trace(sectionName: String, block: () -> T): T {
-    val interval = CMPOSAppTraceLogger()?.beginIntervalNamed(sectionName)
-    try {
-        return block()
-    } finally {
-        interval?.let {
-            CMPOSAppTraceLogger()?.endInterval(it)
-        }
-    }
-}
+actual inline fun <T> trace(sectionName: String, block: () -> T): T = block()
 
 actual fun traceValue(tag: String, value: Long) {
 }

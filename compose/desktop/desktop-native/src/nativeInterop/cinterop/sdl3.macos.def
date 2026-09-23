@@ -1,0 +1,3 @@
+headers = SDL3/SDL.h
+headerFilter = SDL3/SDL*.h
+package = sdl3

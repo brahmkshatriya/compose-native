@@ -37,7 +37,7 @@ androidXMultiplatform {
 
         }
         desktop()
-        mac()
+        macosArm64()
         linux()
         ios()
         watchos()
@@ -46,6 +46,10 @@ androidXMultiplatform {
         js()
         wasmJs()
     }
+
+    // AndroidX does not publish lifecycle-viewmodel-navigation3 for Intel macOS. Build macosX64
+    // from the in-tree sources while retaining the upstream redirect for Apple Silicon macOS.
+    macosX64()
 
     defaultPlatform(PlatformIdentifier.ANDROID)
 

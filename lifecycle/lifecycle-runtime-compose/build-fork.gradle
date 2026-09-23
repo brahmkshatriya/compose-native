@@ -38,7 +38,7 @@ androidXMultiplatform {
         desktop()
         mingwX64()
         linux()
-        mac()
+        macosArm64()
         ios()
         tvos()
         watchos()
@@ -46,19 +46,25 @@ androidXMultiplatform {
         wasmJs()
     }
 
+    // Keep Intel macOS on the source-built lifecycle graph so it cannot mix old
+    // AndroidX/JetBrains runtime KLIBs with the current sources.
+    macosX64()
+
     defaultPlatform(PlatformIdentifier.ANDROID)
 
     sourceSets {
         // jbVerifyForkDependencies: suppress
         commonMain {
             dependencies {
-                // Keep direct references to fork versions to correctly resolve
-                // new redirections to Google's artifacts.
-                implementation(project(":lifecycle:lifecycle-common"))
                 api(project(":lifecycle:lifecycle-runtime"))
-                api("org.jetbrains.compose.runtime:runtime:1.9.3")
+                api("androidx.annotation:annotation:1.9.1")
+                api(project(":compose:runtime:runtime"))
             }
         }
+
+        create("nonAndroidMain").dependsOn(commonMain)
+        desktopMain.dependsOn(nonAndroidMain)
+        nonJvmMain.dependsOn(nonAndroidMain)
     }
 }
 

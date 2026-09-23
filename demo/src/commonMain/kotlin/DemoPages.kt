@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalPlatformAccentColor
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import demo.generated.resources.GoogleSansFlex
@@ -31,22 +30,19 @@ import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun HelloDemoPage() {
+internal fun HelloDemoPage(accentColor: Color?) {
     val darkTheme = isSystemInDarkTheme()
     MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
         Surface(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                val accentColor =
-                    LocalPlatformAccentColor.current ?: MaterialTheme.colorScheme.primary
+                val accent = accentColor ?: MaterialTheme.colorScheme.primary
                 Button(
                     onClick = {},
                     modifier = Modifier.padding(16.dp),
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor = accentColor,
-                            contentColor =
-                                if (accentColor.luminance() > 0.5f) Color.Black else Color.White,
-                        ),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accent,
+                        contentColor = if (accent.luminance() > 0.5f) Color.Black else Color.White,
+                    ),
                 ) {
                     Text("hi")
                 }
@@ -56,7 +52,7 @@ internal fun HelloDemoPage() {
 }
 
 @Composable
-internal fun ResourceDemoPage() {
+internal fun ResourceDemoPage(platformName: String) {
     val font = Font(Res.font.GoogleSansFlex)
     Column(
         modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -65,9 +61,6 @@ internal fun ResourceDemoPage() {
     ) {
         Icon(painter = painterResource(Res.drawable.ic_home_filled), contentDescription = null)
         Text(text = stringResource(Res.string.app_name), fontFamily = FontFamily(font))
-        Text(
-            "String, vector, and byte-backed font resources are loaded by the " +
-                "$desktopPlatformName runtime."
-        )
+        Text("The same common resources are loaded through the $platformName runtime.")
     }
 }

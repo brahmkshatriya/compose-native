@@ -3,15 +3,27 @@ import org.jetbrains.androidx.build.ComposePlatforms
 import org.jetbrains.androidx.build.ComposeProperties
 import org.jetbrains.androidx.build.JetBrainsPublication
 
-// this module depends on all other modules info, so we need to initialize them first
-(rootProject.allprojects - project).forEach {
-    evaluationDependsOn(it.path)
+val parsedComposeProperties = ComposeProperties(project)
+
+// Publication tasks inspect target-specific tasks from the projects they publish. Desktop/JVM
+// publication intentionally contains only the two fork-specific modules, so avoid eagerly
+// evaluating the unrelated AndroidX graph in that filtered build. Other publication modes keep
+// the historical all-project evaluation behavior.
+val projectsRequiredForPublication =
+    when {
+        parsedComposeProperties.targetPlatforms == setOf(ComposePlatforms.Desktop) ->
+            JetBrainsPublication.jvmComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
+        parsedComposeProperties.targetPlatforms.isNotEmpty() &&
+            parsedComposeProperties.targetPlatforms.all { it in ComposePlatforms.MACOS_NATIVE } ->
+            JetBrainsPublication.macosComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
+        else -> rootProject.allprojects - project
+    }
+projectsRequiredForPublication.forEach { publicationProject ->
+    evaluationDependsOn(publicationProject.path)
 }
 
 val libraryToComponents = JetBrainsPublication.libraryToComponents
 val Project.composeComponent get() = JetBrainsPublication.projectPathToComponent[path]
-
-val parsedComposeProperties = ComposeProperties(project)
 
 tasks.register("publishComposeJb", ComposePublishingTask::class) {
     group = "Compose Multiplatform"
@@ -55,20 +67,48 @@ tasks.register("publishComposeForkPlatformsToMavenLocal", ComposePublishingTask:
     }
 }
 
+tasks.register("publishComposeJvmToMavenLocal", ComposePublishingTask::class) {
+    group = "Compose Multiplatform"
+    description = "Publishes only fork-specific Compose Desktop/JVM target modules to Maven Local"
+    repository = "MavenLocal"
+    composeProperties = parsedComposeProperties
+
+    JetBrainsPublication.jvmComponents.forEach {
+        publishAvailablePlatformsOnly(rootProject, it)
+    }
+}
+
+tasks.register("publishComposeJvmForkRootsToMavenLocal") {
+    group = "Compose Multiplatform"
+    description = "Publishes KMP roots only for the fork-specific JVM Compose modules"
+
+    JetBrainsPublication.jvmComponents.forEach { component ->
+        rootProject.findProject(component.path)
+            ?.tasks
+            ?.findByName("publishKotlinMultiplatformPublicationToMavenLocal")
+            ?.let { dependsOn(it) }
+    }
+}
+
 tasks.register("publishComposeIosToMavenLocal", ComposePublishingTask::class) {
     group = "Compose Multiplatform"
-    description = "Publishes the complete fork iOS target graph to Maven Local"
+    description = "Publishes only fork-specific iOS target modules to Maven Local"
     repository = "MavenLocal"
     composeProperties = parsedComposeProperties
 
     JetBrainsPublication.iosComponents.forEach { component ->
-        if (component.path == ":compose:ui:ui-uikit") {
-            // ui-uikit exists only on iOS in this fork, so its KMP root cannot be supplied by
-            // the Linux root-publication job. Publish that root alongside its iOS variants.
-            publishAvailablePlatforms(rootProject, component)
-        } else {
-            publishAvailablePlatformsOnly(rootProject, component)
-        }
+        publishAvailablePlatformsOnly(rootProject, component)
+    }
+}
+
+tasks.register("publishComposeMacosToMavenLocal", ComposePublishingTask::class) {
+    group = "Compose Multiplatform"
+    description = "Publishes the complete desktop-native macOS target graph to Maven Local"
+    repository = "MavenLocal"
+    composeProperties = parsedComposeProperties
+
+    JetBrainsPublication.macosComponents.forEach { component ->
+        publishAvailablePlatformsOnly(rootProject, component)
     }
 }
 

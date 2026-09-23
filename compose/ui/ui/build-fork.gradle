@@ -157,8 +157,6 @@ androidXMultiplatform {
             dependsOn(skikoMain)
             dependencies {
                 // To comply with Klib resolver until https://youtrack.jetbrains.com/issue/KT-61096 is fixed
-                implementation("org.jetbrains.compose.annotation-internal:annotation:1.10.0")
-                implementation("org.jetbrains.compose.collection-internal:collection:1.10.0")
                 implementation(project(":compose:ui:ui-backhandler"))
                 implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.9.6")
                 implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate:2.9.6")
@@ -177,8 +175,12 @@ androidXMultiplatform {
             dependsOn(nonJvmTest)
         }
 
-        desktopNativeMain {
+        desktopNativeHostMain {
             dependsOn(nativeMain)
+        }
+
+        desktopNativeMain {
+            dependsOn(desktopNativeHostMain)
             dependsOn(skikoBackendMain)
         }
 
@@ -191,6 +193,7 @@ androidXMultiplatform {
         }
 
         macosMain {
+            dependsOn(desktopNativeHostMain)
             dependsOn(skikoBackendMain)
         }
 
@@ -230,8 +233,10 @@ androidXMultiplatform {
     }
 }
 
-dependencies {
-    lintChecks(project(":compose:ui:ui-lint"))
+plugins.withId("com.android.library") {
+    dependencies {
+        lintChecks(project(":compose:ui:ui-lint"))
+    }
 }
 
 androidx {

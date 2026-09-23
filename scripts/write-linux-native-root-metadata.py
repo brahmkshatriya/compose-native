@@ -17,12 +17,23 @@ NATIVE_TARGETS = {
     "linuxx64": "linux_x64",
     "linuxarm64": "linux_arm64",
     "mingwx64": "mingw_x64",
+    "macosx64": "macos_x64",
+    "macosarm64": "macos_arm64",
+}
+NATIVE_SKIKO_TARGETS = {"linuxx64", "linuxarm64", "mingwx64", "macosx64", "macosarm64"}
+NATIVE_SKIKO_TARGET_NAMES = {NATIVE_TARGETS[suffix] for suffix in NATIVE_SKIKO_TARGETS}
+
+NATIVE_VARIANT_NAMES = {
+    "linuxx64": "linuxX64ApiElements",
+    "linuxarm64": "linuxArm64ApiElements",
+    "mingwx64": "mingwX64ApiElements",
+    "macosx64": "macosX64ApiElements",
+    "macosarm64": "macosArm64ApiElements",
 }
 OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 SKIKO_MODULE = "skiko"
 DESKTOP_NATIVE_GROUP_SUFFIX = ".compose.desktop"
 DESKTOP_NATIVE_MODULE = "desktop-native"
-DESKTOP_NATIVE_TARGETS = ("linux_arm64", "linux_x64", "mingw_x64")
 DESKTOP_NATIVE_CINTEROPS = ("cinterop-sdl3", "cinterop-nativedesktop")
 
 
@@ -46,16 +57,16 @@ def write_metadata_jar_entry(
     destination.writestr(entry, content)
 
 
-def commonize_klib_manifest(content: bytes) -> bytes:
+def commonize_klib_manifest(content: bytes, targets: tuple[str, ...]) -> bytes:
     values = {}
     for line in content.decode("utf-8").splitlines():
         key, separator, value = line.partition("=")
         if separator:
             values[key] = value
-    targets = " ".join(DESKTOP_NATIVE_TARGETS)
-    values["commonizer_native_targets"] = targets
-    values["commonizer_target"] = f"({', '.join(DESKTOP_NATIVE_TARGETS)})"
-    values["native_targets"] = targets
+    target_list = " ".join(targets)
+    values["commonizer_native_targets"] = target_list
+    values["commonizer_target"] = f"({', '.join(targets)})"
+    values["native_targets"] = target_list
     return ("\n".join(f"{key}={value}" for key, value in sorted(values.items())) + "\n").encode()
 
 
@@ -87,21 +98,34 @@ def create_desktop_native_metadata(
     ):
         return None
 
-    platform_module = f"{root_module}-linuxx64"
-    platform_directory = repository.joinpath(
-        *root_group.split("."), platform_module, version
-    )
-    platform_module_file = platform_directory / f"{platform_module}-{version}.module"
-    if not platform_module_file.is_file():
+    published_targets: list[tuple[str, str, Path, Path]] = []
+    for platform_suffix, native_target in NATIVE_TARGETS.items():
+        platform_module = f"{root_module}-{platform_suffix}"
+        platform_directory = repository.joinpath(
+            *root_group.split("."), platform_module, version
+        )
+        platform_module_file = platform_directory / f"{platform_module}-{version}.module"
+        if platform_module_file.is_file():
+            published_targets.append(
+                (platform_suffix, native_target, platform_directory, platform_module_file)
+            )
+    if not published_targets:
         return None
 
+    # Prefer Linux x64 as the long-standing metadata template when it is present; otherwise use
+    # the first locally published desktop-native target (notably macOS-only publication jobs).
+    template = next(
+        (target for target in published_targets if target[0] == "linuxx64"),
+        published_targets[0],
+    )
+    platform_suffix, template_native_target, platform_directory, platform_module_file = template
     platform_metadata = json.loads(platform_module_file.read_text(encoding="utf-8"))
     api_variant = next(
         (
             variant
             for variant in platform_metadata.get("variants", [])
             if variant.get("attributes", {}).get("org.jetbrains.kotlin.native.target")
-            == "linux_x64"
+            == template_native_target
             and variant.get("attributes", {}).get("org.gradle.usage") == "kotlin-api"
         ),
         None,
@@ -133,17 +157,10 @@ def create_desktop_native_metadata(
             "isPublishedAsRoot": "true",
             "variants": [
                 {
-                    "name": "linuxX64ApiElements",
+                    "name": NATIVE_VARIANT_NAMES[platform_suffix],
                     "sourceSet": ["commonMain", "desktopNativeMain"],
-                },
-                {
-                    "name": "linuxArm64ApiElements",
-                    "sourceSet": ["commonMain", "desktopNativeMain"],
-                },
-                {
-                    "name": "mingwX64ApiElements",
-                    "sourceSet": ["commonMain", "desktopNativeMain"],
-                },
+                }
+                for platform_suffix, _, _, _ in published_targets
             ],
             "sourceSets": [
                 {
@@ -168,6 +185,7 @@ def create_desktop_native_metadata(
             ],
         }
     }
+    published_native_targets = tuple(target[1] for target in published_targets)
     with zipfile.ZipFile(klib_file) as source, zipfile.ZipFile(
         temporary_jar, "w", compression=zipfile.ZIP_DEFLATED
     ) as destination:
@@ -187,7 +205,7 @@ def create_desktop_native_metadata(
                 continue
             content = source.read(entry.filename)
             if entry.filename == "default/manifest":
-                content = commonize_klib_manifest(content)
+                content = commonize_klib_manifest(content, published_native_targets)
             write_metadata_jar_entry(
                 destination,
                 f"desktopNativeMain/{entry.filename}",
@@ -222,7 +240,7 @@ def create_desktop_native_metadata(
                         continue
                     content = cinterop.read(entry.filename)
                     if entry.filename == "default/manifest":
-                        content = commonize_klib_manifest(content)
+                        content = commonize_klib_manifest(content, published_native_targets)
                     write_metadata_jar_entry(
                         destination,
                         f"desktopNativeMain-cinterop/{library_directory}/{entry.filename}",
@@ -257,9 +275,12 @@ def create_desktop_native_metadata(
 
 def upstream_group_for_fork_dependency(group: str, group_prefix: str) -> str | None:
     compose_prefix = f"{group_prefix}.compose."
+    navigation3_prefix = f"{group_prefix}.androidx.navigation3"
     androidx_prefix = f"{group_prefix}.androidx."
     if group.startswith(compose_prefix):
         return f"org.jetbrains.compose.{group.removeprefix(compose_prefix)}"
+    if group == navigation3_prefix or group.startswith(f"{navigation3_prefix}."):
+        return f"androidx.navigation3{group.removeprefix(navigation3_prefix)}"
     if group.startswith(androidx_prefix):
         return f"org.jetbrains.androidx.{group.removeprefix(androidx_prefix)}"
     return None
@@ -274,7 +295,7 @@ def upstream_version_for_dependency(
         return upstream_versions.get("compose")
     if group == "org.jetbrains.androidx.lifecycle":
         return upstream_versions.get("lifecycle")
-    if group == "org.jetbrains.androidx.navigation3":
+    if group in {"androidx.navigation3", "org.jetbrains.androidx.navigation3"}:
         return upstream_versions.get("navigation3")
     if group == "org.jetbrains.androidx.navigationevent":
         return upstream_versions.get("navigationevent")
@@ -294,29 +315,33 @@ def rewrite_module_dependency_groups(
     metadata = json.loads(module_file.read_text(encoding="utf-8"))
     rewritten = 0
     for variant in metadata.get("variants", []):
+        rewritten += remove_unpublished_stub_dependencies(variant)
+        attributes = variant.get("attributes", {})
         is_desktop_native = (
-            variant.get("attributes", {}).get("org.jetbrains.kotlin.native.target")
-            in NATIVE_TARGETS.values()
+            attributes.get("org.jetbrains.kotlin.native.target") in NATIVE_SKIKO_TARGET_NAMES
         )
+        is_jvm = attributes.get("org.jetbrains.kotlin.platform.type") == "jvm"
         for dependency_section in ("dependencies", "dependencyConstraints"):
             for dependency in variant.get(dependency_section, []):
                 group = dependency.get("group")
                 if not isinstance(group, str):
                     continue
-                if (
-                    is_desktop_native
-                    and group == OFFICIAL_SKIKO_GROUP
-                    and dependency.get("module") == SKIKO_MODULE
-                ):
-                    dependency["group"] = native_skiko_group
-                    rewritten += 1
+                if group == OFFICIAL_SKIKO_GROUP and dependency.get("module") == SKIKO_MODULE:
                     version = dependency.get("version")
-                    if isinstance(version, dict):
-                        for key in ("requires", "strictly", "prefers"):
-                            if key in version and version[key] != native_skiko_version:
-                                version[key] = native_skiko_version
-                                rewritten += 1
-                    continue
+                    if is_desktop_native:
+                        dependency["group"] = native_skiko_group
+                        rewritten += 1
+                        if isinstance(version, dict):
+                            for key in ("requires", "strictly", "prefers"):
+                                if key in version and version[key] != native_skiko_version:
+                                    version[key] = native_skiko_version
+                                    rewritten += 1
+                        continue
+                legacy_navigation3_group = group == "org.jetbrains.androidx.navigation3"
+                if legacy_navigation3_group:
+                    dependency["group"] = "androidx.navigation3"
+                    group = "androidx.navigation3"
+                    rewritten += 1
                 upstream_group = upstream_group_for_fork_dependency(
                     group, group_prefix
                 )
@@ -332,7 +357,11 @@ def rewrite_module_dependency_groups(
                 version = dependency.get("version")
                 if upstream_version is not None and isinstance(version, dict):
                     for key in ("requires", "strictly", "prefers"):
-                        if version.get(key) == publication_version:
+                        if version.get(key) == publication_version or (
+                            legacy_navigation3_group
+                            and key in version
+                            and version.get(key) != upstream_version
+                        ):
                             version[key] = upstream_version
                             rewritten += 1
     if rewritten:
@@ -356,8 +385,9 @@ def rewrite_pom_dependency_groups(
     artifact = pom_file.parent.parent.name
     is_desktop_native = any(
         artifact.endswith(f"-{platform_suffix}")
-        for platform_suffix in NATIVE_TARGETS
+        for platform_suffix in NATIVE_SKIKO_TARGETS
     )
+    is_jvm = artifact.endswith("-desktop") or artifact.endswith("-jvm")
 
     def rewrite_dependency(match: re.Match[str]) -> str:
         nonlocal rewritten
@@ -367,6 +397,7 @@ def rewrite_pom_dependency_groups(
         if group_match is None:
             return dependency
         group = group_match.group(1)
+        legacy_navigation3_group = group == "org.jetbrains.androidx.navigation3"
         artifact_match = re.search(r"<artifactId>([^<]+)</artifactId>", dependency)
         if (
             is_desktop_native
@@ -386,6 +417,14 @@ def rewrite_pom_dependency_groups(
             )
             rewritten += version_rewrites
             return dependency
+        if legacy_navigation3_group:
+            dependency = dependency.replace(
+                f"<groupId>{group}</groupId>",
+                "<groupId>androidx.navigation3</groupId>",
+                1,
+            )
+            group = "androidx.navigation3"
+            rewritten += 1
         upstream_group = upstream_group_for_fork_dependency(group, group_prefix)
         if upstream_group is not None:
             dependency = dependency.replace(
@@ -401,9 +440,12 @@ def rewrite_pom_dependency_groups(
             upstream_group, upstream_versions
         )
         if upstream_version is not None:
-            version_pattern = re.compile(
-                rf"(<version>)({re.escape(publication_version)})(</version>)"
-            )
+            if legacy_navigation3_group:
+                version_pattern = re.compile(r"(<version>)([^<]+)(</version>)")
+            else:
+                version_pattern = re.compile(
+                    rf"(<version>)({re.escape(publication_version)})(</version>)"
+                )
             dependency, version_rewrites = version_pattern.subn(
                 rf"\g<1>{upstream_version}\g<3>", dependency, count=1
             )
@@ -459,24 +501,29 @@ def is_publishable_root_variant(variant: dict[str, object]) -> bool:
     return str(variant.get("name", "")).startswith("metadata")
 
 
-def remove_unpublished_stub_dependencies(variant: dict[str, object]) -> None:
-    dependencies = variant.get("dependencies")
-    if not isinstance(dependencies, list):
-        return
-    variant["dependencies"] = [
-        dependency
-        for dependency in dependencies
-        if not (
-            isinstance(dependency, dict)
-            and str(dependency.get("group", "")).startswith(
-                "compose-multiplatform-core."
+def remove_unpublished_stub_dependencies(variant: dict[str, object]) -> int:
+    removed = 0
+    for section in ("dependencies", "dependencyConstraints"):
+        dependencies = variant.get(section)
+        if not isinstance(dependencies, list):
+            continue
+        filtered = [
+            dependency
+            for dependency in dependencies
+            if not (
+                isinstance(dependency, dict)
+                and str(dependency.get("group", "")).startswith(
+                    "compose-multiplatform-core."
+                )
+                and (
+                    dependency.get("version") == {"requires": "unspecified"}
+                    or dependency.get("version") == {"strictly": "unspecified"}
+                )
             )
-            and (
-                dependency.get("version") == {"requires": "unspecified"}
-                or dependency.get("version") == {"strictly": "unspecified"}
-            )
-        )
-    ]
+        ]
+        removed += len(dependencies) - len(filtered)
+        variant[section] = filtered
+    return removed
 
 
 def main() -> None:

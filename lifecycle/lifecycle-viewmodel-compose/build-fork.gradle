@@ -37,7 +37,7 @@ androidXMultiplatform {
 
         }
         desktop()
-        mac()
+        macosArm64()
         linux()
         ios()
         watchos()
@@ -46,6 +46,10 @@ androidXMultiplatform {
         js()
         wasmJs()
     }
+
+    // Google no longer publishes these redirect artifacts for Intel macOS.
+    // Build macosX64 from the in-tree sources while retaining redirects elsewhere.
+    macosX64()
 
     defaultPlatform(PlatformIdentifier.ANDROID)
 

@@ -87,9 +87,11 @@ androidXMultiplatform {
     }
 }
 
-dependencies {
-    lintPublish(project(":navigation3:navigation3-ui-lint"))
-    lintChecks(project(":navigation3:navigation3-ui-lint"))
+plugins.withId("com.android.library") {
+    dependencies {
+        lintChecks(project(":navigation3:navigation3-ui-lint"))
+        lintPublish(project(":navigation3:navigation3-ui-lint"))
+    }
 }
 
 androidx {

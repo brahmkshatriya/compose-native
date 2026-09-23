@@ -34,13 +34,17 @@ androidXMultiplatform {
         desktop()
         mingwX64()
         linux()
-        mac()
+        macosArm64()
         ios()
         tvos()
         watchos()
         js()
         wasmJs()
     }
+
+    // AndroidX Navigation 3 does not publish an Intel macOS KLIB. Build this target from
+    // the in-tree sources while retaining artifact redirection for the published targets.
+    macosX64()
 
     defaultPlatform(PlatformIdentifier.ANDROID)
 

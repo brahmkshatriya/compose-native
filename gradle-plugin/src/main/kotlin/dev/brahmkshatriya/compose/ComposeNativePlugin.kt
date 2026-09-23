@@ -212,7 +212,7 @@ private fun Project.configureLocalDependencySubstitutions(
                             it,
                             includeNativeOnlyCompose = true,
                             includeJetBrainsAndroidx = true,
-                            includeAndroidx = false,
+                            includeAndroidx = true,
                         )
                     } ?: return@all
                 details.useTarget(composeTarget)
@@ -255,9 +255,8 @@ internal fun Project.nativeSkikoPublicationVersion(): String {
     return declaredVersions.singleOrNull() ?: DEFAULT_NATIVE_SKIKO_VERSION
 }
 
-private class RewriteNativeSkikoPublicationMetadataAction(
-    private val nativeSkikoVersion: String,
-) : Action<Task>, Serializable {
+private class RewriteNativeSkikoPublicationMetadataAction(private val nativeSkikoVersion: String) :
+    Action<Task>, Serializable {
     override fun execute(task: Task) {
         val metadataTask = task as GenerateModuleMetadata
         val metadataFile = metadataTask.outputFile.get().asFile
@@ -282,7 +281,7 @@ internal fun rewriteNativeSkikoPublicationMetadata(
     }
 
 internal fun String.isDesktopNativePublicationMetadataTask(): Boolean =
-    DESKTOP_NATIVE_TARGET_SOURCE_SETS.values.any { targetName ->
+    DESKTOP_NATIVE_PUBLICATION_TARGET_NAMES.any { targetName ->
         contains(targetName, ignoreCase = true)
     }
 
@@ -353,6 +352,12 @@ internal fun composeForkCoordinateFor(
     }
     if (includeJetBrainsAndroidx && group.startsWith(OFFICIAL_ANDROIDX_GROUP_PREFIX)) {
         val family = group.removePrefix(OFFICIAL_ANDROIDX_GROUP_PREFIX)
+        if (family in FORK_ANDROIDX_FAMILIES) {
+            return "$FORK_ANDROIDX_GROUP_PREFIX$family:$module:$version"
+        }
+    }
+    if (includeAndroidx && group.startsWith(ANDROIDX_GROUP_PREFIX)) {
+        val family = group.removePrefix(ANDROIDX_GROUP_PREFIX)
         if (family in FORK_ANDROIDX_FAMILIES) {
             return "$FORK_ANDROIDX_GROUP_PREFIX$family:$module:$version"
         }
@@ -592,13 +597,14 @@ private const val DESKTOP_NATIVE_MAIN_CONFIGURATION_PREFIX = "desktopNativeMain"
 private const val RESOLVABLE_METADATA_CONFIGURATION_SUFFIX = "ResolvableDependenciesMetadata"
 private const val OFFICIAL_COMPOSE_GROUP_PREFIX = "org.jetbrains.compose."
 private const val OFFICIAL_ANDROIDX_GROUP_PREFIX = "org.jetbrains.androidx."
+private const val ANDROIDX_GROUP_PREFIX = "androidx."
 private const val ANDROIDX_COMPOSE_GROUP_PREFIX = "androidx.compose."
 private const val FORK_COMPOSE_GROUP_PREFIX = "dev.brahmkshatriya.compose."
 private const val FORK_ANDROIDX_GROUP_PREFIX = "dev.brahmkshatriya.androidx."
 private const val OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 private const val FORK_SKIKO_GROUP = "dev.brahmkshatriya.skiko"
 private const val SKIKO_MODULE = "skiko"
-private const val DEFAULT_NATIVE_SKIKO_VERSION = "0.151.5"
+private const val DEFAULT_NATIVE_SKIKO_VERSION = "0.153.1"
 private val ANDROIDX_COMPOSE_FAMILIES =
     setOf("animation", "foundation", "material", "material3", "runtime", "ui")
 private val ANDROIDX_COMPOSE_FORK_MODULES =
@@ -611,7 +617,10 @@ private val ANDROIDX_COMPOSE_FORK_MODULES =
         "material",
         "material-ripple",
         "material3",
+        "material3-ripple",
         "runtime",
+        "runtime-annotation",
+        "runtime-retain",
         "runtime-saveable",
         "ui",
         "ui-backhandler",
@@ -625,16 +634,18 @@ private val ANDROIDX_COMPOSE_FORK_MODULES =
 private val COMPOSE_FAMILIES = ANDROIDX_COMPOSE_FAMILIES + setOf("components", "desktop")
 private val NATIVE_ONLY_COMPOSE_FAMILIES = setOf("components", "desktop")
 private val FORK_ANDROIDX_FAMILIES =
-    setOf("lifecycle", "navigation", "navigation3", "navigationevent", "savedstate")
+    setOf("collection", "lifecycle", "navigation", "navigation3", "navigationevent", "savedstate")
 private val OFFICIAL_SKIKO_DEPENDENCY_REGEX =
     Regex(
         """(?s)("group"\s*:\s*")org\.jetbrains\.skiko("\s*,\s*"module"\s*:\s*"skiko"\s*,\s*"version"\s*:\s*\{\s*"(?:requires|strictly)"\s*:\s*")[^"]+(")"""
     )
 private val DEFAULT_LINUX_LINKER_OPTIONS = listOf("-L/usr/lib")
 private val DESKTOP_NATIVE_CONFIGURATION_MARKERS =
-    listOf("desktopnative", "linuxx64", "linuxarm64", "mingwx64")
+    listOf("desktopnative", "linuxx64", "linuxarm64", "mingwx64", "macosx64", "macosarm64")
 private val SHARED_NATIVE_MAIN_CONFIGURATION_PREFIXES = listOf("desktopNativeMain")
 private val NATIVE_INTERNAL_COMPOSE_MODULES = setOf("ui" to "ui-skiko")
 
 private val DESKTOP_NATIVE_TARGET_SOURCE_SETS =
     mapOf("linux_x64" to "linuxX64", "linux_arm64" to "linuxArm64", "mingw_x64" to "mingwX64")
+private val DESKTOP_NATIVE_PUBLICATION_TARGET_NAMES =
+    DESKTOP_NATIVE_TARGET_SOURCE_SETS.values + listOf("macosX64", "macosArm64")

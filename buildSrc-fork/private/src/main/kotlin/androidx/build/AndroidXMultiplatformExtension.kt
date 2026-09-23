@@ -33,13 +33,17 @@ import org.gradle.api.GradleException
 import org.gradle.api.NamedDomainObjectCollection
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.component.AdhocComponentWithVariants
 import org.gradle.api.configuration.BuildFeatures
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.testing.Test
 import org.gradle.kotlin.dsl.the
 import org.gradle.kotlin.dsl.withType
+import org.jetbrains.androidx.build.ComposePlatforms
 import org.jetbrains.androidx.build.configureForkWebTarget
+import org.jetbrains.androidx.build.isJetBrainsAppleNativeOnlyPublication
+import org.jetbrains.androidx.build.isJetBrainsMacosNativeOnlyPublication
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
@@ -75,6 +79,8 @@ import org.jetbrains.kotlin.konan.target.LinkerOutputKind
  * of wrapping is to prevent targets from being added when the platform has not been enabled. e.g.
  * the `macosX64` target is gated on a `project.enableMac` check.
  */
+internal const val REDIRECT_METADATA_JS_TARGET = "redirectMetadataJs"
+
 abstract class AndroidXMultiplatformExtension(val project: Project) {
 
     @get:Inject abstract val buildFeatures: BuildFeatures
@@ -124,6 +130,19 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
 
     val agpKmpExtension: KotlinMultiplatformAndroidLibraryTarget by agpKmpExtensionDelegate
 
+    private val requestedComposePlatforms: Set<ComposePlatforms>? by lazy {
+        project.findProperty("compose.platforms")?.toString()?.let(ComposePlatforms::parse)
+    }
+
+    private fun composePlatformEnabled(platform: ComposePlatforms): Boolean =
+        requestedComposePlatforms?.contains(platform) ?: true
+
+    // Android Native has no ComposePlatforms enum entry. Keep its historical default when no
+    // compose filter is supplied, and include it for `compose.platforms=all`; an explicit subset
+    // such as the iOS publication build must not create unrelated Android Native targets.
+    private fun composeUnmappedPlatformEnabled(): Boolean =
+        requestedComposePlatforms == null || requestedComposePlatforms == ComposePlatforms.ALL
+
     /**
      * The list of platforms that have been declared as supported in the build configuration.
      *
@@ -149,6 +168,9 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
 
     /** Targets registered for redirect via `redirect { }`. Consumed by the JetBrains plugin. */
     internal val redirectTargetDecls: MutableList<RedirectTargetDecl> = mutableListOf()
+
+    /** Optional fork hook invoked after a top-level redirect { } block finishes configuring. */
+    internal var redirectBlockCompleted: (() -> Unit)? = null
 
     /**
      * Names of redirect targets, registered **before** the target is created (see
@@ -189,6 +211,50 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
         kotlinExtension.sourceSets.maybeCreate("redirectCommonMain")
     }
 
+    private var redirectMetadataJsTargetCreated = false
+
+    /**
+     * Keep the real common source-set graph genuinely multiplatform during filtered Apple-native
+     * publication. When redirected JVM-family targets are excluded and normal JS is disabled,
+     * commonMain may otherwise be shared only by Native targets; Kotlin/Native then rejects
+     * optional JVM expectations such as @JvmInline/@JvmStatic while compiling metadata.
+     *
+     * A tiny synthetic JS target is created immediately so the hierarchy sees another platform
+     * family. Its outgoing variants are removed from the KMP root software component, so it never
+     * appears in published Gradle metadata and no synthetic artifact needs to be published.
+     */
+    private fun ensureRedirectMetadataJsTarget() {
+        if (!project.isJetBrainsAppleNativeOnlyPublication()) return
+        if (
+            redirectMetadataJsTargetCreated ||
+                (project.enableJs() && composePlatformEnabled(ComposePlatforms.Js))
+        ) {
+            return
+        }
+
+        val target = kotlinExtension.js(REDIRECT_METADATA_JS_TARGET)
+        redirectMetadataJsTargetCreated = true
+
+        val syntheticConfigurations =
+            listOf(
+                    target.apiElementsConfigurationName,
+                    target.runtimeElementsConfigurationName,
+                    target.sourcesElementsConfigurationName,
+                )
+                .mapNotNull(project.configurations::findByName)
+
+        project.components.configureEach { component ->
+            if (component.name == "adhocKotlin") {
+                val adhocComponent = component as AdhocComponentWithVariants
+                syntheticConfigurations.forEach { configuration ->
+                    adhocComponent.addVariantsFromConfiguration(configuration) { details ->
+                        details.skip()
+                    }
+                }
+            }
+        }
+    }
+
     private fun recordRedirect(
         target: KotlinTarget,
         targetName: String,
@@ -202,6 +268,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
         }
         redirectTargetNames += target.name
         redirectTargetDecls += RedirectTargetDecl(target.name, redirectCoordinate)
+        ensureRedirectMetadataJsTarget()
         // Wire the target's main compilation source-set to the parallel root up-front.
         target.compilations.findByName("main")?.defaultSourceSet?.dependsOn(redirectCommonMain)
     }
@@ -216,7 +283,9 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
         get() =
             if (kotlinExtensionDelegate.isInitialized()) {
                 kotlinExtension.targets.mapNotNull {
-                    if (it.targetName != "metadata") {
+                    if (
+                        it.targetName != "metadata" && it.targetName != REDIRECT_METADATA_JS_TARGET
+                    ) {
                         it.targetName
                     } else {
                         null
@@ -241,6 +310,13 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     var defaultPlatform: String? = null
         get() = field ?: supportedPlatforms.singleOrNull()?.id
         set(value) {
+            if (project.isJetBrainsAppleNativeOnlyPublication()) {
+                if (!kotlinExtensionDelegate.isInitialized() || targetPlatforms.isEmpty()) {
+                    field = null
+                    return
+                }
+            }
+            var selectedValue = value
             if (value != null) {
                 if (supportedPlatforms.none { it.id == value }) {
                     throw GradleException(
@@ -249,15 +325,26 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
                             supportedPlatforms.joinToString(", ") { it.id }
                     )
                 }
-                if (targetPlatforms.none { it == value }) {
-                    throw GradleException(
-                        "Platform $value is not available in this build " +
-                            "environment. Available platforms are: " +
-                            targetPlatforms.joinToString(", ")
-                    )
+                if (targetPlatforms.none { it.equals(value, ignoreCase = true) }) {
+                    selectedValue =
+                        requestedComposePlatforms
+                            ?.let { requested ->
+                                supportedPlatforms.firstOrNull { platform ->
+                                    requested.any { it.matches(platform.id) } &&
+                                        targetPlatforms.any {
+                                            it.equals(platform.id, ignoreCase = true)
+                                        }
+                                }
+                            }
+                            ?.id
+                            ?: throw GradleException(
+                                "Platform $value is not available in this build " +
+                                    "environment. Available platforms are: " +
+                                    targetPlatforms.joinToString(", ")
+                            )
                 }
             }
-            field = value
+            field = selectedValue
         }
 
     val targets: NamedDomainObjectCollection<KotlinTarget>
@@ -473,7 +560,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun jvm(block: Action<KotlinJvmTarget>? = null): KotlinJvmTarget? =
         potentiallyRedirecting("jvm") {
             supportedPlatforms.add(PlatformIdentifier.JVM)
-            if (project.enableJvm()) {
+            if (project.enableJvm() && composePlatformEnabled(ComposePlatforms.Desktop)) {
                 kotlinExtension.jvm { block?.execute(this) }
             } else {
                 null
@@ -486,7 +573,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
         block: Action<KotlinJvmTarget>? = null,
     ): KotlinJvmTarget? {
         supportedPlatforms.add(PlatformIdentifier.JVM_STUBS)
-        return if (project.enableJvm()) {
+        return if (project.enableJvm() && composePlatformEnabled(ComposePlatforms.Desktop)) {
             kotlinExtension.jvm("jvmStubs") {
                 block?.execute(this)
                 project.tasks.named("jvmStubsTest").configure {
@@ -513,7 +600,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun androidNativeX86(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("androidNativeX86") {
             supportedPlatforms.add(PlatformIdentifier.ANDROID_NATIVE_X86)
-            if (project.enableAndroidNative()) {
+            if (project.enableAndroidNative() && composeUnmappedPlatformEnabled()) {
                 kotlinExtension.androidNativeX86 { block?.execute(this) }
             } else {
                 null
@@ -524,7 +611,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun androidNativeX64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("androidNativeX64") {
             supportedPlatforms.add(PlatformIdentifier.ANDROID_NATIVE_X64)
-            if (project.enableAndroidNative()) {
+            if (project.enableAndroidNative() && composeUnmappedPlatformEnabled()) {
                 kotlinExtension.androidNativeX64 { block?.execute(this) }
             } else {
                 null
@@ -535,7 +622,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun androidNativeArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("androidNativeArm64") {
             supportedPlatforms.add(PlatformIdentifier.ANDROID_NATIVE_ARM64)
-            if (project.enableAndroidNative()) {
+            if (project.enableAndroidNative() && composeUnmappedPlatformEnabled()) {
                 kotlinExtension.androidNativeArm64 { block?.execute(this) }
             } else {
                 null
@@ -546,7 +633,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun androidNativeArm32(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("androidNativeArm32") {
             supportedPlatforms.add(PlatformIdentifier.ANDROID_NATIVE_ARM32)
-            if (project.enableAndroidNative()) {
+            if (project.enableAndroidNative() && composeUnmappedPlatformEnabled()) {
                 kotlinExtension.androidNativeArm32 { block?.execute(this) }
             } else {
                 null
@@ -559,7 +646,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     ): KotlinMultiplatformAndroidLibraryTarget? =
         potentiallyRedirecting("android") {
             supportedPlatforms.add(PlatformIdentifier.ANDROID)
-            if (project.enableJvm()) {
+            if (project.enableJvm() && composePlatformEnabled(ComposePlatforms.Android)) {
                 agpKmpExtension.also { block?.execute(it) }
             } else {
                 null
@@ -570,7 +657,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun desktop(block: Action<KotlinJvmTarget>? = null): KotlinJvmTarget? =
         potentiallyRedirecting("desktop") {
             supportedPlatforms.add(PlatformIdentifier.DESKTOP)
-            if (project.enableDesktop()) {
+            if (project.enableDesktop() && composePlatformEnabled(ComposePlatforms.Desktop)) {
                 kotlinExtension.jvm("desktop") { block?.execute(this) }
             } else {
                 null
@@ -581,7 +668,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun mingwX64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTargetWithHostTests? =
         potentiallyRedirecting("mingwX64") {
             supportedPlatforms.add(PlatformIdentifier.MINGW_X_64)
-            if (project.enableWindows()) {
+            if (project.enableWindows() && composePlatformEnabled(ComposePlatforms.MingwX64)) {
                 kotlinExtension.mingwX64 { block?.execute(this) }
             } else {
                 null
@@ -591,14 +678,26 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     /** Configures all mac targets supported by AndroidX. */
     @JvmOverloads
     fun mac(block: Action<KotlinNativeTarget>? = null): List<KotlinNativeTarget> {
-        return listOfNotNull(macosArm64(block))
+        return listOfNotNull(macosX64(block), macosArm64(block))
     }
+
+    @Suppress("DEPRECATION")
+    @JvmOverloads
+    fun macosX64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTargetWithHostTests? =
+        potentiallyRedirecting("macosX64") {
+            supportedPlatforms.add(PlatformIdentifier.MAC_X_64)
+            if (project.enableMac() && composePlatformEnabled(ComposePlatforms.MacosX64)) {
+                kotlinExtension.macosX64 { block?.execute(this) }
+            } else {
+                null
+            }
+        }
 
     @JvmOverloads
     fun macosArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTargetWithHostTests? =
         potentiallyRedirecting("macosArm64") {
             supportedPlatforms.add(PlatformIdentifier.MAC_ARM_64)
-            if (project.enableMac()) {
+            if (project.enableMac() && composePlatformEnabled(ComposePlatforms.MacosArm64)) {
                 kotlinExtension.macosArm64 { block?.execute(this) }
             } else {
                 null
@@ -612,26 +711,30 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     }
 
     @JvmOverloads
-    fun iosArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
-        potentiallyRedirecting("iosArm64") {
+    fun iosArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? {
+        ensureRedirectMetadataJsTarget()
+        return potentiallyRedirecting("iosArm64") {
             supportedPlatforms.add(PlatformIdentifier.IOS_ARM_64)
-            if (project.enableMac()) {
+            if (project.enableMac() && composePlatformEnabled(ComposePlatforms.IosArm64)) {
                 kotlinExtension.iosArm64 { block?.execute(this) }
             } else {
                 null
             }
         }
+    }
 
     @JvmOverloads
-    fun iosSimulatorArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
-        potentiallyRedirecting("iosSimulatorArm64") {
+    fun iosSimulatorArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? {
+        ensureRedirectMetadataJsTarget()
+        return potentiallyRedirecting("iosSimulatorArm64") {
             supportedPlatforms.add(PlatformIdentifier.IOS_SIMULATOR_ARM_64)
-            if (project.enableMac()) {
+            if (project.enableMac() && composePlatformEnabled(ComposePlatforms.IosSimulatorArm64)) {
                 kotlinExtension.iosSimulatorArm64 { block?.execute(this) }
             } else {
                 null
             }
         }
+    }
 
     /** Configures all watchos targets supported by AndroidX. */
     @JvmOverloads
@@ -649,7 +752,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun watchosArm32(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("watchosArm32") {
             supportedPlatforms.add(PlatformIdentifier.WATCHOS_ARM_32)
-            if (project.enableMac()) {
+            if (project.enableMac() && composePlatformEnabled(ComposePlatforms.WatchosArm32)) {
                 kotlinExtension.watchosArm32 { block?.execute(this) }
             } else {
                 null
@@ -660,7 +763,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun watchosArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("watchosArm64") {
             supportedPlatforms.add(PlatformIdentifier.WATCHOS_ARM_64)
-            if (project.enableMac()) {
+            if (project.enableMac() && composePlatformEnabled(ComposePlatforms.WatchosArm64)) {
                 kotlinExtension.watchosArm64 { block?.execute(this) }
             } else {
                 null
@@ -671,7 +774,10 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun watchosDeviceArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("watchosDeviceArm64") {
             supportedPlatforms.add(PlatformIdentifier.WATCHOS_DEVICE_ARM_64)
-            if (project.enableMac()) {
+            if (
+                project.enableMac() &&
+                    requestedComposePlatforms?.any { it.name == "WatchosDeviceArm64" } != false
+            ) {
                 kotlinExtension.watchosDeviceArm64 { block?.execute(this) }
             } else {
                 null
@@ -682,7 +788,10 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun watchosSimulatorArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("watchosSimulatorArm64") {
             supportedPlatforms.add(PlatformIdentifier.WATCHOS_SIMULATOR_ARM_64)
-            if (project.enableMac()) {
+            if (
+                project.enableMac() &&
+                    composePlatformEnabled(ComposePlatforms.WatchosSimulatorArm64)
+            ) {
                 kotlinExtension.watchosSimulatorArm64 { block?.execute(this) }
             } else {
                 null
@@ -699,7 +808,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun tvosArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("tvosArm64") {
             supportedPlatforms.add(PlatformIdentifier.TVOS_ARM_64)
-            if (project.enableMac()) {
+            if (project.enableMac() && composePlatformEnabled(ComposePlatforms.TvosArm64)) {
                 kotlinExtension.tvosArm64 { block?.execute(this) }
             } else {
                 null
@@ -710,7 +819,9 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun tvosSimulatorArm64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("tvosSimulatorArm64") {
             supportedPlatforms.add(PlatformIdentifier.TVOS_SIMULATOR_ARM_64)
-            if (project.enableMac()) {
+            if (
+                project.enableMac() && composePlatformEnabled(ComposePlatforms.TvosSimulatorArm64)
+            ) {
                 kotlinExtension.tvosSimulatorArm64 { block?.execute(this) }
             } else {
                 null
@@ -728,6 +839,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
             supportedPlatforms.add(PlatformIdentifier.LINUX_ARM_64)
             if (
                 project.enableLinux() &&
+                    composePlatformEnabled(ComposePlatforms.LinuxArm64) &&
                     project.findProperty("compose.native.linux.arm64.enabled") != "false"
             ) {
                 kotlinExtension.linuxArm64 { block?.execute(this) }
@@ -740,7 +852,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     fun linuxX64(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? =
         potentiallyRedirecting("linuxX64") {
             supportedPlatforms.add(PlatformIdentifier.LINUX_X_64)
-            if (project.enableLinux()) {
+            if (project.enableLinux() && composePlatformEnabled(ComposePlatforms.LinuxX64)) {
                 kotlinExtension.linuxX64 { block?.execute(this) }
             } else {
                 null
@@ -750,7 +862,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
     @JvmOverloads
     fun linuxX64Stubs(block: Action<KotlinNativeTarget>? = null): KotlinNativeTarget? {
         supportedPlatforms.add(PlatformIdentifier.LINUX_X_64_STUBS)
-        return if (project.enableLinux()) {
+        return if (project.enableLinux() && composePlatformEnabled(ComposePlatforms.LinuxX64)) {
             kotlinExtension.linuxX64("linuxx64Stubs") {
                 block?.execute(this)
                 project.tasks.named("linuxx64StubsTest").configure {
@@ -768,7 +880,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
         potentiallyRedirecting("js") {
             configureForkWebTarget(
                 platform = PlatformIdentifier.JS,
-                isEnabled = project.enableJs(),
+                isEnabled = project.enableJs() && composePlatformEnabled(ComposePlatforms.Js),
                 createTarget = { configure -> kotlinExtension.js(configure) },
                 block = block,
             )
@@ -780,7 +892,8 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
         potentiallyRedirecting("wasmJs") {
             configureForkWebTarget(
                 platform = PlatformIdentifier.WASM_JS,
-                isEnabled = project.enableWasmJs(),
+                isEnabled =
+                    project.enableWasmJs() && composePlatformEnabled(ComposePlatforms.WasmJs),
                 createTarget = { configure -> kotlinExtension.wasmJs(configure) },
                 block = block,
             )
@@ -814,6 +927,9 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
             block.execute(this)
         } finally {
             redirectCoordinate = prevRedirectScope
+            if (prevRedirectScope == null) {
+                redirectBlockCompleted?.invoke()
+            }
         }
     }
 
@@ -830,7 +946,14 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
      */
     private fun <T> potentiallyRedirecting(targetName: String, create: () -> T): T {
         val redirectScope = redirectCoordinate ?: return create()
+        if (project.isJetBrainsMacosNativeOnlyPublication() && targetName.startsWith("macos")) {
+            return create()
+        }
         expectRedirect(targetName)
+        // The redirected target itself may be filtered out in an iOS-only publication. Create the
+        // metadata anchor from the declaration, not from recordRedirect(), so commonMain still has
+        // a non-Native platform compilation and KGP does not turn it into shared-Native metadata.
+        ensureRedirectMetadataJsTarget()
         return create().also {
             (it as? KotlinTarget)?.let { target ->
                 recordRedirect(target, targetName, redirectScope)

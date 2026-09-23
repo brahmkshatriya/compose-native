@@ -66,9 +66,6 @@ open class ComposePublishingTask : DefaultTask() {
                 )
             }
         }
-        project.tasks.findByName("jbVerifyDependencyVersions")?.let { verificationTask ->
-            dependsOn(verificationTask)
-        }
     }
 
     /** Publishes a KMP root and every requested target publication that the project declares. */

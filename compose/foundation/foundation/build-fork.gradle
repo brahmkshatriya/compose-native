@@ -34,6 +34,22 @@ plugins {
     alias(libs.plugins.atomicFu)
 }
 
+def usesOfficialComposeDependencies = providers.gradleProperty("compose.platforms").getOrElse("") == "Desktop"
+def upstreamComposeVersion = providers.gradleProperty("compose.native.upstream.version.COMPOSE").get()
+def upstreamMaterial3Version = providers.gradleProperty("compose.native.upstream.version.COMPOSE_MATERIAL3").get()
+def composeDependency = { String projectPath ->
+    if (!usesOfficialComposeDependencies) return project(projectPath)
+    def parts = projectPath.tokenize(":")
+    if (parts.size() < 3 || parts[0] != "compose") {
+        throw new GradleException("Unsupported Compose project dependency: $projectPath")
+    }
+    def family = parts[1]
+    def module = parts[-1]
+    def version = family == "material3" ? upstreamMaterial3Version : upstreamComposeVersion
+    return "org.jetbrains.compose.$family:$module:$version"
+}
+
+
 androidXMultiplatform {
     androidLibrary {
         compileSdk = 37
@@ -55,12 +71,12 @@ androidXMultiplatform {
     sourceSets {
         commonMain.dependencies {
             api("androidx.collection:collection:1.6.0")
-            api(project(":compose:animation:animation"))
-            api(project(":compose:runtime:runtime"))
-            api(project(":compose:ui:ui"))
-            implementation(project(":compose:ui:ui-text"))
-            implementation(project(":compose:ui:ui-util"))
-            implementation(project(":compose:foundation:foundation-layout"))
+            api(composeDependency(":compose:animation:animation"))
+            api(composeDependency(":compose:runtime:runtime"))
+            api(composeDependency(":compose:ui:ui"))
+            implementation(composeDependency(":compose:ui:ui-text"))
+            implementation(composeDependency(":compose:ui:ui-util"))
+            implementation(composeDependency(":compose:foundation:foundation-layout"))
             implementation("androidx.graphics:graphics-shapes:1.1.0")
         }
 
@@ -90,7 +106,7 @@ androidXMultiplatform {
         skikoBackendMain {
             dependsOn(skikoMain)
             dependencies {
-                api(project(":compose:ui:ui-skiko"))
+                api(composeDependency(":compose:ui:ui-skiko"))
                 api(libs.skiko)
             }
         }
@@ -98,7 +114,7 @@ androidXMultiplatform {
         skikoTest {
             dependsOn(commonTest)
             dependencies {
-                implementation(project(":compose:ui:ui-test"))
+                implementation(composeDependency(":compose:ui:ui-test"))
             }
         }
 
@@ -112,7 +128,7 @@ androidXMultiplatform {
         desktopTest {
             dependsOn(skikoTest)
             dependencies {
-                implementation(project(":compose:ui:ui-test-junit4"))
+                implementation(composeDependency(":compose:ui:ui-test-junit4"))
                 implementation(libs.truth)
                 implementation(libs.junit)
                 implementation(libs.skikoAwtRuntime)
@@ -174,7 +190,7 @@ androidXMultiplatform {
             dependsOn(darwinMain)
             dependencies {
                 // TODO: We shouldn't use it directly here
-                implementation(project(":compose:ui:ui-uikit"))
+                implementation(composeDependency(":compose:ui:ui-uikit"))
             }
         }
 
@@ -198,8 +214,10 @@ androidXMultiplatform {
     }
 }
 
-dependencies {
-    lintChecks(project(":compose:foundation:foundation-lint"))
+plugins.withId("com.android.library") {
+    dependencies {
+        lintChecks(project(":compose:foundation:foundation-lint"))
+    }
 }
 
 androidx {

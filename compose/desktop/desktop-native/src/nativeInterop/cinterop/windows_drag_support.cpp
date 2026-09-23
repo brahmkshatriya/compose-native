@@ -618,6 +618,17 @@ int kplatform_window_set_transparent(void *raw_window, int transparent) {
     return transparent ? (supported ? 1 : 0) : 1;
 }
 
+int kplatform_window_set_fullscreen(void *raw_window, int fullscreen) {
+    auto *window = static_cast<SDL_Window *>(raw_window);
+    return window && SDL_SetWindowFullscreen(window, fullscreen != 0) ? 1 : 0;
+}
+
+int kplatform_window_set_maximized(void *raw_window, int maximized) {
+    auto *window = static_cast<SDL_Window *>(raw_window);
+    if (!window) return 0;
+    return (maximized ? SDL_MaximizeWindow(window) : SDL_RestoreWindow(window)) ? 1 : 0;
+}
+
 int kplatform_window_allow_drawing_inside_title_bar(void *raw_window, int allow) {
     SDL_Window *sdl_window = static_cast<SDL_Window *>(raw_window);
     HWND window = window_handle(sdl_window);

@@ -78,9 +78,11 @@ androidXMultiplatform {
     }
 }
 
-dependencies {
-    lintChecks(project(":compose:runtime:runtime-retain-lint"))
-    lintPublish(project(":compose:runtime:runtime-retain-lint"))
+plugins.withId("com.android.library") {
+    dependencies {
+        lintChecks(project(":compose:runtime:runtime-retain-lint"))
+        lintPublish(project(":compose:runtime:runtime-retain-lint"))
+    }
 }
 
 androidx {

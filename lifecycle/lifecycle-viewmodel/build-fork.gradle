@@ -36,7 +36,7 @@ androidXMultiplatform {
             androidResources.enable = true
         }
         desktop()
-        mac()
+        macosArm64()
         linux()
         ios()
         watchos()
@@ -46,7 +46,26 @@ androidXMultiplatform {
         wasmJs()
     }
 
+    // AndroidX no longer publishes this redirect artifact for Intel macOS.
+    macosX64()
+
     defaultPlatform(PlatformIdentifier.ANDROID)
+
+    sourceSets {
+        configureEach {
+            languageSettings.optIn("kotlin.contracts.ExperimentalContracts")
+        }
+
+        commonMain.dependencies {
+            api("androidx.annotation:annotation:1.9.1")
+            api(libs.kotlinCoroutinesCore)
+            implementation("androidx.collection:collection:1.5.0")
+        }
+
+        nativeMain.dependencies {
+            implementation(libs.atomicFu)
+        }
+    }
 
 }
 

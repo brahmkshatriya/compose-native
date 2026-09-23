@@ -79,11 +79,9 @@ fun Project.configureMavenArtifactUpload(componentFactory: SoftwareComponentFact
             registered = true
         }
     }
-    afterEvaluate {
-        components.all { component ->
-            if (isValidReleaseComponent(component)) {
-                registerOnFirstPublishableArtifact(component)
-            }
+    components.configureEach { component ->
+        if (isValidReleaseComponent(component)) {
+            registerOnFirstPublishableArtifact(component)
         }
     }
 }

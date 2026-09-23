@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+depends = UIKit Metal CoreGraphics Foundation IOSurface darwin
 linkerOpts = -framework UIKit
 package = androidx.compose.ui.uikit.utils
 language = Objective-C

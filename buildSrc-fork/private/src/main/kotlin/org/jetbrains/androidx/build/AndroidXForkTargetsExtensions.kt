@@ -148,6 +148,7 @@ fun <T: KotlinTarget> AndroidXMultiplatformExtension.configureForkWebTarget(
 /**
  * Configures native compilation tasks with flags to link required frameworks
  */
+@Suppress("DEPRECATION")
 fun configureDarwinFlags(project: Project) {
     val darwinFlags = listOf(
         "-linker-option", "-framework", "-linker-option", "Metal",
@@ -170,11 +171,15 @@ fun configureDarwinFlags(project: Project) {
              it.freeCompilerArgs += flags
         }
     }
-    project.multiplatformExtension!!.run {
-        macosArm64 { configureFreeCompilerArgs() }
-        iosArm64 { configureFreeCompilerArgs() }
-        iosSimulatorArm64 { configureFreeCompilerArgs() }
-    }
+    project.multiplatformExtension!!.targets
+        .filter { target ->
+            target.name == "macosX64" ||
+                target.name == "macosArm64" ||
+                target.name == "iosArm64" ||
+                target.name == "iosSimulatorArm64"
+        }
+        .filterIsInstance<KotlinNativeTarget>()
+        .forEach { it.configureFreeCompilerArgs() }
 }
 
 /**

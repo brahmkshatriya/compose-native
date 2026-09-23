@@ -59,8 +59,7 @@ echo "Publishing forked Compose iOS targets as $group_prefix:*:$version"
     "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
     "-Pjetbrains.publication.version.LIFECYCLE=$version" \
     "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
-    :mpp:publishComposeIosToMavenLocal \
-    :mpp:publishComposeForkRootsToMavenLocal
+    :mpp:publishCompleteComposeForkToMavenLocal
 
 "$compose_root/scripts/write-linux-native-root-metadata.py" \
     --repository "$maven_repository" \

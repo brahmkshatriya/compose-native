@@ -57,10 +57,13 @@ fun Project.configureKtfmt() {
             task.cacheEvenIfNoOutputs()
         }
 
-    // afterEvaluate because Gradle's default "check" task doesn't exist yet
-    afterEvaluate {
-        addToCheckTask(ktCheckTask)
-        addToBuildOnServer(ktCheckTask)
+    // Wire lazily because these lifecycle tasks may be registered after the AndroidX plugin.
+    // Avoid Project.afterEvaluate(): Gradle's mutation guard rejects registering it from some
+    // lazy project-configuration contexts.
+    tasks.configureEach { task ->
+        if (task.name == "check" || task.name == BUILD_ON_SERVER_TASK) {
+            task.dependsOn(ktCheckTask)
+        }
     }
 }
 

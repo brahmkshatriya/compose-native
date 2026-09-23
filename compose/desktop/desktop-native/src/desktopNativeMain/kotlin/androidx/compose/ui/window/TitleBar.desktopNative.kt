@@ -174,6 +174,12 @@ internal expect val PlatformCaptionButtonWidth: Dp
 /** The height of the clickable caption-button hit area on this platform. */
 internal expect val PlatformCaptionButtonHeight: Dp
 
+/** Whether the platform places its caption controls at the leading edge of the title bar. */
+internal expect val PlatformCaptionButtonsAtStart: Boolean
+
+/** Draws platform-specific spacing before leading caption buttons. */
+@Composable internal expect fun PlatformTitleBarStartPadding()
+
 /** Draws the platform-specific content after the last caption button. */
 @Composable internal expect fun PlatformTitleBarEndPadding()
 
@@ -215,26 +221,41 @@ internal fun FrameWindowScope.ClientTitleBar(
         Modifier.fillMaxWidth().height(titleBarHeight),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        WindowDraggableArea(Modifier.weight(1f).fillMaxHeight()) {}
-        CaptionButton(
-            type = CaptionButtonType.Minimize,
-            titleBar = titleBar,
-            foreground = foreground,
-            enabled = true,
-            onClick = { window.minimize() },
-        )
-        CaptionButton(
-            type =
-                if (state.placement == WindowPlacement.Maximized) {
-                    CaptionButtonType.Restore
-                } else {
-                    CaptionButtonType.Maximize
-                },
-            titleBar = titleBar,
-            foreground = foreground,
-            enabled = resizable,
-            onClick = { window.toggleMaximized() },
-        )
+        if (PlatformCaptionButtonsAtStart) {
+            if (titleBar !is TitleBar.Custom) PlatformTitleBarStartPadding()
+            CaptionButtons(
+                state = state,
+                resizable = resizable,
+                titleBar = titleBar,
+                foreground = foreground,
+                onCloseRequest = onCloseRequest,
+            )
+            WindowDraggableArea(Modifier.weight(1f).fillMaxHeight()) {}
+        } else {
+            WindowDraggableArea(Modifier.weight(1f).fillMaxHeight()) {}
+            CaptionButtons(
+                state = state,
+                resizable = resizable,
+                titleBar = titleBar,
+                foreground = foreground,
+                onCloseRequest = onCloseRequest,
+            )
+            // Trailing spacing is part of the platform-default style; custom buttons define their
+            // own geometry, so no framework padding is added after them.
+            if (titleBar !is TitleBar.Custom) PlatformTitleBarEndPadding()
+        }
+    }
+}
+
+@Composable
+private fun FrameWindowScope.CaptionButtons(
+    state: WindowState,
+    resizable: Boolean,
+    titleBar: TitleBar,
+    foreground: Color,
+    onCloseRequest: () -> Unit,
+) {
+    if (PlatformCaptionButtonsAtStart) {
         CaptionButton(
             type = CaptionButtonType.Close,
             titleBar = titleBar,
@@ -242,11 +263,34 @@ internal fun FrameWindowScope.ClientTitleBar(
             enabled = true,
             onClick = onCloseRequest,
         )
-        // Trailing spacing is part of the platform-default style; custom buttons define their
-        // own geometry, so no framework padding is added after them.
-        if (titleBar !is TitleBar.Custom) {
-            PlatformTitleBarEndPadding()
-        }
+    }
+    CaptionButton(
+        type = CaptionButtonType.Minimize,
+        titleBar = titleBar,
+        foreground = foreground,
+        enabled = true,
+        onClick = { window.minimize() },
+    )
+    CaptionButton(
+        type =
+            if (state.placement == WindowPlacement.Maximized) {
+                CaptionButtonType.Restore
+            } else {
+                CaptionButtonType.Maximize
+            },
+        titleBar = titleBar,
+        foreground = foreground,
+        enabled = resizable,
+        onClick = { window.toggleMaximized() },
+    )
+    if (!PlatformCaptionButtonsAtStart) {
+        CaptionButton(
+            type = CaptionButtonType.Close,
+            titleBar = titleBar,
+            foreground = foreground,
+            enabled = true,
+            onClick = onCloseRequest,
+        )
     }
 }
 

@@ -14,4 +14,19 @@
  * limitations under the License.
  */
 
+@file:OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+
 package androidx.compose.ui.uikit.utils
+
+/** Initializes the process-wide Compose UI OS trace logger. */
+fun initializeAppTraceLogger(name: String) {
+    CMPOSInitializeAppTraceLogger(name)
+}
+
+/** Starts an OS trace interval without exposing the Objective-C cinterop type to consumers. */
+fun beginAppTraceInterval(name: String): Any? = CMPOSAppTraceLogger()?.beginIntervalNamed(name)
+
+/** Ends an OS trace interval previously returned by [beginAppTraceInterval]. */
+fun endAppTraceInterval(interval: Any?) {
+    (interval as? CMPOSLoggerInterval)?.let { CMPOSAppTraceLogger()?.endInterval(it) }
+}

@@ -20,9 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.platform.NativeDesktopEvent
+import androidx.compose.ui.platform.NativeDesktopPlatformServicesRegistry
 import androidx.compose.ui.platform.NativeNotificationAction
 import androidx.compose.ui.platform.NativeNotificationHint
-import androidx.compose.ui.platform.NativeDesktopPlatformServicesRegistry
 import androidx.compose.ui.platform.NativeProgressUpdate
 import kotlin.math.roundToInt
 
@@ -157,16 +157,18 @@ object PlatformNotificationBackend : NotificationBackend {
     override val capabilities: Set<NotificationCapability>
         get() {
             val names =
-                NativeDesktopPlatformServicesRegistry.current()?.notificationCapabilities().orEmpty()
+                NativeDesktopPlatformServicesRegistry.current()
+                    ?.notificationCapabilities()
+                    .orEmpty()
             return NotificationCapability.entries.filterTo(mutableSetOf()) {
                 it.protocolName in names
             }
         }
 
     override fun show(request: NotificationRequest): NotificationHandle {
-        val services = requireLinuxDesktopServices()
+        val services = requireNativeDesktopServices()
         check(services.areNotificationsSupported()) {
-            "The current Linux desktop session does not provide org.freedesktop.Notifications"
+            "The current native desktop host does not provide system notifications"
         }
         val handle = PlatformNotificationHandle(request)
         handle.send(request)
@@ -203,7 +205,7 @@ object PlatformNotificationBackend : NotificationBackend {
             private set
 
         fun send(request: NotificationRequest) {
-            val services = requireLinuxDesktopServices()
+            val services = requireNativeDesktopServices()
             val protocolHints = mutableMapOf<String, NativeNotificationHint>()
             protocolHints["urgency"] =
                 NativeNotificationHint.ByteValue(
@@ -245,7 +247,7 @@ object PlatformNotificationBackend : NotificationBackend {
 
         override fun close() {
             if (id == 0u) return
-            requireLinuxDesktopServices().closeNotification(id)
+            requireNativeDesktopServices().closeNotification(id)
         }
 
         override fun addEventListener(
@@ -341,7 +343,7 @@ object PlatformProgressJobBackend : ProgressJobBackend {
         }
 
     override fun start(request: ProgressJobRequest): ProgressJobHandle {
-        val services = requireLinuxDesktopServices()
+        val services = requireNativeDesktopServices()
         if (!services.isProgressServiceSupported())
             return NotificationProgressJobBackend.start(request)
         val capabilities =
@@ -387,7 +389,7 @@ object PlatformProgressJobBackend : ProgressJobBackend {
                         .roundToInt()
                         .coerceIn(0, 100)
                         .toUInt()
-            requireLinuxDesktopServices()
+            requireNativeDesktopServices()
                 .updateProgressJob(
                     path,
                     NativeProgressUpdate(
@@ -409,7 +411,7 @@ object PlatformProgressJobBackend : ProgressJobBackend {
             if (!active) return
             active = false
             handles.remove(path)
-            requireLinuxDesktopServices().terminateProgressJob(path, errorMessage)
+            requireNativeDesktopServices().terminateProgressJob(path, errorMessage)
         }
 
         override fun addEventListener(
@@ -555,9 +557,9 @@ private fun NotificationHint.toPlatformHint(): NativeNotificationHint =
             )
     }
 
-private fun requireLinuxDesktopServices() =
+private fun requireNativeDesktopServices() =
     checkNotNull(NativeDesktopPlatformServicesRegistry.current()) {
-        "Linux desktop services are only available inside application { ... }"
+        "Native desktop services are only available inside application { ... }"
     }
 
 private fun formatByteRate(bytesPerSecond: ULong): String {

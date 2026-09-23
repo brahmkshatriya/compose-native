@@ -36,6 +36,7 @@ constructor(val componentFactory: SoftwareComponentFactory) : Plugin<Project> {
             // androidx.*
             subproject.configureJetBrainsCapabilityResolution()
             subproject.configureComposeNativeSkikoResolution()
+            subproject.configureMacosSourceBuiltCompatibilityResolution()
 
             subproject.tasks.configureEach {
                 if (it.name == "kotlinStoreYarnLock") it.enabled = false
@@ -71,16 +72,85 @@ constructor(val componentFactory: SoftwareComponentFactory) : Plugin<Project> {
     }
 }
 
+private fun Project.configureMacosSourceBuiltCompatibilityResolution() {
+    val sourceBuiltCompatibilityModules =
+        mapOf(
+            "androidx.collection:collection" to ":collection:collection",
+            "org.jetbrains.androidx.collection:collection" to ":collection:collection",
+            "androidx.compose.runtime:runtime" to ":compose:runtime:runtime",
+            "org.jetbrains.compose.runtime:runtime" to ":compose:runtime:runtime",
+            "androidx.compose.runtime:runtime-annotation" to ":compose:runtime:runtime-annotation",
+            "org.jetbrains.compose.runtime:runtime-annotation" to
+                ":compose:runtime:runtime-annotation",
+            "androidx.compose.runtime:runtime-saveable" to ":compose:runtime:runtime-saveable",
+            "org.jetbrains.compose.runtime:runtime-saveable" to ":compose:runtime:runtime-saveable",
+            "androidx.compose.runtime:runtime-retain" to ":compose:runtime:runtime-retain",
+            "androidx.lifecycle:lifecycle-common" to ":lifecycle:lifecycle-common",
+            "org.jetbrains.androidx.lifecycle:lifecycle-common" to ":lifecycle:lifecycle-common",
+            "androidx.lifecycle:lifecycle-runtime" to ":lifecycle:lifecycle-runtime",
+            "org.jetbrains.androidx.lifecycle:lifecycle-runtime" to ":lifecycle:lifecycle-runtime",
+            "androidx.lifecycle:lifecycle-runtime-compose" to
+                ":lifecycle:lifecycle-runtime-compose",
+            "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose" to
+                ":lifecycle:lifecycle-runtime-compose",
+            "androidx.lifecycle:lifecycle-viewmodel" to ":lifecycle:lifecycle-viewmodel",
+            "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel" to
+                ":lifecycle:lifecycle-viewmodel",
+            "androidx.lifecycle:lifecycle-viewmodel-compose" to
+                ":lifecycle:lifecycle-viewmodel-compose",
+            "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose" to
+                ":lifecycle:lifecycle-viewmodel-compose",
+            "androidx.lifecycle:lifecycle-viewmodel-savedstate" to
+                ":lifecycle:lifecycle-viewmodel-savedstate",
+            "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate" to
+                ":lifecycle:lifecycle-viewmodel-savedstate",
+            "androidx.lifecycle:lifecycle-viewmodel-navigation3" to
+                ":lifecycle:lifecycle-viewmodel-navigation3",
+            "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3" to
+                ":lifecycle:lifecycle-viewmodel-navigation3",
+            "androidx.navigation3:navigation3-runtime" to ":navigation3:navigation3-runtime",
+            "org.jetbrains.androidx.navigation3:navigation3-runtime" to
+                ":navigation3:navigation3-runtime",
+            "androidx.navigation3:navigation3-ui" to ":navigation3:navigation3-ui",
+            "org.jetbrains.androidx.navigation3:navigation3-ui" to ":navigation3:navigation3-ui",
+            "androidx.navigationevent:navigationevent" to ":navigationevent:navigationevent",
+            "androidx.navigationevent:navigationevent-compose" to
+                ":navigationevent:navigationevent-compose",
+            "androidx.savedstate:savedstate" to ":savedstate:savedstate",
+            "org.jetbrains.androidx.savedstate:savedstate" to ":savedstate:savedstate",
+            "androidx.savedstate:savedstate-compose" to ":savedstate:savedstate-compose",
+            "org.jetbrains.androidx.savedstate:savedstate-compose" to
+                ":savedstate:savedstate-compose",
+        )
+
+    configurations.configureEach { configuration ->
+        val lowerName = configuration.name.lowercase()
+        val sourceBuiltMacosConfiguration =
+            "macosx64" in lowerName ||
+                (isJetBrainsMacosNativeOnlyPublication() && "macosarm64" in lowerName)
+        if (!sourceBuiltMacosConfiguration) return@configureEach
+        configuration.resolutionStrategy.dependencySubstitution { substitutions ->
+            sourceBuiltCompatibilityModules.forEach { (coordinate, projectPath) ->
+                substitutions
+                    .substitute(substitutions.module(coordinate))
+                    .using(substitutions.project(projectPath))
+                    .because("Keep source-built macOS variants on the in-tree dependency graph")
+            }
+        }
+    }
+}
+
 private fun Project.configureComposeNativeSkikoResolution() {
     val nativeSkikoGroup =
         providers.gradleProperty("compose.native.skiko.group").orElse("dev.brahmkshatriya.skiko")
     val nativeSkikoVersion =
-        providers.gradleProperty("compose.native.skiko.version").orElse("0.151.5")
+        providers.gradleProperty("compose.native.skiko.version").orElse("0.153.0")
 
     val desktopNativeRequested =
         ComposeProperties(this).targetPlatforms.any { platform ->
             platform in ComposePlatforms.LINUX_NATIVE ||
-                platform in ComposePlatforms.WINDOWS_NATIVE
+                platform in ComposePlatforms.WINDOWS_NATIVE ||
+                platform in ComposePlatforms.MACOS_NATIVE
         }
 
     configurations.configureEach { configuration ->
@@ -88,7 +158,9 @@ private fun Project.configureComposeNativeSkikoResolution() {
         val desktopNativeTarget =
             "linuxx64" in lowerName ||
                 "linuxarm64" in lowerName ||
-                "mingwx64" in lowerName
+                "mingwx64" in lowerName ||
+                "macosx64" in lowerName ||
+                "macosarm64" in lowerName
         val sharedDesktopNativeMetadata = desktopNativeRequested && "nativemain" in lowerName
         if (!desktopNativeTarget && !sharedDesktopNativeMetadata) {
             return@configureEach

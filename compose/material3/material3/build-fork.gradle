@@ -35,6 +35,22 @@ plugins {
     alias(libs.plugins.atomicFu)
 }
 
+def usesOfficialComposeDependencies = providers.gradleProperty("compose.platforms").getOrElse("") == "Desktop"
+def upstreamComposeVersion = providers.gradleProperty("compose.native.upstream.version.COMPOSE").get()
+def upstreamMaterial3Version = providers.gradleProperty("compose.native.upstream.version.COMPOSE_MATERIAL3").get()
+def composeDependency = { String projectPath ->
+    if (!usesOfficialComposeDependencies) return project(projectPath)
+    def parts = projectPath.tokenize(":")
+    if (parts.size() < 3 || parts[0] != "compose") {
+        throw new GradleException("Unsupported Compose project dependency: $projectPath")
+    }
+    def family = parts[1]
+    def module = parts[-1]
+    def version = family == "material3" ? upstreamMaterial3Version : upstreamComposeVersion
+    return "org.jetbrains.compose.$family:$module:$version"
+}
+
+
 androidXMultiplatform {
     androidLibrary {
         compileSdk = 37
@@ -57,15 +73,15 @@ androidXMultiplatform {
             // Keep pinned unless there is a need for tip of tree behavior
             implementation("androidx.collection:collection:1.5.0")
             // unpinning to use `Style`, will pin to next Alpha.
-            implementation(project(":compose:animation:animation-core"))
-            implementation(project(":compose:ui:ui-util"))
-            api(project(":compose:foundation:foundation-layout"))
-            api(project(":compose:material:material-ripple"))
-            implementation(project(":compose:material3:material3-ripple"))
-            api(project(":compose:runtime:runtime"))
-            api(project(":compose:ui:ui"))
-            api(project(":compose:foundation:foundation"))
-            api(project(":compose:ui:ui-text"))
+            implementation(composeDependency(":compose:animation:animation-core"))
+            implementation(composeDependency(":compose:ui:ui-util"))
+            api(composeDependency(":compose:foundation:foundation-layout"))
+            api(composeDependency(":compose:material:material-ripple"))
+            implementation(composeDependency(":compose:material3:material3-ripple"))
+            api(composeDependency(":compose:runtime:runtime"))
+            api(composeDependency(":compose:ui:ui"))
+            api(composeDependency(":compose:foundation:foundation"))
+            api(composeDependency(":compose:ui:ui-text"))
             api("androidx.graphics:graphics-shapes:1.1.0")
         }
 
@@ -82,13 +98,13 @@ androidXMultiplatform {
             dependencies {
                 implementation(libs.datetime)
                 implementation(libs.atomicFu)
-                implementation(project(":compose:ui:ui-backhandler"))
+                implementation(composeDependency(":compose:ui:ui-backhandler"))
             }
         }
 
         commonTest {
             dependencies {
-                implementation(project(":compose:ui:ui-test"))
+                implementation(composeDependency(":compose:ui:ui-test"))
                 implementation(kotlin("test"))
             }
         }
@@ -97,9 +113,9 @@ androidXMultiplatform {
             dependsOn(commonTest)
             dependencies {
                 // Test against project dependencies
-                implementation(project(":compose:foundation:foundation"))
-                implementation(project(":compose:ui:ui"))
-                implementation(project(":compose:runtime:runtime"))
+                implementation(composeDependency(":compose:foundation:foundation"))
+                implementation(composeDependency(":compose:ui:ui"))
+                implementation(composeDependency(":compose:runtime:runtime"))
                 def navigationEventVersion = project.redirectVersions.get('androidx.navigationevent')
                 implementation("androidx.navigationevent:navigationevent-testing:$navigationEventVersion")
                 implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
@@ -113,7 +129,7 @@ androidXMultiplatform {
         desktopTest {
             dependsOn(skikoTest)
             dependencies {
-                implementation(project(":compose:ui:ui-test-junit4"))
+                implementation(composeDependency(":compose:ui:ui-test-junit4"))
                 implementation(libs.truth)
                 implementation(libs.junit)
                 implementation(libs.skikoAwtRuntime)

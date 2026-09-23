@@ -171,7 +171,10 @@ internal fun Project.configureDependencyVerification() {
                             .plus(
                                 configuration.allDependencyConstraints
                                     .asSequence()
-                                    .filter { it.version != null }
+                                    .filter {
+                                        it.version != null &&
+                                            it.version != "unspecified"
+                                    }
                                     .map { constraint ->
                                         AndroidXDependency(
                                             constraint.group,

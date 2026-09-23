@@ -124,8 +124,10 @@ androidXMultiplatform {
     }
 }
 
-dependencies {
-    lintChecks(project(":compose:material:material-lint"))
+plugins.withId("com.android.library") {
+    dependencies {
+        lintChecks(project(":compose:material:material-lint"))
+    }
 }
 
 androidx {

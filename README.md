@@ -4,7 +4,7 @@ Compose Multiplatform for Linux and Windows Kotlin/Native. It produces native ex
 JVM requirement and can be added to an existing multiplatform project without replacing official
 Compose on unsupported targets.
 
-Supported native targets: Linux x64, Linux arm64, and Windows x64.
+Supported native targets: Linux x64, Linux arm64, Windows x64, macOS x64, and macOS arm64.
 
 ## Installation
 
@@ -27,7 +27,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.13.0-alpha01"
-    id("dev.brahmkshatriya.compose") version "1.13.0-alpha01"
+    id("dev.brahmkshatriya.compose") version "1.153.0-alpha01"
 }
 ```
 
@@ -39,7 +39,7 @@ Use official Compose in `commonMain` and the fork only in `desktopNativeMain`. A
 JS, and Wasm continue using official Compose.
 
 ```kotlin
-val composeNativeVersion = "1.13.0-alpha01"
+val composeNativeVersion = "1.153.0-alpha01"
 
 kotlin {
     desktopNative {
@@ -67,17 +67,17 @@ kotlin {
 }
 ```
 
-This is the option to use when the same project also targets JVM desktop or macOS, where fork
-artifacts are not currently published. iOS can use either this official-Compose path or the full
-fork path below.
+This option keeps Android, JVM desktop, Apple, JS, and Wasm on official Compose while overlaying
+only the Linux and Windows Kotlin/Native desktop targets.
 
 ### Full fork
 
-Put the fork dependencies in `commonMain` to use them on every published fork target: Android, JS,
-Wasm JS, iOS, Linux, and Windows.
+Put the fork dependencies in `commonMain` to use the modified `foundation` and `material3` on
+Android, JVM desktop, JS, Wasm JS, and iOS. On macOS, Linux, and Windows Kotlin/Native, the same
+fork version selects the larger native closure required by the native desktop backend.
 
 ```kotlin
-val composeNativeVersion = "1.13.0-alpha01"
+val composeNativeVersion = "1.153.0-alpha01"
 
 kotlin {
     desktopNative {
@@ -88,7 +88,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.brahmkshatriya.compose.ui:ui:$composeNativeVersion")
+            implementation("org.jetbrains.compose.ui:ui:1.13.0-alpha01")
             implementation("dev.brahmkshatriya.compose.foundation:foundation:$composeNativeVersion")
             implementation("dev.brahmkshatriya.compose.material3:material3:$composeNativeVersion")
         }
@@ -102,9 +102,19 @@ kotlin {
 }
 ```
 
-Do not use the full-fork setup for JVM desktop or macOS yet; those fork variants are not
-published. iOS device (`iosArm64`) and Apple Silicon simulator (`iosSimulatorArm64`) variants are
-published and continue to use official Skiko.
+On Android, JVM desktop, JS, Wasm JS, and iOS, the application opts into this fork only for
+`foundation` and `material3`; the remaining Compose, AndroidX, and Skiko dependencies stay on their
+official JetBrains/AndroidX coordinates. macOS x64/arm64, Linux x64/arm64, and Windows x64 use the
+larger native fork closure and native Skiko required by the desktop-native backend.
+
+The published Apple targets are `iosArm64`, `iosSimulatorArm64`, `macosX64`, and `macosArm64`.
+iOS uses official support libraries and Skiko; macOS uses the native fork closure.
+
+To run the JVM component catalogue against the in-tree fork implementation:
+
+```bash
+./gradlew :demo:runJvmCatalogue
+```
 
 <details>
 <summary><strong>Fork-specific Compose changes</strong></summary>
@@ -148,6 +158,10 @@ brings in the native Skiko dependency.
 
 JDK 21 and the Kotlin/Native toolchain are required.
 
+On macOS, the desktop-native backend selects Metal when a system Metal device is available and
+falls back to OpenGL otherwise. Set `COMPOSE_MACOS_RENDER_API=AUTO`, `METAL`, or `OPENGL` to
+override the selection (`AUTO` is the default). Native OpenGL interop requires the OpenGL renderer.
+
 On Linux, install SDL3, Fontconfig, D-Bus, and OpenGL/EGL development libraries. For example:
 
 ```shell
@@ -173,13 +187,12 @@ executable run tasks and Windows distributions.
 | Android | Yes |
 | JS | Yes |
 | Wasm JS | Yes |
-| JVM desktop | No |
-| iOS / macOS | No |
+| JVM desktop | Yes |
+| iOS arm64 | Yes |
+| iOS simulator arm64 | Yes |
+| macOS arm64 | Yes |
+| macOS x64 | Yes |
 | Windows arm64 | No |
-
-JVM desktop and Apple projects can still use official JetBrains Compose alongside the native fork.
-
-
 
 ## Packaging
 
@@ -201,14 +214,13 @@ composeNativeApplication {
 
 | Component | Version |
 | --- | --- |
-| Compose Native plugin / fork | `1.13.0-alpha01` |
+| Compose Native plugin / fork | `1.153.0-alpha01` |
 | JetBrains Compose plugin | `1.13.0-alpha01` |
 | Kotlin / Compose compiler | `2.3.20` |
-| Native Skiko | `0.151.5` |
+| Native Skiko | `0.153.1` |
 
 ## Limitations
 
-- JVM desktop and Apple fork artifacts are not published yet.
 - Windows arm64 is not supported.
 - Windows accessibility does not yet expose a complete UI Automation provider.
 - Transparent windows depend on compositor support.

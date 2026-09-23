@@ -58,7 +58,7 @@ internal actual suspend fun PlatformTextInputSession.platformSpecificTextInputSe
     fun onEditCommand(commands: List<EditCommand>) {
         editProcessor.reset(
             value = state.untransformedText.toTextFieldValue(),
-            textInputSession = null
+            textInputSession = null,
         )
         val newValue = editProcessor.apply(commands)
 
@@ -82,9 +82,7 @@ internal actual suspend fun PlatformTextInputSession.platformSpecificTextInputSe
 
     fun editText(block: TextEditingScope.() -> Unit) {
         state.editUntransformedTextAsUser(restartImeIfContentChanges = false) {
-            with(TextEditingScope(this)) {
-                block()
-            }
+            with(TextEditingScope(this)) { block() }
         }
     }
 
@@ -127,115 +125,121 @@ private fun TextFieldCharSequence.toTextFieldValue() =
 
 @Suppress("NOTHING_TO_INLINE")
 @OptIn(ExperimentalComposeUiApi::class)
-private inline fun (() -> TextFieldCharSequence).asTextEditorState() = object : TextEditorState {
+private inline fun (() -> TextFieldCharSequence).asTextEditorState() =
+    object : TextEditorState {
 
-    override val length: Int
-        get() = this@asTextEditorState().length
+        override val length: Int
+            get() = this@asTextEditorState().length
 
-    override fun get(index: Int): Char = this@asTextEditorState()[index]
+        override fun get(index: Int): Char = this@asTextEditorState()[index]
 
-    override fun subSequence(startIndex: Int, endIndex: Int): CharSequence {
-        return this@asTextEditorState().subSequence(startIndex, endIndex)
+        override fun subSequence(startIndex: Int, endIndex: Int): CharSequence {
+            return this@asTextEditorState().subSequence(startIndex, endIndex)
+        }
+
+        override val selection: TextRange
+            get() = this@asTextEditorState().selection
+
+        override val composition: TextRange?
+            get() = this@asTextEditorState().composition
+
+        override val text: String
+            get() = this@asTextEditorState().toString()
     }
-
-    override val selection: TextRange
-        get() = this@asTextEditorState().selection
-
-    override val composition: TextRange?
-        get() = this@asTextEditorState().composition
-
-    override val text: String get() = this@asTextEditorState().toString()
-}
 
 @OptIn(ExperimentalComposeUiApi::class)
-private fun TextEditingScope(buffer: TextFieldBuffer) = object : TextEditingScope {
-    // Be careful about using TextRange.start/end, as the selection can be reversed (start > end).
-    // Prefer to use TextRange.min/max.
+private fun TextEditingScope(buffer: TextFieldBuffer) =
+    object : TextEditingScope {
+        // Be careful about using TextRange.start/end, as the selection can be reversed (start >
+        // end).
+        // Prefer to use TextRange.min/max.
 
-    override fun deleteSurroundingTextInCodePoints(
-        lengthBeforeCursor: Int,
-        lengthAfterCursor: Int
-    ) {
-        val charSequence = buffer.asCharSequence()
-        val selection = buffer.selection
-        buffer.delete(
-            start = selection.max,
-            end = charSequence.offsetByCodePoints(
-                index = selection.max,
-                offset = lengthAfterCursor
+        override fun deleteSurroundingTextInCodePoints(
+            lengthBeforeCursor: Int,
+            lengthAfterCursor: Int,
+        ) {
+            val charSequence = buffer.asCharSequence()
+            val selection = buffer.selection
+            buffer.delete(
+                start = selection.max,
+                end =
+                    charSequence.offsetByCodePoints(
+                        index = selection.max,
+                        offset = lengthAfterCursor,
+                    ),
             )
-        )
-        buffer.delete(
-            start = charSequence.offsetByCodePoints(
-                index = selection.min,
-                offset = -lengthBeforeCursor
-            ),
-            end = selection.min
-        )
-    }
-
-    override fun setSelection(start: Int, end: Int) {
-        buffer.setSelectionCoerced(start, end)
-    }
-
-    override fun commitText(text: CharSequence, newCursorPosition: Int) {
-        // API description says replace ongoing composition text if there. Then, if there is no
-        // composition text, insert text into the cursor position or replace selection.
-        val replacementRange = buffer.composition ?: buffer.selection
-        buffer.replace(replacementRange.min, replacementRange.max, text)
-
-        val newCursor = replacementRange.min + text.length
-
-        // See API description for the meaning of newCursorPosition.
-        val newCursorInBuffer =
-            if (newCursorPosition > 0) {
-                newCursor + newCursorPosition - 1
-            } else {
-                newCursor + newCursorPosition - text.length
-            }
-        buffer.setSelectionCoerced(newCursorInBuffer, newCursorInBuffer)
-    }
-
-    override fun setComposingRegion(start: Int, end: Int) {
-        // Sanitize the input: reverse if reversed, clamp into valid range, ignore empty range.
-        val clampedStart = start.coerceIn(0, buffer.length)
-        val clampedEnd = end.coerceIn(0, buffer.length)
-        if (clampedStart == clampedEnd) {
-            // do nothing. empty composition range is not allowed.
-        } else if (clampedStart < clampedEnd) {
-            buffer.setComposition(clampedStart, clampedEnd)
-        } else {
-            buffer.setComposition(clampedEnd, clampedStart)
-        }
-    }
-
-    override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
-        val replacementRange = buffer.composition ?: buffer.selection
-        // API doc says, if there is ongoing composing text, replace it with new text.
-        // If there is no composing text, insert composing text into the cursor position with
-        // removing selected text if any.
-        buffer.replace(replacementRange.min, replacementRange.max, text)
-        if (text.isNotEmpty()) {
-            buffer.setComposition(replacementRange.min, replacementRange.min + text.length)
+            buffer.delete(
+                start =
+                    charSequence.offsetByCodePoints(
+                        index = selection.min,
+                        offset = -lengthBeforeCursor,
+                    ),
+                end = selection.min,
+            )
         }
 
-        val newCursor = replacementRange.min + text.length
+        override fun setSelection(start: Int, end: Int) {
+            buffer.setSelectionCoerced(start, end)
+        }
 
-        // See API description for the meaning of newCursorPosition.
-        val newCursorInBuffer =
-            if (newCursorPosition > 0) {
-                newCursor + newCursorPosition - 1
+        override fun commitText(text: CharSequence, newCursorPosition: Int) {
+            // API description says replace ongoing composition text if there. Then, if there is no
+            // composition text, insert text into the cursor position or replace selection.
+            val replacementRange = buffer.composition ?: buffer.selection
+            buffer.replace(replacementRange.min, replacementRange.max, text)
+
+            val newCursor = replacementRange.min + text.length
+
+            // See API description for the meaning of newCursorPosition.
+            val newCursorInBuffer =
+                if (newCursorPosition > 0) {
+                    newCursor + newCursorPosition - 1
+                } else {
+                    newCursor + newCursorPosition - text.length
+                }
+            buffer.setSelectionCoerced(newCursorInBuffer, newCursorInBuffer)
+        }
+
+        override fun setComposingRegion(start: Int, end: Int) {
+            // Sanitize the input: reverse if reversed, clamp into valid range, ignore empty range.
+            val clampedStart = start.coerceIn(0, buffer.length)
+            val clampedEnd = end.coerceIn(0, buffer.length)
+            if (clampedStart == clampedEnd) {
+                // do nothing. empty composition range is not allowed.
+            } else if (clampedStart < clampedEnd) {
+                buffer.setComposition(clampedStart, clampedEnd)
             } else {
-                newCursor + newCursorPosition - text.length
+                buffer.setComposition(clampedEnd, clampedStart)
+            }
+        }
+
+        override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
+            val replacementRange = buffer.composition ?: buffer.selection
+            // API doc says, if there is ongoing composing text, replace it with new text.
+            // If there is no composing text, insert composing text into the cursor position with
+            // removing selected text if any.
+            buffer.replace(replacementRange.min, replacementRange.max, text)
+            if (text.isNotEmpty()) {
+                buffer.setComposition(replacementRange.min, replacementRange.min + text.length)
             }
 
-        buffer.setSelectionCoerced(newCursorInBuffer, newCursorInBuffer)
-    }
+            val newCursor = replacementRange.min + text.length
 
-    override fun finishComposingText() {
-        buffer.commitComposition()
+            // See API description for the meaning of newCursorPosition.
+            val newCursorInBuffer =
+                if (newCursorPosition > 0) {
+                    newCursor + newCursorPosition - 1
+                } else {
+                    newCursor + newCursorPosition - text.length
+                }
+
+            buffer.setSelectionCoerced(newCursorInBuffer, newCursorInBuffer)
+        }
+
+        override fun finishComposingText() {
+            buffer.commitComposition()
+        }
     }
-}
 
 @OptIn(ExperimentalComposeUiApi::class)
 internal data class SkikoPlatformTextInputMethodRequest(
@@ -250,5 +254,5 @@ internal data class SkikoPlatformTextInputMethodRequest(
     override val textClippingRectInRoot: () -> Rect?,
     override val unclippedTextOffsetInRoot: () -> Offset?,
     override val editText: (block: TextEditingScope.() -> Unit) -> Unit,
-    override val editorToken: Any?,
-): PlatformTextInputMethodRequest
+    @Suppress("NOTHING_TO_OVERRIDE") override val editorToken: Any?,
+) : PlatformTextInputMethodRequest

@@ -31,6 +31,7 @@ import org.gradle.kotlin.dsl.get
 import org.gradle.kotlin.dsl.getByName
 import org.gradle.process.CommandLineArgumentProvider
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
+import org.jetbrains.kotlin.gradle.targets.jvm.KotlinJvmTarget
 
 const val ERROR_PRONE_TASK = "runErrorProne"
 
@@ -47,10 +48,11 @@ fun Project.configureErrorProneForJava() {
     val kmpExtension = project.multiplatformExtension
     log.info("Configuring error-prone for ${project.path}")
     if (kmpExtension != null) { // KMP project
+        val jvmTarget =
+            kmpExtension.targets.withType(KotlinJvmTarget::class.java).singleOrNull()
+                ?: kmpExtension.jvm()
         val compileJavaTaskProvider =
-            kmpExtension
-                .jvm()
-                .compilations
+            jvmTarget.compilations
                 .getByName(KotlinCompilation.MAIN_COMPILATION_NAME)
                 .compileJavaTaskProvider
         makeErrorProneTask(compileJavaTaskProvider)

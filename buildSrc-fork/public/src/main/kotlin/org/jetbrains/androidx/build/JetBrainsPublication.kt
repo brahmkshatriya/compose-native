@@ -56,6 +56,18 @@ object JetBrainsPublication {
                         ":compose:runtime:runtime-saveable",
                         supportedPlatforms = ComposePlatforms.ALL,
                     ),
+                    ComposeComponent(
+                        ":compose:runtime:runtime-annotation",
+                        supportedPlatforms = ComposePlatforms.ALL,
+                    ),
+                    ComposeComponent(
+                        ":compose:runtime:runtime-retain",
+                        supportedPlatforms = ComposePlatforms.ALL,
+                    ),
+                    ComposeComponent(
+                        ":collection:collection",
+                        supportedPlatforms = ComposePlatforms.ALL,
+                    ),
                     ComposeComponent(":compose:ui:ui"),
                     ComposeComponent(":compose:ui:ui-geometry"),
                     ComposeComponent(
@@ -66,7 +78,9 @@ object JetBrainsPublication {
                     ComposeComponent(
                         ":compose:desktop:desktop-native",
                         supportedPlatforms =
-                            ComposePlatforms.LINUX_NATIVE + ComposePlatforms.WINDOWS_NATIVE,
+                            ComposePlatforms.LINUX_NATIVE +
+                                ComposePlatforms.WINDOWS_NATIVE +
+                                ComposePlatforms.MACOS_NATIVE,
                     ),
                     ComposeComponent(":compose:ui:ui-skiko"),
                     ComposeComponent(":compose:ui:ui-test"),
@@ -184,9 +198,13 @@ object JetBrainsPublication {
             "NAVIGATION_EVENT" to
                 listOf(
                     ComposeComponent(
+                        ":navigationevent:navigationevent",
+                        supportedPlatforms = ComposePlatforms.ALL,
+                    ),
+                    ComposeComponent(
                         ":navigationevent:navigationevent-compose",
                         supportedPlatforms = ComposePlatforms.ALL,
-                    )
+                    ),
                 ),
             "SAVEDSTATE" to
                 listOf(
@@ -267,12 +285,30 @@ object JetBrainsPublication {
                     )
             }
 
-    /** Complete target-level graph required by the existing UIKit Compose host on iOS. */
+    /**
+     * Fork-specific modules published for Compose Desktop/JVM; all other dependencies stay
+     * upstream.
+     */
+    val jvmComponents: List<ComposeComponent>
+        get() =
+            forkComposeComponents.map { component ->
+                component.copy(supportedPlatforms = setOf(ComposePlatforms.Desktop))
+            }
+
+    /** Fork-specific modules published for iOS; all other iOS dependencies stay upstream. */
     val iosComponents: List<ComposeComponent>
         get() =
-            iosComponentPaths.map { path ->
-                projectPathToComponent[path]?.copy(supportedPlatforms = ComposePlatforms.IOS)
-                    ?: ComposeComponent(path, supportedPlatforms = ComposePlatforms.IOS)
+            forkComposeComponents.map { component ->
+                component.copy(supportedPlatforms = ComposePlatforms.IOS)
+            }
+
+    /** Complete desktop-native fork graph published for Intel and Apple Silicon macOS. */
+    val macosComponents: List<ComposeComponent>
+        get() =
+            nativeComponentPaths.map { path ->
+                projectPathToComponent[path]?.copy(
+                    supportedPlatforms = ComposePlatforms.MACOS_NATIVE
+                ) ?: ComposeComponent(path, supportedPlatforms = ComposePlatforms.MACOS_NATIVE)
             }
 
     /** Modules with fork-specific behavior that must replace upstream on Android, JS, and Wasm. */
@@ -282,17 +318,13 @@ object JetBrainsPublication {
     private val forkComposeComponentPaths =
         listOf(":compose:foundation:foundation", ":compose:material3:material3")
 
-    private val iosComponentPaths
-        get() =
-            nativeComponentPaths.filterNot {
-                it == ":compose:desktop:desktop-native" ||
-                    it == ":compose:components:components-resources"
-            } + ":compose:ui:ui-uikit"
-
     private val nativeComponentPaths =
         listOf(
+            ":collection:collection",
             ":compose:runtime:runtime",
+            ":compose:runtime:runtime-annotation",
             ":compose:runtime:runtime-saveable",
+            ":compose:runtime:runtime-retain",
             ":lifecycle:lifecycle-common",
             ":lifecycle:lifecycle-runtime",
             ":lifecycle:lifecycle-viewmodel",
@@ -304,6 +336,7 @@ object JetBrainsPublication {
             ":savedstate:savedstate-compose",
             ":navigation3:navigation3-runtime",
             ":navigation3:navigation3-ui",
+            ":navigationevent:navigationevent",
             ":navigationevent:navigationevent-compose",
             ":compose:ui:ui-util",
             ":compose:ui:ui-unit",
@@ -320,6 +353,7 @@ object JetBrainsPublication {
             ":compose:foundation:foundation",
             ":compose:material:material-ripple",
             ":compose:material:material",
+            ":compose:material3:material3-ripple",
             ":compose:material3:material3",
             ":compose:desktop:desktop-native",
             ":compose:components:components-resources",

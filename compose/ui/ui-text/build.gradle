@@ -97,9 +97,11 @@ androidXMultiplatform {
     }
 }
 
-dependencies {
-    lintPublish(project(":compose:ui:ui-text-lint"))
-    lintChecks(project(":compose:ui:ui-text-lint"))
+plugins.withId("com.android.library") {
+    dependencies {
+        lintChecks(project(":compose:ui:ui-text-lint"))
+        lintPublish(project(":compose:ui:ui-text-lint"))
+    }
 }
 
 androidx {

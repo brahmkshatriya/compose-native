@@ -17,6 +17,7 @@
 import androidx.build.KotlinTarget
 import androidx.build.SoftwareType
 import org.jetbrains.androidx.build.XcodeBuildLock
+import org.jetbrains.kotlin.gradle.utils.NativeCompilerDownloader
 
 plugins {
     id("AndroidXPlugin")
@@ -72,11 +73,18 @@ private def configure(target, isDevice, architecture, testTarget) {
     def destination = isDevice ? "generic/platform=iOS" : "generic/platform=iOS Simulator"
 
     configureObjcUtils(target, xcodeProjectDir, sdkName, destination, architecture, isDevice, testTarget)
-    configureSwiftUtils(target, xcodeProjectDir, sdkName, destination, architecture)
+    if (System.getenv("COMPOSE_SKIP_UIKIT_SWIFT_INTEROP") != "true") {
+        configureSwiftUtils(target, xcodeProjectDir, sdkName, destination, architecture)
+    }
 }
 
 private def configureObjcUtils(target, xcodeProjectDir, sdkName, destination, architecture, isDevice, testTarget) {
     def libraryName = "CMPUIKitObjcUtils"
+    def sdkOverrideRoot = System.getenv("COMPOSE_IOS_SDK_ROOT")
+    def sdkOverridePath = sdkOverrideRoot == null ? null : new File(
+            sdkOverrideRoot,
+            isDevice ? "iphoneos.sdk" : "iphonesimulator.sdk"
+    )
     def testSchemeName = "CMPUIKitUtilsTests"
     def buildDir = new File(project.buildDir, "objc/${libraryName}-${sdkName}.xcarchive")
     def libraryPath = archivedStaticLibraryPath(buildDir, libraryName)
@@ -140,8 +148,26 @@ private def configureObjcUtils(target, xcodeProjectDir, sdkName, destination, ar
                     .withPropertyName("${libraryName}-${sdkName}-archive")
 
             workingDir(xcodeProjectDir)
-            commandLine("xcodebuild")
-            args(xcodeArchiveArgs(libraryName, buildDir, sdkName, destination, architecture))
+            if (sdkOverridePath?.isDirectory()) {
+                def directBuildDir = new File(project.buildDir, "objc/direct-${libraryName}-${sdkName}")
+                def targetTriple = isDevice
+                        ? "${architecture}-apple-ios14.0"
+                        : "${architecture}-apple-ios14.0-simulator"
+                commandLine("/bin/bash", "-c", """
+                    set -e
+                    rm -rf '${directBuildDir}'
+                    mkdir -p '${directBuildDir}' '${libraryPath.parentFile}'
+                    for src in '${headersPath}'/*.m; do
+                        obj='${directBuildDir}'/\$(basename \"\${src%.m}\").o
+                        clang -fobjc-arc -target '${targetTriple}' -isysroot '${sdkOverridePath}' \
+                            -I'${headersPath}' -c \"\$src\" -o \"\$obj\"
+                    done
+                    libtool -static -o '${libraryPath}' '${directBuildDir}'/*.o
+                """)
+            } else {
+                commandLine("xcodebuild")
+                args(xcodeArchiveArgs(libraryName, buildDir, sdkName, destination, architecture))
+            }
         }
 
         tasks[compileTaskProvider.name].dependsOn(libTask)
@@ -151,6 +177,24 @@ private def configureObjcUtils(target, xcodeProjectDir, sdkName, destination, ar
             objcUtils {
                 def cinteropTask = tasks[interopProcessingTaskName]
 
+                // Reuse Kotlin/Native's built-in Apple framework KLIBs. Without these explicit
+                // cinterop dependencies, system declarations imported by the CMP headers are
+                // generated again in androidx.compose.ui.uikit.utils, producing incompatible
+                // duplicates of platform.UIKit / platform.Metal / platform.CoreGraphics types.
+                def konanHome = new NativeCompilerDownloader(project).compilerDirectory
+                def platformKlibs = new File(
+                        konanHome,
+                        "klib/platform/${target.konanTarget.name}"
+                )
+                dependencyFiles += project.files(
+                        new File(platformKlibs, "org.jetbrains.kotlin.native.platform.UIKit"),
+                        new File(platformKlibs, "org.jetbrains.kotlin.native.platform.Metal"),
+                        new File(platformKlibs, "org.jetbrains.kotlin.native.platform.CoreGraphics"),
+                        new File(platformKlibs, "org.jetbrains.kotlin.native.platform.Foundation"),
+                        new File(platformKlibs, "org.jetbrains.kotlin.native.platform.IOSurface"),
+                        new File(platformKlibs, "org.jetbrains.kotlin.native.platform.darwin")
+                )
+
                 headersPath.eachFileRecurse {
                     if (it.name.endsWith('.h')) {
                         extraOpts("-header", it.name)
@@ -158,6 +202,9 @@ private def configureObjcUtils(target, xcodeProjectDir, sdkName, destination, ar
                     }
                 }
                 compilerOpts("-I${headersPath}")
+                if (sdkOverridePath?.isDirectory()) {
+                    compilerOpts("-isysroot", sdkOverridePath.absolutePath)
+                }
             }
         }
     }
@@ -174,6 +221,11 @@ private def configureObjcUtils(target, xcodeProjectDir, sdkName, destination, ar
 
 private def configureSwiftUtils(target, xcodeProjectDir, sdkName, destination, architecture) {
     def libraryName = "CMPUIKitSwiftUtils"
+    def sdkOverrideRoot = System.getenv("COMPOSE_IOS_SDK_ROOT")
+    def sdkOverridePath = sdkOverrideRoot == null ? null : new File(
+            sdkOverrideRoot,
+            sdkName == "iphoneos" ? "iphoneos.sdk" : "iphonesimulator.sdk"
+    )
     def librarySourcesDir = new File(xcodeProjectDir, libraryName)
     def buildDir = new File(project.buildDir, "objc/${libraryName}-${sdkName}.xcarchive")
     def libraryPath = archivedStaticLibraryPath(buildDir, libraryName)
@@ -288,6 +340,9 @@ private def configureSwiftUtils(target, xcodeProjectDir, sdkName, destination, a
                 cinteropTask.inputs.file(generatedHeaderPath)
                 extraOpts("-header", generatedHeaderPath.name)
                 compilerOpts("-I${headersPath}")
+                if (sdkOverridePath?.isDirectory()) {
+                    compilerOpts("-isysroot", sdkOverridePath.absolutePath)
+                }
                 defFile(generatedDefPath)
             }
         }

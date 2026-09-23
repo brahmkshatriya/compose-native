@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -66,9 +67,22 @@ internal val LocalGpuInteropRegistry = staticCompositionLocalOf<GpuInteropRegist
 internal val LocalNativeViewInvalidationDispatcher =
     staticCompositionLocalOf<((() -> Unit) -> Unit)> { { it() } }
 
+/**
+ * Returns whether OpenGL-backed [NativeView] rendering is available in the current window.
+ *
+ * A macOS window rendered with Metal intentionally returns false. Applications that need
+ * OpenGL-native interop can request the OpenGL window renderer instead.
+ */
+@ExperimentalComposeUiApi
+@Composable
+fun isOpenGlInteropAvailable(): Boolean =
+    LocalGpuInteropRegistry.current?.isAvailable == true
+
 internal class GpuInteropRegistry(private val layer: SkiaLayer) {
     val rendererDescription: String =
-        layer.withOpenGlContext { kgl_renderer()?.toKString() ?: layer.rendererDescription }
+        layer.withNativeOpenGlContext {
+            kgl_renderer()?.toKString() ?: layer.nativeRendererDescription
+        }
 
     fun create(view: InteropView): GpuNativeViewLayer = GpuNativeViewLayer(this, view)
 
@@ -78,7 +92,7 @@ internal class GpuInteropRegistry(private val layer: SkiaLayer) {
     internal fun withExternalGl(block: () -> Boolean): Boolean {
         if (!isAvailable) return false
         return try {
-            layer.withOpenGlContext(block)
+            layer.withNativeOpenGlContext(block)
         } catch (failure: Throwable) {
             if (isAvailable) throw failure
             false
@@ -93,7 +107,7 @@ internal class GpuInteropRegistry(private val layer: SkiaLayer) {
     ): Boolean {
         if (!isAvailable) return false
         return try {
-            layer.drawOpenGlTexture(textureId, width, height, canvas.skiaCanvas)
+            layer.drawNativeOpenGlTexture(textureId, width, height, canvas.skiaCanvas)
             true
         } catch (failure: Throwable) {
             if (isAvailable) throw failure
@@ -107,7 +121,7 @@ internal class GpuInteropRegistry(private val layer: SkiaLayer) {
             return
         }
         try {
-            layer.withOpenGlContext { kgl_layer_destroy(handle) }
+            layer.withNativeOpenGlContext { kgl_layer_destroy(handle) }
         } catch (failure: Throwable) {
             if (isAvailable) throw failure
             kgl_layer_destroy(handle)
@@ -246,7 +260,9 @@ fun NativeView(
         remember(view, gpuRegistry) {
             if (view.backend == InteropRenderBackend.OpenGl) {
                 requireNotNull(gpuRegistry) {
-                        "OpenGL interop requires the Compose Native desktop host"
+                        "OpenGL interop requires an OpenGL-backed Compose Native desktop window; " +
+                            "it is unavailable with the active renderer. Check " +
+                            "isOpenGlInteropAvailable() before creating an OpenGL NativeView."
                     }
                     .create(view)
             } else {

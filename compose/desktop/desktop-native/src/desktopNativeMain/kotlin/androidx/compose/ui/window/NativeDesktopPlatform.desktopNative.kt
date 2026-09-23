@@ -21,6 +21,8 @@ internal expect fun configureNativeSdlEnvironment()
 
 internal expect fun configureNativeGraphics(layer: SkiaLayer)
 
+internal expect fun fallbackNativeGraphics(layer: SkiaLayer): Boolean
+
 internal expect fun nativeGraphicsWindowFlags(layer: SkiaLayer): ULong
 
 internal expect fun attachNativeSkiaLayer(

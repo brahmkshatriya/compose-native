@@ -20,6 +20,8 @@ class ComposeNativePluginTest {
         assertEquals(true, "linuxX64CompileKlibraries".isDesktopNativeConfiguration())
         assertEquals(true, "linuxArm64RuntimeKlibraries".isDesktopNativeConfiguration())
         assertEquals(true, "mingwX64CompileKlibraries".isDesktopNativeConfiguration())
+        assertEquals(true, "macosX64CompileKlibraries".isDesktopNativeConfiguration())
+        assertEquals(true, "macosArm64RuntimeKlibraries".isDesktopNativeConfiguration())
         assertEquals(
             true,
             "desktopNativeMainResolvableDependenciesMetadata".isDesktopNativeConfiguration(),
@@ -36,7 +38,8 @@ class ComposeNativePluginTest {
         ComposeNativePlugin().apply(project)
         val sharedMetadata =
             project.configurations.create("desktopNativeMainResolvableDependenciesMetadata")
-        val commonMetadata = project.configurations.create("commonMainResolvableDependenciesMetadata")
+        val commonMetadata =
+            project.configurations.create("commonMainResolvableDependenciesMetadata")
         val nativeTarget = Attribute.of("org.jetbrains.kotlin.native.target", String::class.java)
 
         assertEquals("linux_x64", sharedMetadata.attributes.getAttribute(nativeTarget))
@@ -86,6 +89,8 @@ class ComposeNativePluginTest {
         assertEquals(true, "linuxX64CompileKlibraries".usesNativeOverlay())
         assertEquals(false, "linuxMainResolvableDependenciesMetadata".usesNativeOverlay())
         assertEquals(true, "desktopNativeMainImplementation".usesNativeOverlay())
+        assertEquals(true, "macosX64CompileKlibraries".usesNativeOverlay())
+        assertEquals(true, "macosArm64RuntimeKlibraries".usesNativeOverlay())
         assertEquals(false, "commonMainResolvableDependenciesMetadata".usesNativeOverlay())
     }
 
@@ -135,7 +140,7 @@ class ComposeNativePluginTest {
         val project = ProjectBuilder.builder().build()
         val desktopNative = project.configurations.create("desktopNativeMainImplementation")
 
-        assertEquals("0.151.5", project.nativeSkikoPublicationVersion())
+        assertEquals("0.153.1", project.nativeSkikoPublicationVersion())
 
         desktopNative.dependencies.add(
             project.dependencies.create("dev.brahmkshatriya.skiko:skiko:0.151.6")
@@ -185,6 +190,14 @@ class ComposeNativePluginTest {
         assertEquals(
             true,
             "generateMetadataFileForMingwX64Publication".isDesktopNativePublicationMetadataTask(),
+        )
+        assertEquals(
+            true,
+            "generateMetadataFileForMacosX64Publication".isDesktopNativePublicationMetadataTask(),
+        )
+        assertEquals(
+            true,
+            "generateMetadataFileForMacosArm64Publication".isDesktopNativePublicationMetadataTask(),
         )
         assertEquals(
             false,
@@ -394,21 +407,23 @@ class ComposeNativePluginTest {
                 includeAndroidx = true,
             ),
         )
-        assertNull(
+        assertEquals(
+            "dev.brahmkshatriya.compose.runtime:runtime-retain:1.12.10-alpha02",
             composeForkCoordinateFor(
                 "androidx.compose.runtime",
                 "runtime-retain",
                 "1.12.10-alpha02",
                 includeAndroidx = true,
-            )
+            ),
         )
-        assertNull(
+        assertEquals(
+            "dev.brahmkshatriya.compose.runtime:runtime-annotation:1.12.10-alpha02",
             composeForkCoordinateFor(
                 "androidx.compose.runtime",
                 "runtime-annotation",
                 "1.12.10-alpha02",
                 includeAndroidx = true,
-            )
+            ),
         )
     }
 }

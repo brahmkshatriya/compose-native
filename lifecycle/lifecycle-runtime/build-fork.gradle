@@ -21,7 +21,7 @@ androidXMultiplatform {
             androidResources.enable = true
         }
         desktop()
-        mac()
+        macosArm64()
         linux()
         ios()
         watchos()
@@ -31,15 +31,23 @@ androidXMultiplatform {
         wasmJs()
     }
 
+    // AndroidX no longer publishes a usable Intel macOS runtime for this fork graph.
+    // Build it from the same in-tree sources as the other source-built lifecycle modules.
+    macosX64()
+
     defaultPlatform(PlatformIdentifier.ANDROID)
 
     sourceSets {
+        configureEach {
+            languageSettings.optIn("kotlin.experimental.ExperimentalNativeApi")
+        }
+
         // jbVerifyForkDependencies: suppress
         commonMain {
             dependencies {
-                // Keep direct references to fork versions to correctly resolve
-                // new redirections to Google's artifacts.
                 api(project(":lifecycle:lifecycle-common"))
+                api("androidx.annotation:annotation:1.9.1")
+                implementation("androidx.collection:collection:1.5.0")
             }
         }
     }

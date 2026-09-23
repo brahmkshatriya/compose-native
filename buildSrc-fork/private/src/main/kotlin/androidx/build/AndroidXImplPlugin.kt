@@ -216,8 +216,8 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
         project.configureConstraintsWithinGroup(androidXExtension)
         project.validateProjectParser(androidXExtension)
         project.validateAllArchiveInputsRecognized()
-        project.afterEvaluate {
-            if (androidXExtension.shouldPublishSbom().get()) {
+        val finalizeAndroidXProject = {
+            if (!isJetBrainsFork(project) && androidXExtension.shouldPublishSbom().get()) {
                 project.configureSbomPublishing(androidXExtension.isIsolatedProjectsEnabled())
             }
             if (androidXExtension.shouldPublish.get()) {
@@ -228,6 +228,13 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
             project.registerValidateMultiplatformSourceSetNamingTask()
             project.validateLintVersionTestExists(androidXExtension)
         }
+        if (!project.isJetBrainsAppleNativeOnlyPublication()) {
+            if (isJetBrainsFork(project)) {
+                project.gradle.projectsEvaluated { finalizeAndroidXProject() }
+            } else {
+                project.afterEvaluate { finalizeAndroidXProject() }
+            }
+        }
         TaskUpToDateValidator.setup(project, registry)
 
         project.workaroundAndroidXDependencyResolutions()
@@ -235,7 +242,9 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
         project.configureMaxDepVersions(androidXExtension)
         project.configureUnzipChromeBuildService()
 
-        project.configureDependencyAnalysisPlugin()
+        if (!project.isJetBrainsAppleNativeOnlyPublication()) {
+            project.configureDependencyAnalysisPlugin()
+        }
     }
 
     private fun initializeAndroidXExtension(project: Project): AndroidXExtension {
@@ -364,25 +373,27 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
             }
         }
 
-        // Specify coreLibrariesVersion for consumption by Kotlin Gradle Plugin. Note that KGP does
-        // not explicitly support varying the version between tasks/configurations for a given
-        // project, so this is not strictly correct. Picking the non-test (e.g. lower) value seems
-        // to work, though.
-        afterEvaluate { evaluatedProject ->
-            evaluatedProject.kotlinExtensionOrNull?.let { kotlinExtension ->
-                kotlinExtension.coreLibrariesVersion = kotlinVersionStringProvider.get()
-            }
-            if (evaluatedProject.androidXExtension.shouldPublish.get()) {
-                tasks.register(
-                    CheckKotlinApiTargetTask.TASK_NAME,
-                    CheckKotlinApiTargetTask::class.java,
-                ) {
-                    it.kotlinTarget.set(kotlinVersionProvider)
-                    it.outputFile.set(layout.buildDirectory.file("kotlinApiTargetCheckReport.txt"))
-                }
-                addToBuildOnServer(CheckKotlinApiTargetTask.TASK_NAME)
+        // Specify coreLibrariesVersion for consumption by Kotlin Gradle Plugin. Configure it when
+        // the Kotlin plugin is applied instead of using Project.afterEvaluate(), which Gradle's
+        // mutation guard rejects from lazy project-configuration contexts.
+        plugins.configureEach { plugin ->
+            if (plugin is KotlinBasePluginWrapper || plugin is KotlinBaseApiPlugin) {
+                kotlinExtensionOrNull?.coreLibrariesVersion = kotlinVersionStringProvider.get()
             }
         }
+
+        // Register this lazily for every project and skip it for non-published projects. This keeps
+        // task registration independent of project evaluation order.
+        val checkKotlinApiTarget =
+            tasks.register(
+                CheckKotlinApiTargetTask.TASK_NAME,
+                CheckKotlinApiTargetTask::class.java,
+            ) { task ->
+                task.kotlinTarget.set(kotlinVersionProvider)
+                task.outputFile.set(layout.buildDirectory.file("kotlinApiTargetCheckReport.txt"))
+                task.onlyIf { androidXExtension.shouldPublish.get() }
+            }
+        addToBuildOnServer(checkKotlinApiTarget)
 
         // Resolve classpath conflicts caused by kotlin-stdlib-jdk7 and -jdk8 artifacts by amending
         // the kotlin-stdlib artifact metadata to add same-version constraints.
@@ -747,6 +758,7 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
                     Category.CATEGORY_ATTRIBUTE,
                     project.objects.named<Category>(Category.LIBRARY),
                 )
+                it.attributes.attribute(KotlinPlatformType.attribute, KotlinPlatformType.androidJvm)
                 it.attributes.attribute(
                     BuildTypeAttr.ATTRIBUTE,
                     project.objects.named<BuildTypeAttr>("release"),
@@ -971,10 +983,11 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
             project.addToBuildOnServer("jar")
         } else {
             val multiplatformExtension = project.multiplatformExtension!!
-            multiplatformExtension.targets.forEach {
-                if (it.platformType == KotlinPlatformType.jvm) {
-                    val task = project.tasks.named(it.artifactsTaskName, Jar::class.java)
-                    project.addToBuildOnServer(task)
+            multiplatformExtension.targets.forEach { target ->
+                if (target.platformType == KotlinPlatformType.jvm) {
+                    project.tasks.findByName(target.artifactsTaskName)?.let { task ->
+                        project.addToBuildOnServer(task.path)
+                    }
                 }
             }
         }
@@ -1000,7 +1013,10 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
     }
 
     private fun Project.configureProjectVersionValidation(androidXExtension: AndroidXExtension) {
-        // AndroidXExtension.mavenGroup is not readable until afterEvaluate.
+        // This upstream AndroidX policy check depends on evaluation-time Maven group state. The
+        // JetBrains fork owns its publication coordinates separately and may configure projects
+        // lazily, where Project.afterEvaluate is forbidden by Gradle's mutation guard.
+        if (isJetBrainsFork(project)) return
         afterEvaluate { androidXExtension.validateMavenVersion() }
     }
 
@@ -1257,23 +1273,33 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
     // If this project wants other project in the same group to have the same version,
     // this function configures those constraints.
     private fun Project.configureConstraintsWithinGroup(androidXExtension: AndroidXExtension) {
+        // The filtered Apple-native JetBrains publication graph configures projects lazily under
+        // Gradle's
+        // mutation guard, where evaluation callbacks are forbidden. Same-group constraints are
+        // not required to compile or publish the isolated Apple-native target artifacts.
+        if (
+            project.isJetBrainsAppleNativeOnlyPublication() ||
+                project.isJetBrainsJvmOnlyPublication()
+        ) {
+            return
+        }
         if (
             !project.shouldAddGroupConstraints().get() || buildFeatures.isIsolatedProjectsEnabled()
         ) {
             return
         }
-        project.afterEvaluate {
+        val configureGroupConstraints = configureGroupConstraints@{
             // make sure that the project has a group
-            val projectGroup = androidXExtension.mavenGroup ?: return@afterEvaluate
+            val projectGroup = androidXExtension.mavenGroup ?: return@configureGroupConstraints
             // make sure that this group is configured to use a single version
-            projectGroup.atomicGroupVersion ?: return@afterEvaluate
+            projectGroup.atomicGroupVersion ?: return@configureGroupConstraints
 
             // Under certain circumstances, a project is allowed to override its
             // version see ( isGroupVersionOverrideAllowed ), in which case it's
             // not participating in the versioning policy yet,
             // and we don't assign it any version constraints
             if (androidXExtension.mavenVersion != null) {
-                return@afterEvaluate
+                return@configureGroupConstraints
             }
 
             // We don't want to emit the same constraint into our .module file more than once,
@@ -1378,6 +1404,11 @@ abstract class AndroidXImplPlugin @Inject constructor() : Plugin<Project> {
                     }
                 }
             }
+        }
+        if (isJetBrainsFork(project)) {
+            project.gradle.projectsEvaluated { configureGroupConstraints() }
+        } else {
+            project.afterEvaluate { configureGroupConstraints() }
         }
     }
 
@@ -1519,6 +1550,21 @@ private fun Project.configureJavaCompilationWarnings(
 
 fun Project.hasBenchmarkPlugin(): Boolean {
     return false
+}
+
+private fun Project.isJetBrainsJvmOnlyPublication(): Boolean {
+    if (!isJetBrainsFork(this)) return false
+    val requestedPlatforms = providers.gradleProperty("compose.platforms").orNull ?: return false
+    val platforms = requestedPlatforms.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    return platforms == listOf("Desktop")
+}
+
+private fun Project.isJetBrainsAppleNativeOnlyPublication(): Boolean {
+    if (!isJetBrainsFork(this)) return false
+    val requestedPlatforms = providers.gradleProperty("compose.platforms").orNull ?: return false
+    val platforms = requestedPlatforms.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+    return platforms.isNotEmpty() &&
+        platforms.all { it.startsWith("Ios") || it.startsWith("Macos") }
 }
 
 fun Project.isMacrobenchmark(): Boolean {

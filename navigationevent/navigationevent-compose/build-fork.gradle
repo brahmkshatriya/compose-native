@@ -38,7 +38,7 @@ androidXMultiplatform {
 
         }
         desktop()
-        mac()
+        macosArm64()
         linux()
         ios()
         watchos()
@@ -48,6 +48,10 @@ androidXMultiplatform {
         wasmJs()
     }
 
+    // Google no longer publishes these redirect artifacts for Intel macOS.
+    // Build macosX64 from the in-tree sources while retaining redirects elsewhere.
+    macosX64()
+
     defaultPlatform(PlatformIdentifier.ANDROID)
 
     sourceSets {
@@ -55,7 +59,17 @@ androidXMultiplatform {
         commonMain.dependencies {
             // Keep direct references to fork versions to correctly resolve
             // new redirections to Google's artifacts.
+            api(project(":navigationevent:navigationevent"))
             api("org.jetbrains.compose.runtime:runtime:1.11.0")
+            implementation(libs.kotlinCoroutinesCore)
+        }
+
+        create("nonAndroidMain").dependsOn(commonMain)
+        desktopMain.dependsOn(nonAndroidMain)
+        nonJvmMain.dependsOn(nonAndroidMain)
+
+        wasmJsMain.dependencies {
+            implementation(libs.kotlinXw3c)
         }
     }
 }

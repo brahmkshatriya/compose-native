@@ -17,6 +17,7 @@ enum class ComposePlatforms(vararg val alternativeNames: String) {
     Android("Android"),
     Js("Web"),
     WasmJs("Web"),
+    MacosX64("Macos"),
     MacosArm64("Macos"),
     IosArm64("Ios"),
     IosSimulatorArm64("Ios"),
@@ -78,6 +79,7 @@ enum class ComposePlatforms(vararg val alternativeNames: String) {
         )
 
         val MACOS_NATIVE = EnumSet.of(
+            MacosX64,
             MacosArm64
         )
 
