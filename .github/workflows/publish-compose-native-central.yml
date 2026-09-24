@@ -164,10 +164,26 @@ jobs:
           retention-days: 5
 
   android-web:
-    name: Build Android, JS, and Wasm
+    name: Build ${{ matrix.name }}
     needs: prepare
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Android
+            id: android
+            runner: ubuntu-24.04
+            platform: Android
+          - name: JS
+            id: js
+            runner: ubuntu-24.04
+            platform: Js
+          - name: Wasm
+            id: wasm
+            runner: ubuntu-24.04
+            platform: WasmJs
     steps:
       - uses: actions/checkout@v4
 
@@ -181,37 +197,48 @@ jobs:
 
       - uses: android-actions/setup-android@v4
         name: Set up Android SDK
+        if: matrix.platform == 'Android'
 
       - name: Install Android platform and export JDK
         shell: bash
         run: |
           set -euo pipefail
-          sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+          if [[ "${{ matrix.platform }}" == 'Android' ]]; then
+            sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+          fi
           echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
 
-      - name: Publish fork platforms to an isolated Maven repository
+      - name: Publish fork platform to an isolated Maven repository
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          COMPOSE_PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
           repository="$GITHUB_WORKSPACE/release/maven-local"
+          compose_platforms="$COMPOSE_PLATFORM"
+          if [[ "$COMPOSE_PLATFORM" == 'Android' ]]; then
+            compose_platforms='Android,Js'
+          fi
           ./gradlew \
             --no-daemon \
             --stacktrace \
             --no-configuration-cache \
             --configure-on-demand \
             "-Dmaven.repo.local=$repository" \
-            -Pcompose.platforms=Android,Js,WasmJs \
+            "-Pcompose.platforms=$compose_platforms" \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
             "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            :mpp:publishComposeForkPlatformsToMavenLocal
+            ":compose:foundation:foundation:publish${COMPOSE_PLATFORM}PublicationToMavenLocal" \
+            ":compose:material3:material3:publish${COMPOSE_PLATFORM}PublicationToMavenLocal"
 
-          scripts/verify-fork-android-aars.py \
-            --repository "$repository" \
-            --version "$RELEASE_VERSION" \
-            --group-prefix dev.brahmkshatriya
+          if [[ "$COMPOSE_PLATFORM" == 'Android' ]]; then
+            scripts/verify-fork-android-aars.py \
+              --repository "$repository" \
+              --version "$RELEASE_VERSION" \
+              --group-prefix dev.brahmkshatriya
+          fi
 
       - name: Export only fork publications
         shell: bash
@@ -228,9 +255,9 @@ jobs:
           test -d "$export_root/compose"
 
       - uses: actions/upload-artifact@v4
-        name: Upload Android and web repository
+        name: Upload ${{ matrix.name }} repository
         with:
-          name: compose-native-repo-android-web-${{ needs.prepare.outputs.version }}
+          name: compose-native-repo-${{ matrix.id }}-${{ needs.prepare.outputs.version }}
           path: release/export
           if-no-files-found: error
           retention-days: 5
@@ -301,10 +328,24 @@ jobs:
           retention-days: 5
 
   ios:
-    name: Build iOS
+    name: Build ${{ matrix.name }}
     needs: prepare
-    runs-on: macos-15
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: iOS arm64
+            id: ios-arm64
+            runner: macos-15
+            platform: IosArm64
+            sdk: iphoneos
+          - name: iOS simulator arm64
+            id: ios-simulator-arm64
+            runner: macos-15
+            platform: IosSimulatorArm64
+            sdk: iphonesimulator
     steps:
       - uses: actions/checkout@v4
 
@@ -318,17 +359,19 @@ jobs:
 
       - name: Verify Xcode and export JDK
         shell: bash
+        env:
+          XCODE_SDK: ${{ matrix.sdk }}
         run: |
           set -euo pipefail
           xcodebuild -version
-          xcrun --sdk iphoneos --show-sdk-version
-          xcrun --sdk iphonesimulator --show-sdk-version
+          xcrun --sdk "$XCODE_SDK" --show-sdk-version
           echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
 
-      - name: Publish iOS targets to an isolated Maven repository
+      - name: Publish iOS target to an isolated Maven repository
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          COMPOSE_PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
           repository="$GITHUB_WORKSPACE/release/maven-local"
@@ -338,7 +381,7 @@ jobs:
             --no-configuration-cache \
             --no-configure-on-demand \
             "-Dmaven.repo.local=$repository" \
-            -Pcompose.platforms=IosArm64,IosSimulatorArm64 \
+            "-Pcompose.platforms=$COMPOSE_PLATFORM" \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
             "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
@@ -363,18 +406,30 @@ jobs:
           test -d "$export_root/compose"
 
       - uses: actions/upload-artifact@v4
-        name: Upload iOS repository
+        name: Upload ${{ matrix.name }} repository
         with:
-          name: compose-native-repo-ios-${{ needs.prepare.outputs.version }}
+          name: compose-native-repo-${{ matrix.id }}-${{ needs.prepare.outputs.version }}
           path: release/export
           if-no-files-found: error
           retention-days: 5
 
   macos:
-    name: Build macOS
+    name: Build ${{ matrix.name }}
     needs: prepare
-    runs-on: macos-15
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS x64
+            id: macos-x64
+            runner: macos-15
+            platform: MacosX64
+          - name: macOS arm64
+            id: macos-arm64
+            runner: macos-15
+            platform: MacosArm64
     steps:
       - uses: actions/checkout@v4
 
@@ -394,31 +449,30 @@ jobs:
           xcrun --sdk macosx --show-sdk-version
           echo "ANDROIDX_JDK21=$JAVA_HOME" >> "$GITHUB_ENV"
 
-      - name: Publish macOS targets to an isolated Maven repository
+      - name: Publish macOS target to an isolated Maven repository
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          COMPOSE_PLATFORM: ${{ matrix.platform }}
         run: |
           set -euo pipefail
           repository="$GITHUB_WORKSPACE/release/maven-local"
-          for compose_platform in MacosX64 MacosArm64; do
-            ./gradlew \
-              --no-daemon \
-              --stacktrace \
-              --no-configuration-cache \
-              --no-configure-on-demand \
-              "-Dmaven.repo.local=$repository" \
-              "-Pcompose.platforms=$compose_platform" \
-              -Pandroidx.enabled.kmp.target.platforms=-js,-wasm,-windows,-linux,-desktop,-android_native \
-              -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
-              "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.NAVIGATION_3=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
-              :mpp:publishComposeMacosToMavenLocal
-          done
+          ./gradlew \
+            --no-daemon \
+            --stacktrace \
+            --no-configuration-cache \
+            --no-configure-on-demand \
+            "-Dmaven.repo.local=$repository" \
+            "-Pcompose.platforms=$COMPOSE_PLATFORM" \
+            -Pandroidx.enabled.kmp.target.platforms=-js,-wasm,-windows,-linux,-desktop,-android_native \
+            -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
+            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.NAVIGATION_3=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            :mpp:publishComposeMacosToMavenLocal
 
       - name: Export only fork publications
         shell: bash
@@ -435,9 +489,9 @@ jobs:
           test -d "$export_root/compose"
 
       - uses: actions/upload-artifact@v4
-        name: Upload macOS repository
+        name: Upload ${{ matrix.name }} repository
         with:
-          name: compose-native-repo-macos-${{ needs.prepare.outputs.version }}
+          name: compose-native-repo-${{ matrix.id }}-${{ needs.prepare.outputs.version }}
           path: release/export
           if-no-files-found: error
           retention-days: 5
