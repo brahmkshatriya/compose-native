@@ -20,7 +20,8 @@ dependencies or choose dependency versions.
   targets so native desktop dependencies can be declared once. Its shared metadata resolver uses
   `linux_x64` as the representative native variant when a native-only dependency exposes separate
   Linux x64, Linux ARM64, and MinGW variants, avoiding ambiguous variant selection.
-- Add all three desktop-native targets without repeating target blocks:
+- Add all five desktop-native targets (Linux x64, Linux ARM64, MinGW x64, macOS x64, and macOS
+  ARM64) without repeating target blocks:
 
 ```kotlin
 kotlin {

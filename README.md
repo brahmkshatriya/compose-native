@@ -27,7 +27,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.13.0-alpha01"
-    id("dev.brahmkshatriya.compose") version "1.13.0-alpha03"
+    id("dev.brahmkshatriya.compose") version "1.13.0-alpha04"
 }
 ```
 
@@ -39,7 +39,7 @@ Use official Compose in `commonMain` and the fork only in `desktopNativeMain`. A
 JS, and Wasm continue using official Compose.
 
 ```kotlin
-val composeNativeVersion = "1.13.0-alpha03"
+val composeNativeVersion = "1.13.0-alpha04"
 
 kotlin {
     desktopNative {
@@ -77,7 +77,7 @@ Android, JVM desktop, JS, Wasm JS, and iOS. On macOS, Linux, and Windows Kotlin/
 fork version selects the larger native closure required by the native desktop backend.
 
 ```kotlin
-val composeNativeVersion = "1.13.0-alpha03"
+val composeNativeVersion = "1.13.0-alpha04"
 
 kotlin {
     desktopNative {
@@ -199,9 +199,9 @@ executable run tasks and Windows distributions.
 When an executable is configured, the plugin also uses `src/main/kotlin` as native desktop source
 and `src/main/composeResources` as native Compose resources. Linux builds get AppDir/AppImage tasks;
 Windows x64 gets a self-contained distribution directory, zip, MSI, and installer EXE tasks.
-Explicit `macosX64()` and
-`macosArm64()` executable targets inherit the same `desktopNativeMain` sources and get `.app`
-bundle and `.dmg` packaging tasks.
+`desktopNative()` includes macOS x64 and macOS arm64 alongside Linux x64, Linux arm64, and Windows
+x64. macOS executable targets inherit the same `desktopNativeMain` sources and get `.app` bundle
+and `.dmg` packaging tasks.
 
 Application metadata can be customized with `composeNativeApplication`:
 
@@ -248,7 +248,7 @@ notarization.
 
 | Component | Version |
 | --- | --- |
-| Compose Native plugin / fork | `1.13.0-alpha03` |
+| Compose Native plugin / fork | `1.13.0-alpha04` |
 | JetBrains Compose plugin | `1.13.0-alpha01` |
 | Kotlin / Compose compiler | `2.3.20` |
 | Native Skiko | `0.153.1` |

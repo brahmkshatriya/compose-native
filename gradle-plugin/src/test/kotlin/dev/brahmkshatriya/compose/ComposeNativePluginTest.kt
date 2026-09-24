@@ -95,6 +95,17 @@ class ComposeNativePluginTest {
     }
 
     @Test
+    fun preservesAndroidxRuntimeRedirectTargetsOnlyForRedirectedNativePlatforms() {
+        assertEquals(true, "linuxX64CompileKlibraries".usesRedirectedNativeRuntime())
+        assertEquals(true, "linuxArm64RuntimeKlibraries".usesRedirectedNativeRuntime())
+        assertEquals(true, "mingwX64CompilationDependenciesMetadata".usesRedirectedNativeRuntime())
+        assertEquals(false, "desktopNativeMainImplementation".usesRedirectedNativeRuntime())
+        assertEquals(false, "macosX64CompileKlibraries".usesRedirectedNativeRuntime())
+        assertEquals(false, "macosArm64RuntimeKlibraries".usesRedirectedNativeRuntime())
+        assertEquals(false, "commonMainResolvableDependenciesMetadata".usesRedirectedNativeRuntime())
+    }
+
+    @Test
     fun mapsUnpublishedNativeMetadataModulesToFork() {
         assertEquals(
             mapOf(

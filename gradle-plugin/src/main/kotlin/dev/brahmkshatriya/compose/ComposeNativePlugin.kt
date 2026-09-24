@@ -195,6 +195,16 @@ private fun Project.configureLocalDependencySubstitutions(
         configuration.resolutionStrategy.dependencySubstitution { rules ->
             rules.all { details ->
                 val selector = details.requested as? ModuleComponentSelector ?: return@all
+                if (
+                    configuration.name.usesRedirectedNativeRuntime() &&
+                        selector.isAndroidxRuntimeRedirectTarget()
+                ) {
+                    // Linux/Windows Runtime publications are redirect shims whose real
+                    // implementation lives in AndroidX. Do not redirect their target back to the
+                    // fork or the dependency graph loops on the shim and the Compose compiler
+                    // never sees the real Runtime KLIB.
+                    return@all
+                }
                 val substitution = substitutions["${selector.group}:${selector.module}"]
                 if (
                     substitution != null &&
@@ -459,6 +469,14 @@ internal fun String.isMetadataTransformationConfiguration(): Boolean =
 internal fun String.usesNativeOverlay(): Boolean =
     isDesktopNativeConfiguration() || isSharedNativeMetadataConfiguration()
 
+internal fun String.usesRedirectedNativeRuntime(): Boolean {
+    val normalized = lowercase()
+    return REDIRECTED_NATIVE_RUNTIME_CONFIGURATION_MARKERS.any(normalized::contains)
+}
+
+internal fun ModuleComponentSelector.isAndroidxRuntimeRedirectTarget(): Boolean =
+    group == ANDROIDX_COMPOSE_RUNTIME_GROUP && module in ANDROIDX_RUNTIME_REDIRECT_MODULES
+
 internal fun nativeMetadataSubstitutionsFor(version: String): Map<String, ModuleSubstitution> =
     NATIVE_INTERNAL_COMPOSE_MODULES.associate { (family, module) ->
         val officialCoordinate = "$OFFICIAL_COMPOSE_GROUP_PREFIX$family:$module"
@@ -599,6 +617,7 @@ private const val OFFICIAL_COMPOSE_GROUP_PREFIX = "org.jetbrains.compose."
 private const val OFFICIAL_ANDROIDX_GROUP_PREFIX = "org.jetbrains.androidx."
 private const val ANDROIDX_GROUP_PREFIX = "androidx."
 private const val ANDROIDX_COMPOSE_GROUP_PREFIX = "androidx.compose."
+private const val ANDROIDX_COMPOSE_RUNTIME_GROUP = "androidx.compose.runtime"
 private const val FORK_COMPOSE_GROUP_PREFIX = "dev.brahmkshatriya.compose."
 private const val FORK_ANDROIDX_GROUP_PREFIX = "dev.brahmkshatriya.androidx."
 private const val OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
@@ -642,11 +661,19 @@ private val OFFICIAL_SKIKO_DEPENDENCY_REGEX =
 private val DEFAULT_LINUX_LINKER_OPTIONS = listOf("-L/usr/lib")
 private val DESKTOP_NATIVE_CONFIGURATION_MARKERS =
     listOf("desktopnative", "linuxx64", "linuxarm64", "mingwx64", "macosx64", "macosarm64")
+private val REDIRECTED_NATIVE_RUNTIME_CONFIGURATION_MARKERS =
+    listOf("linuxx64", "linuxarm64", "mingwx64")
+private val ANDROIDX_RUNTIME_REDIRECT_MODULES = setOf("runtime", "runtime-annotation")
 private val SHARED_NATIVE_MAIN_CONFIGURATION_PREFIXES = listOf("desktopNativeMain")
 private val NATIVE_INTERNAL_COMPOSE_MODULES = setOf("ui" to "ui-skiko")
 
 private val DESKTOP_NATIVE_TARGET_SOURCE_SETS =
-    mapOf("linux_x64" to "linuxX64", "linux_arm64" to "linuxArm64", "mingw_x64" to "mingwX64")
-private val DESKTOP_NATIVE_SOURCE_SET_NAMES =
-    DESKTOP_NATIVE_TARGET_SOURCE_SETS.values + listOf("macosX64", "macosArm64")
+    mapOf(
+        "linux_x64" to "linuxX64",
+        "linux_arm64" to "linuxArm64",
+        "mingw_x64" to "mingwX64",
+        "macos_x64" to "macosX64",
+        "macos_arm64" to "macosArm64",
+    )
+private val DESKTOP_NATIVE_SOURCE_SET_NAMES = DESKTOP_NATIVE_TARGET_SOURCE_SETS.values
 private val DESKTOP_NATIVE_PUBLICATION_TARGET_NAMES = DESKTOP_NATIVE_SOURCE_SET_NAMES

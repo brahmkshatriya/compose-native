@@ -9,6 +9,76 @@ import org.gradle.testkit.runner.GradleRunner
 
 class ComposeNativePluginFunctionalTest {
     @Test
+    fun resolvesRealAndroidxRuntimeBehindLinuxNativeRedirectShim() {
+        val projectDir = createTempDirectory("compose-native-runtime-redirect-test").toFile()
+        projectDir.deleteOnExit()
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories {
+                        google()
+                        mavenCentral()
+                        gradlePluginPortal()
+                    }
+                }
+                dependencyResolutionManagement {
+                    repositories {
+                        google()
+                        mavenCentral()
+                    }
+                }
+                rootProject.name = "compose-native-runtime-redirect-test"
+                """
+                    .trimIndent()
+            )
+        projectDir.resolve("src/linuxX64Main/kotlin").mkdirs()
+        projectDir
+            .resolve("src/linuxX64Main/kotlin/Example.kt")
+            .writeText(
+                """
+                import androidx.compose.runtime.Composable
+
+                @Composable
+                fun Example() = Unit
+                """
+                    .trimIndent()
+            )
+        projectDir
+            .resolve("build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "2.4.20"
+                    id("org.jetbrains.kotlin.plugin.compose") version "2.4.20"
+                    id("dev.brahmkshatriya.compose")
+                }
+
+                kotlin {
+                    linuxX64()
+
+                    sourceSets {
+                        desktopNativeMain.dependencies {
+                            implementation("dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha03")
+                        }
+                    }
+                }
+                """
+                    .trimIndent()
+            )
+
+        val result =
+            GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withPluginClasspath()
+                .withArguments("compileKotlinLinuxX64", "--no-configuration-cache", "--stacktrace")
+                .build()
+
+        assertContains(result.output, "BUILD SUCCESSFUL")
+    }
+
+    @Test
     fun addsOfficialComposeUiMetadataToTheCommonMainIdeModel() {
         val projectDir = createTempDirectory("compose-native-ide-dependencies-test").toFile()
         projectDir.deleteOnExit()
@@ -272,16 +342,6 @@ class ComposeNativePluginFunctionalTest {
 
                 kotlin {
                     desktopNative {
-                        binaries.executable {
-                            entryPoint = "com.example.main"
-                        }
-                    }
-                    macosX64 {
-                        binaries.executable {
-                            entryPoint = "com.example.main"
-                        }
-                    }
-                    macosArm64 {
                         binaries.executable {
                             entryPoint = "com.example.main"
                         }
