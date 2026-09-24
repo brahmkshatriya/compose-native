@@ -312,6 +312,28 @@ class ComposeNativePluginFunctionalTest {
     }
 
     @Test
+    fun includesAndroidxRuntimeInTheCommonMetadataRepair() {
+        assertTrue(
+            isOfficialCommonIdeDependency(
+                group = "androidx.compose.runtime",
+                module = "runtime",
+            )
+        )
+        assertTrue(
+            isOfficialCommonIdeDependency(
+                group = "androidx.compose.runtime",
+                module = "runtime-annotation",
+            )
+        )
+        assertTrue(
+            isOfficialCommonIdeDependency(
+                group = "androidx.compose.runtime",
+                module = "runtime-saveable",
+            )
+        )
+    }
+
+    @Test
     fun createsDesktopNativeExecutablesAndSourceSetHierarchy() {
         val projectDir = createTempDirectory("compose-native-hierarchy-test").toFile()
         projectDir.deleteOnExit()

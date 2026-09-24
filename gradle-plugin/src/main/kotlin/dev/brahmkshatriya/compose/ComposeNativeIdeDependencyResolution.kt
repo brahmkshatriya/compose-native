@@ -97,6 +97,7 @@ private fun isOfficialCommonIdeDependency(dependency: IdeaKotlinDependency): Boo
 internal fun isOfficialCommonIdeDependency(group: String, module: String): Boolean =
     when (group) {
         OFFICIAL_COMPOSE_UI_GROUP -> module !in PLATFORM_ONLY_COMPOSE_UI_MODULES
+        OFFICIAL_ANDROIDX_COMPOSE_RUNTIME_GROUP -> true
         OFFICIAL_NAVIGATION_EVENT_GROUP -> module == NAVIGATION_EVENT_COMPOSE_MODULE
         else -> false
     }
@@ -221,6 +222,7 @@ private const val COMPOSE_FORK_GROUP_PREFIX = "dev.brahmkshatriya.compose."
 private const val OFFICIAL_COMPOSE_GROUP_PREFIX = "org.jetbrains.compose."
 private const val OFFICIAL_COMPOSE_UI_GROUP = "org.jetbrains.compose.ui"
 private const val OFFICIAL_COMPOSE_COMPONENTS_GROUP = "org.jetbrains.compose.components"
+private const val OFFICIAL_ANDROIDX_COMPOSE_RUNTIME_GROUP = "androidx.compose.runtime"
 private const val OFFICIAL_NAVIGATION_EVENT_GROUP = "androidx.navigationevent"
 private const val COMPONENTS_RESOURCES_MODULE = "components-resources"
 private const val NAVIGATION_EVENT_COMPOSE_MODULE = "navigationevent-compose"
