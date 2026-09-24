@@ -59,7 +59,9 @@ layout as shared desktop-application input:
 - `src/main/composeResources` is registered as a `desktopNativeMain` Compose resource directory.
 - Compose resources are copied next to debug and release Native executables.
 - Linux x64/arm64 executables get architecture-specific AppDir and AppImage tasks.
-- Windows x64 executables get a self-contained distribution directory and zip task.
+- Windows x64 executables get a self-contained distribution directory plus zip, MSI, and installer
+  EXE tasks.
+- Explicit macOS x64/arm64 executables get architecture-specific `.app` bundle and `.dmg` tasks.
 
 Native application metadata can be customized without defining packaging tasks in the application:
 
@@ -77,6 +79,14 @@ composeNativeApplication {
 Linux AppDir tasks strip the packaged executable by default, bundle SDL 3, copy Compose resources,
 and generate `AppRun` plus the desktop entry. Windows packaging downloads the matching SDL 3
 runtime, includes the Kotlin/Native MinGW runtime DLLs and Skiko ICU data, and copies Compose
-resources beside the executable. Additional platform runtimes can be supplied with
-`linuxX64RuntimeFiles`, `linuxArm64RuntimeFiles`, or `windowsX64RuntimeFiles`.
+resources beside the executable. `packageWindowsX64ReleaseMsi` uses WiX 4+ (`wix`) or WiX 3
+(`candle` + `light`), while `packageWindowsX64ReleaseInstallerExe` uses NSIS (`makensis`). Their
+tool paths can be overridden with `windowsWixExecutable` and `windowsNsisExecutable`, or with
+`COMPOSE_WINDOWS_WIX` and `COMPOSE_WINDOWS_NSIS`. Both installers consume the same staged
+distribution as `packageWindowsX64ReleaseZip`. macOS packaging places the executable in `Contents/MacOS`,
+Compose resources in `Contents/Resources`, runtime dylibs in `Contents/Frameworks`, rewrites
+Mach-O load paths, and ad-hoc signs the `.app` before creating the DMG. Additional platform
+runtimes can be supplied with `linuxX64RuntimeFiles`, `linuxArm64RuntimeFiles`,
+`macosX64RuntimeFiles`, `macosArm64RuntimeFiles`, or `windowsX64RuntimeFiles`.
 `stripLinuxExecutable` and `bundleSdl` can be changed in `composeNativeApplication` when needed.
+Developer ID signing and notarization remain the application/release pipeline's responsibility.

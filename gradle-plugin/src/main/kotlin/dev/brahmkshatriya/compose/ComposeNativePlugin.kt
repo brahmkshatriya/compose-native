@@ -566,7 +566,7 @@ private fun Project.addDesktopNativeSourceSets() {
         desktopNativeTest.dependsOnSourceSet(sourceSets.getByName("commonTest"))
 
         afterEvaluate {
-            DESKTOP_NATIVE_TARGET_SOURCE_SETS.values.forEach { sourceSetPrefix ->
+            DESKTOP_NATIVE_SOURCE_SET_NAMES.forEach { sourceSetPrefix ->
                 sourceSets
                     .findByName("${sourceSetPrefix}Main")
                     ?.dependsOnSourceSet(desktopNativeMain)
@@ -647,5 +647,6 @@ private val NATIVE_INTERNAL_COMPOSE_MODULES = setOf("ui" to "ui-skiko")
 
 private val DESKTOP_NATIVE_TARGET_SOURCE_SETS =
     mapOf("linux_x64" to "linuxX64", "linux_arm64" to "linuxArm64", "mingw_x64" to "mingwX64")
-private val DESKTOP_NATIVE_PUBLICATION_TARGET_NAMES =
+private val DESKTOP_NATIVE_SOURCE_SET_NAMES =
     DESKTOP_NATIVE_TARGET_SOURCE_SETS.values + listOf("macosX64", "macosArm64")
+private val DESKTOP_NATIVE_PUBLICATION_TARGET_NAMES = DESKTOP_NATIVE_SOURCE_SET_NAMES

@@ -3,6 +3,7 @@ package dev.brahmkshatriya.compose
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
+import java.util.UUID
 import java.util.zip.GZIPInputStream
 import javax.inject.Inject
 import org.gradle.api.DefaultTask
@@ -52,10 +53,14 @@ abstract class ComposeNativeApplicationExtension @Inject constructor(objects: Ob
 
     val linuxX64RuntimeFiles: ConfigurableFileCollection = objects.fileCollection()
     val linuxArm64RuntimeFiles: ConfigurableFileCollection = objects.fileCollection()
+    val macosX64RuntimeFiles: ConfigurableFileCollection = objects.fileCollection()
+    val macosArm64RuntimeFiles: ConfigurableFileCollection = objects.fileCollection()
     val windowsX64RuntimeFiles: ConfigurableFileCollection = objects.fileCollection()
 
     val windowsSdlVersion: Property<String> = objects.property(String::class.java)
     val windowsSdlSha256: Property<String> = objects.property(String::class.java)
+    val windowsWixExecutable: Property<String> = objects.property(String::class.java)
+    val windowsNsisExecutable: Property<String> = objects.property(String::class.java)
 }
 
 @DisableCachingByDefault(
@@ -349,6 +354,273 @@ abstract class PrepareWindowsDistributionTask : DefaultTask() {
     }
 }
 
+@DisableCachingByDefault(because = "Invokes WiX to build a Windows Installer package")
+abstract class PackageWindowsMsiTask
+@Inject
+constructor(private val execOperations: ExecOperations) : DefaultTask() {
+    @get:Input abstract val applicationName: Property<String>
+    @get:Input abstract val packageName: Property<String>
+    @get:Input abstract val packageVersion: Property<String>
+    @get:Input abstract val applicationDescription: Property<String>
+    @get:Input abstract val vendor: Property<String>
+
+    @get:Input
+    @get:Optional
+    abstract val wixExecutable: Property<String>
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val distributionDirectory: DirectoryProperty
+
+    @get:OutputFile abstract val outputFile: RegularFileProperty
+
+    @TaskAction
+    fun packageMsi() {
+        val tool = resolveWindowsWixTool(wixExecutable.orNull)
+        val source = temporaryDir.resolve("installer.wxs")
+        source.writeText(
+            windowsMsiSource(
+                modernWix = tool.modern,
+                applicationName = applicationName.get(),
+                packageName = packageName.get(),
+                packageVersion = packageVersion.get(),
+                description = applicationDescription.get(),
+                vendor = vendor.orNull.orEmpty(),
+                distributionDirectory = distributionDirectory.get().asFile,
+            )
+        )
+
+        val output = outputFile.get().asFile
+        output.parentFile.mkdirs()
+        output.delete()
+
+        if (tool.modern) {
+            execOperations.exec { spec ->
+                spec.executable(tool.wix!!)
+                spec.args(
+                    "build",
+                    source.absolutePath,
+                    "-arch",
+                    "x64",
+                    "-out",
+                    output.absolutePath,
+                )
+            }
+        } else {
+            val objectFile = temporaryDir.resolve("installer.wixobj")
+            objectFile.delete()
+            execOperations.exec { spec ->
+                spec.executable(tool.candle!!)
+                spec.args(
+                    "-nologo",
+                    "-arch",
+                    "x64",
+                    "-out",
+                    objectFile.absolutePath,
+                    source.absolutePath,
+                )
+            }
+            execOperations.exec { spec ->
+                spec.executable(tool.light!!)
+                spec.args(
+                    "-nologo",
+                    "-out",
+                    output.absolutePath,
+                    objectFile.absolutePath,
+                )
+            }
+        }
+    }
+}
+
+@DisableCachingByDefault(because = "Invokes NSIS to build a Windows installer executable")
+abstract class PackageWindowsInstallerExeTask
+@Inject
+constructor(private val execOperations: ExecOperations) : DefaultTask() {
+    @get:Input abstract val applicationName: Property<String>
+    @get:Input abstract val packageName: Property<String>
+    @get:Input abstract val executableName: Property<String>
+    @get:Input abstract val packageVersion: Property<String>
+    @get:Input abstract val applicationDescription: Property<String>
+    @get:Input abstract val vendor: Property<String>
+
+    @get:Input
+    @get:Optional
+    abstract val nsisExecutable: Property<String>
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val distributionDirectory: DirectoryProperty
+
+    @get:OutputFile abstract val outputFile: RegularFileProperty
+
+    @TaskAction
+    fun packageInstaller() {
+        val makensis = resolveWindowsNsisTool(nsisExecutable.orNull)
+        val output = outputFile.get().asFile
+        output.parentFile.mkdirs()
+        output.delete()
+
+        val source = temporaryDir.resolve("installer.nsi")
+        source.writeText(
+            windowsNsisSource(
+                applicationName = applicationName.get(),
+                packageName = packageName.get(),
+                executableName = executableName.get(),
+                packageVersion = packageVersion.get(),
+                description = applicationDescription.get(),
+                vendor = vendor.orNull.orEmpty(),
+                distributionDirectory = distributionDirectory.get().asFile,
+                outputFile = output,
+            )
+        )
+        execOperations.exec { spec ->
+            spec.executable(makensis)
+            spec.args(source.absolutePath)
+        }
+    }
+}
+
+@DisableCachingByDefault(
+    because = "Assembles and rewrites a platform-specific macOS application bundle"
+)
+abstract class PrepareMacosAppBundleTask : DefaultTask() {
+    @get:Input abstract val applicationName: Property<String>
+    @get:Input abstract val packageName: Property<String>
+    @get:Input abstract val executableName: Property<String>
+    @get:Input abstract val packageVersion: Property<String>
+    @get:Input abstract val applicationDescription: Property<String>
+    @get:Input abstract val vendor: Property<String>
+    @get:Input abstract val bundleSdl: Property<Boolean>
+    @get:Input abstract val targetArchitecture: Property<String>
+
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val releaseExecutable: RegularFileProperty
+
+    @get:InputDirectory
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val resourceDirectory: DirectoryProperty
+
+    @get:InputFile
+    @get:Optional
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val iconFile: RegularFileProperty
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val runtimeFiles: ConfigurableFileCollection
+
+    @get:OutputDirectory abstract val appBundle: DirectoryProperty
+
+    @TaskAction
+    fun prepare() {
+        checkMacosHost()
+        val app = appBundle.get().asFile
+        app.deleteRecursively()
+        val contents = app.resolve("Contents")
+        val macos = contents.resolve("MacOS").apply(File::mkdirs)
+        val resources = contents.resolve("Resources").apply(File::mkdirs)
+        val frameworks = contents.resolve("Frameworks").apply(File::mkdirs)
+
+        val executable = macos.resolve(executableName.get())
+        releaseExecutable.get().asFile.copyTo(executable, overwrite = true)
+        executable.setExecutable(true, false)
+
+        copyRuntimeFiles(runtimeFiles.files, frameworks)
+        bundleMacosSdlIfNeeded(executable, frameworks)
+        rewriteBundledMacosDylibs(executable, frameworks)
+
+        if (resourceDirectory.isPresent) {
+            val source = resourceDirectory.get().asFile
+            if (source.isDirectory) {
+                source.copyRecursively(resources.resolve("compose-resources"), overwrite = true)
+            }
+        }
+
+        val iconName =
+            if (iconFile.isPresent) {
+                val source = iconFile.get().asFile
+                val name = "AppIcon.${source.extension.ifBlank { "icns" }}"
+                source.copyTo(resources.resolve(name), overwrite = true)
+                name.takeIf { source.extension.equals("icns", ignoreCase = true) }
+            } else null
+
+        contents.resolve("Info.plist").writeText(
+            macosInfoPlist(
+                applicationName.get(), packageName.get(), executableName.get(), packageVersion.get(),
+                applicationDescription.get(), vendor.orNull.orEmpty(), iconName,
+            )
+        )
+        contents.resolve("PkgInfo").writeText("APPL????")
+        adHocSignMacosBundle(app)
+    }
+
+    private fun bundleMacosSdlIfNeeded(executable: File, frameworks: File) {
+        if (!bundleSdl.get() || frameworks.containsSdl3Dylib()) return
+        val dependency = macosDylibDependencies(executable).firstOrNull {
+            File(it).name.contains("SDL3", ignoreCase = true)
+        } ?: throw GradleException(
+            "Could not locate the SDL 3 dependency of ${releaseExecutable.get().asFile}. " +
+                "Add it to composeNativeApplication.${runtimePropertyName()}."
+        )
+        val source = resolveMacosRuntimeDependency(dependency, runtimeFiles.files)
+            ?: throw GradleException(
+                "Could not locate $dependency. Add the SDL 3 dylib to " +
+                    "composeNativeApplication.${runtimePropertyName()}."
+            )
+        source.copyTo(frameworks.resolve(source.name), overwrite = true)
+    }
+
+    private fun runtimePropertyName(): String =
+        if (targetArchitecture.get() == "arm64") "macosArm64RuntimeFiles"
+        else "macosX64RuntimeFiles"
+}
+
+@DisableCachingByDefault(because = "Invokes hdiutil to create a macOS disk image")
+abstract class PackageMacosDmgTask
+@Inject
+constructor(private val execOperations: ExecOperations) : DefaultTask() {
+    @get:Input abstract val applicationName: Property<String>
+
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val appBundle: DirectoryProperty
+
+    @get:OutputFile abstract val outputFile: RegularFileProperty
+
+    @TaskAction
+    fun packageDmg() {
+        checkMacosHost()
+        val hdiutil =
+            findOnPath("hdiutil") ?: throw GradleException("hdiutil was not found on PATH")
+        val source = appBundle.get().asFile
+        val staging = temporaryDir.resolve("dmg-root")
+        staging.deleteRecursively()
+        staging.mkdirs()
+        source.copyRecursively(staging.resolve(source.name), overwrite = true)
+
+        val output = outputFile.get().asFile
+        output.parentFile.mkdirs()
+        output.delete()
+        execOperations.exec { spec ->
+            spec.executable(hdiutil)
+            spec.args(
+                "create",
+                "-volname",
+                applicationName.get(),
+                "-srcfolder",
+                staging.absolutePath,
+                "-ov",
+                "-format",
+                "UDZO",
+                output.absolutePath,
+            )
+        }
+    }
+}
+
 internal fun Project.createComposeNativeApplicationExtension() {
     if (extensions.findByName(COMPOSE_NATIVE_APPLICATION_EXTENSION_NAME) != null) return
     extensions
@@ -384,6 +656,8 @@ internal fun Project.createComposeNativeApplicationExtension() {
             distributionDirectory.convention(layout.buildDirectory.dir("distributions"))
             windowsSdlVersion.convention(DEFAULT_WINDOWS_SDL_VERSION)
             windowsSdlSha256.convention(DEFAULT_WINDOWS_SDL_SHA256)
+            windowsWixExecutable.convention(providers.environmentVariable("COMPOSE_WINDOWS_WIX"))
+            windowsNsisExecutable.convention(providers.environmentVariable("COMPOSE_WINDOWS_NSIS"))
             windowsX64RuntimeFiles.from(defaultWindowsCxxRuntimeFiles())
         }
 }
@@ -406,7 +680,11 @@ internal fun Project.configureDesktopNativeApplicationConventions() {
         executableTargets
             .filter { it.platform == NativeApplicationPlatform.WINDOWS }
             .forEach(::configureWindowsPackaging)
+        executableTargets
+            .filter { it.platform == NativeApplicationPlatform.MACOS }
+            .forEach(::configureMacosPackaging)
         configureSingleLinuxPackagingAliases(executableTargets)
+        configureSingleMacosPackagingAliases(executableTargets)
     }
 }
 
@@ -553,6 +831,70 @@ private fun Project.configureLinuxPackaging(target: DesktopNativeApplicationTarg
     }
 }
 
+private fun Project.configureMacosPackaging(target: DesktopNativeApplicationTarget) {
+    val extension = extensions.getByType(ComposeNativeApplicationExtension::class.java)
+    val releaseExecutable =
+        layout.buildDirectory.file(
+            extension.binaryName.map { binary ->
+                "bin/${target.sourceSetPrefix}/releaseExecutable/$binary.kexe"
+            }
+        )
+    val resourceDirectory =
+        layout.buildDirectory.dir("bin/${target.sourceSetPrefix}/releaseExecutable/resources")
+    val appBundle =
+        extension.distributionDirectory.dir(
+            extension.applicationName.zip(extension.packageVersion) { app, version ->
+                "${app.fileSafe()}-$version-macos-${target.packageArchitecture}.app"
+            }
+        )
+    val runtimeFiles =
+        if (target.sourceSetPrefix == "macosArm64") extension.macosArm64RuntimeFiles
+        else extension.macosX64RuntimeFiles
+    val linkTaskName = "linkReleaseExecutable${target.taskSuffix}"
+    val copyTaskName = "copyRelease${target.taskSuffix}ExecutableResources"
+    val prepare =
+        tasks.register(
+            "prepare${target.taskSuffix}ReleaseAppBundle",
+            PrepareMacosAppBundleTask::class.java,
+        ) { task ->
+            task.group = "distribution"
+            task.description = "Assembles the ${target.displayName} release .app bundle."
+            task.dependsOn(linkTaskName)
+            if (tasks.findByName(copyTaskName) != null) task.dependsOn(copyTaskName)
+            task.applicationName.set(extension.applicationName)
+            task.packageName.set(extension.packageName)
+            task.executableName.set(extension.executableName)
+            task.packageVersion.set(extension.packageVersion)
+            task.applicationDescription.set(extension.description)
+            task.vendor.set(extension.vendor)
+            task.bundleSdl.set(extension.bundleSdl)
+            task.targetArchitecture.set(target.packageArchitecture)
+            task.releaseExecutable.set(releaseExecutable)
+            if (tasks.findByName(copyTaskName) != null)
+                task.resourceDirectory.set(resourceDirectory)
+            task.iconFile.set(extension.iconFile)
+            task.runtimeFiles.from(runtimeFiles)
+            task.appBundle.set(appBundle)
+        }
+    tasks.register(
+        "package${target.taskSuffix}ReleaseDmg",
+        PackageMacosDmgTask::class.java,
+    ) { task ->
+        task.group = "distribution"
+        task.description = "Builds the ${target.displayName} release DMG."
+        task.dependsOn(prepare)
+        task.applicationName.set(extension.applicationName)
+        task.appBundle.set(appBundle)
+        task.outputFile.set(
+            extension.distributionDirectory.file(
+                extension.applicationName.zip(extension.packageVersion) { app, version ->
+                    "${app.fileSafe()}-$version-macos-${target.packageArchitecture}.dmg"
+                }
+            )
+        )
+    }
+}
+
 private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTarget) {
     val extension = extensions.getByType(ComposeNativeApplicationExtension::class.java)
     val releaseExecutable =
@@ -615,6 +957,54 @@ private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTa
         task.archiveVersion.set(extension.packageVersion)
         task.archiveClassifier.set("windows-x86_64")
         task.destinationDirectory.set(extension.distributionDirectory)
+    }
+    tasks.register("packageWindowsX64ReleaseMsi", PackageWindowsMsiTask::class.java) { task ->
+        task.group = "distribution"
+        task.description = "Builds the Windows x64 release MSI installer."
+        task.dependsOn(prepare)
+        task.applicationName.set(extension.applicationName)
+        task.packageName.set(extension.packageName)
+        task.packageVersion.set(extension.packageVersion)
+        task.applicationDescription.set(extension.description)
+        task.vendor.set(extension.vendor)
+        task.wixExecutable.set(extension.windowsWixExecutable)
+        task.distributionDirectory.set(distributionDirectory)
+        task.outputFile.set(
+            extension.distributionDirectory.file(
+                extension.applicationName.zip(extension.packageVersion) { app, version ->
+                    app.fileSafe() + "-" + version + "-windows-x86_64.msi"
+                }
+            )
+        )
+    }
+    val installerExe =
+        tasks.register(
+            "packageWindowsX64ReleaseInstallerExe",
+            PackageWindowsInstallerExeTask::class.java,
+        ) { task ->
+            task.group = "distribution"
+            task.description = "Builds the Windows x64 release installer executable."
+            task.dependsOn(prepare)
+            task.applicationName.set(extension.applicationName)
+            task.packageName.set(extension.packageName)
+            task.executableName.set(extension.executableName)
+            task.packageVersion.set(extension.packageVersion)
+            task.applicationDescription.set(extension.description)
+            task.vendor.set(extension.vendor)
+            task.nsisExecutable.set(extension.windowsNsisExecutable)
+            task.distributionDirectory.set(distributionDirectory)
+            task.outputFile.set(
+                extension.distributionDirectory.file(
+                    extension.applicationName.zip(extension.packageVersion) { app, version ->
+                        app.fileSafe() + "-" + version + "-windows-x86_64-installer.exe"
+                    }
+                )
+            )
+        }
+    tasks.register("packageWindowsX64ReleaseInstaller") { task ->
+        task.group = "distribution"
+        task.description = "Builds the Windows x64 release installer executable."
+        task.dependsOn(installerExe)
     }
 }
 
@@ -718,6 +1108,314 @@ private fun Project.configureWindowsIcuData() =
         }
     }
 
+
+
+private data class WindowsWixTool(
+    val wix: String? = null,
+    val candle: String? = null,
+    val light: String? = null,
+) {
+    val modern: Boolean
+        get() = wix != null
+}
+
+private fun resolveWindowsWixTool(configured: String?): WindowsWixTool {
+    fun resolve(candidate: String): WindowsWixTool? {
+        val file = File(candidate)
+        if (file.isFile) {
+            val name = file.name.lowercase()
+            if (name == "wix" || name == "wix.exe") return WindowsWixTool(wix = file.absolutePath)
+            if (name == "candle" || name == "candle.exe") {
+                val lightName = if (name.endsWith(".exe")) "light.exe" else "light"
+                val light = file.parentFile.resolve(lightName)
+                if (light.isFile) {
+                    return WindowsWixTool(candle = file.absolutePath, light = light.absolutePath)
+                }
+            }
+            return null
+        }
+        if (!file.isDirectory) return null
+        listOf(file, file.resolve("bin")).forEach { dir ->
+            listOf("wix.exe", "wix").forEach { name ->
+                val wix = dir.resolve(name)
+                if (wix.isFile) return WindowsWixTool(wix = wix.absolutePath)
+            }
+            val candle = dir.resolve("candle.exe")
+            val light = dir.resolve("light.exe")
+            if (candle.isFile && light.isFile) {
+                return WindowsWixTool(candle = candle.absolutePath, light = light.absolutePath)
+            }
+        }
+        return null
+    }
+
+    listOfNotNull(
+        configured?.takeIf(String::isNotBlank),
+        System.getenv("COMPOSE_WINDOWS_WIX")?.takeIf(String::isNotBlank),
+        System.getenv("WIX_EXECUTABLE")?.takeIf(String::isNotBlank),
+        System.getenv("WIX")?.takeIf(String::isNotBlank),
+    ).forEach { candidate ->
+        resolve(candidate)?.let { return it }
+    }
+
+    listOf("wix.exe", "wix").forEach { name ->
+        findOnPath(name)?.let { return WindowsWixTool(wix = it) }
+    }
+    val candle = findOnPath("candle.exe") ?: findOnPath("candle")
+    val light = findOnPath("light.exe") ?: findOnPath("light")
+    if (candle != null && light != null) {
+        return WindowsWixTool(candle = candle, light = light)
+    }
+
+    commonWindowsToolRoots().forEach { root ->
+        root.listFiles().orEmpty()
+            .filter { it.isDirectory && it.name.startsWith("WiX Toolset", ignoreCase = true) }
+            .forEach { dir -> resolve(dir.absolutePath)?.let { return it } }
+    }
+
+    throw GradleException(
+        "WiX was not found. Install WiX 4+ (wix) or WiX 3 (candle/light), " +
+            "or set composeNativeApplication.windowsWixExecutable / COMPOSE_WINDOWS_WIX."
+    )
+}
+
+private fun resolveWindowsNsisTool(configured: String?): String {
+    val candidates =
+        listOfNotNull(
+            configured?.takeIf(String::isNotBlank),
+            System.getenv("COMPOSE_WINDOWS_NSIS")?.takeIf(String::isNotBlank),
+            System.getenv("MAKENSIS")?.takeIf(String::isNotBlank),
+            System.getenv("NSIS_HOME")?.takeIf(String::isNotBlank),
+        )
+    candidates.forEach { candidate ->
+        val file = File(candidate)
+        if (file.isFile) return file.absolutePath
+        if (file.isDirectory) {
+            listOf("makensis.exe", "makensis").forEach { name ->
+                val tool = file.resolve(name)
+                if (tool.isFile) return tool.absolutePath
+            }
+        }
+    }
+    findOnPath("makensis.exe")?.let { return it }
+    findOnPath("makensis")?.let { return it }
+    commonWindowsToolRoots().forEach { root ->
+        val tool = root.resolve("NSIS/makensis.exe")
+        if (tool.isFile) return tool.absolutePath
+    }
+    throw GradleException(
+        "NSIS makensis was not found. Install NSIS or set " +
+            "composeNativeApplication.windowsNsisExecutable / COMPOSE_WINDOWS_NSIS."
+    )
+}
+
+private fun commonWindowsToolRoots(): List<File> =
+    listOf("ProgramFiles", "ProgramFiles(x86)")
+        .mapNotNull(System::getenv)
+        .map(::File)
+        .filter(File::isDirectory)
+
+internal fun windowsMsiSource(
+    modernWix: Boolean,
+    applicationName: String,
+    packageName: String,
+    packageVersion: String,
+    description: String,
+    vendor: String,
+    distributionDirectory: File,
+): String {
+    val files =
+        distributionDirectory.walkTopDown()
+            .filter(File::isFile)
+            .sortedBy { it.relativeTo(distributionDirectory).invariantSeparatorsPath }
+            .toList()
+    check(files.isNotEmpty()) { "Windows distribution is empty: " + distributionDirectory }
+
+    val manufacturer = vendor.ifBlank { applicationName }
+    val version = windowsMsiVersion(packageVersion)
+    val upgradeCode =
+        UUID.nameUUIDFromBytes(packageName.toByteArray(Charsets.UTF_8)).toString().uppercase()
+
+    val sb = StringBuilder()
+    sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
+    if (modernWix) {
+        sb.append("<Wix xmlns=\"http://wixtoolset.org/schemas/v4/wxs\">\n")
+        sb.append("  <Package Name=\"").append(xmlEscape(applicationName)).append("\"")
+        sb.append(" Manufacturer=\"").append(xmlEscape(manufacturer)).append("\"")
+        sb.append(" Version=\"").append(xmlEscape(version)).append("\"")
+        sb.append(" UpgradeCode=\"").append(upgradeCode).append("\"")
+        sb.append(" Language=\"1033\" InstallerVersion=\"500\" Scope=\"perMachine\">\n")
+        sb.append("    <MajorUpgrade DowngradeErrorMessage=\"A newer version is already installed.\" />\n")
+        sb.append("    <MediaTemplate EmbedCab=\"yes\" />\n")
+        if (description.isNotBlank()) {
+            sb.append("    <Property Id=\"ARPCOMMENTS\" Value=\"")
+                .append(xmlEscape(description)).append("\" />\n")
+        }
+        sb.append("    <StandardDirectory Id=\"ProgramFiles64Folder\">\n")
+        sb.append("      <Directory Id=\"INSTALLFOLDER\" Name=\"")
+            .append(xmlEscape(applicationName.fileSafe())).append("\">\n")
+        appendWixDirectoryContents(sb, distributionDirectory, distributionDirectory, files, "        ")
+        sb.append("      </Directory>\n")
+        sb.append("    </StandardDirectory>\n")
+    } else {
+        sb.append("<Wix xmlns=\"http://schemas.microsoft.com/wix/2006/wi\">\n")
+        sb.append("  <Product Id=\"*\" Name=\"").append(xmlEscape(applicationName)).append("\"")
+        sb.append(" Language=\"1033\" Version=\"").append(xmlEscape(version)).append("\"")
+        sb.append(" Manufacturer=\"").append(xmlEscape(manufacturer)).append("\"")
+        sb.append(" UpgradeCode=\"").append(upgradeCode).append("\">\n")
+        sb.append("    <Package InstallerVersion=\"500\" Compressed=\"yes\"")
+            .append(" InstallScope=\"perMachine\" Platform=\"x64\" />\n")
+        sb.append("    <MajorUpgrade DowngradeErrorMessage=\"A newer version is already installed.\" />\n")
+        sb.append("    <MediaTemplate EmbedCab=\"yes\" />\n")
+        if (description.isNotBlank()) {
+            sb.append("    <Property Id=\"ARPCOMMENTS\" Value=\"")
+                .append(xmlEscape(description)).append("\" />\n")
+        }
+        sb.append("    <Directory Id=\"TARGETDIR\" Name=\"SourceDir\">\n")
+        sb.append("      <Directory Id=\"ProgramFiles64Folder\">\n")
+        sb.append("        <Directory Id=\"INSTALLFOLDER\" Name=\"")
+            .append(xmlEscape(applicationName.fileSafe())).append("\">\n")
+        appendWixDirectoryContents(sb, distributionDirectory, distributionDirectory, files, "          ")
+        sb.append("        </Directory>\n")
+        sb.append("      </Directory>\n")
+        sb.append("    </Directory>\n")
+    }
+
+    sb.append("    <Feature Id=\"MainFeature\" Title=\"")
+        .append(xmlEscape(applicationName)).append("\" Level=\"1\">\n")
+    files.forEach { file ->
+        val relative = file.relativeTo(distributionDirectory).invariantSeparatorsPath
+        sb.append("      <ComponentRef Id=\"cmp_")
+            .append(stableInstallerId(relative)).append("\" />\n")
+    }
+    sb.append("    </Feature>\n")
+    sb.append(if (modernWix) "  </Package>\n" else "  </Product>\n")
+    sb.append("</Wix>\n")
+    return sb.toString()
+}
+
+private fun appendWixDirectoryContents(
+    sb: StringBuilder,
+    root: File,
+    directory: File,
+    files: List<File>,
+    indent: String,
+) {
+    files.filter { it.parentFile == directory }.forEach { file ->
+        val relative = file.relativeTo(root).invariantSeparatorsPath
+        val id = stableInstallerId(relative)
+        sb.append(indent).append("<Component Id=\"cmp_").append(id).append("\" Guid=\"*\">\n")
+        sb.append(indent).append("  <File Id=\"fil_").append(id).append("\" Source=\"")
+            .append(xmlEscape(file.absolutePath)).append("\" KeyPath=\"yes\" />\n")
+        sb.append(indent).append("</Component>\n")
+    }
+    directory.listFiles().orEmpty()
+        .filter(File::isDirectory)
+        .sortedBy(File::getName)
+        .forEach { child ->
+            val relative = child.relativeTo(root).invariantSeparatorsPath
+            sb.append(indent).append("<Directory Id=\"dir_")
+                .append(stableInstallerId(relative)).append("\" Name=\"")
+                .append(xmlEscape(child.name)).append("\">\n")
+            appendWixDirectoryContents(sb, root, child, files, indent + "  ")
+            sb.append(indent).append("</Directory>\n")
+        }
+}
+
+internal fun windowsNsisSource(
+    applicationName: String,
+    packageName: String,
+    executableName: String,
+    packageVersion: String,
+    description: String,
+    vendor: String,
+    distributionDirectory: File,
+    outputFile: File,
+): String {
+    val app = nsisEscape(applicationName)
+    val manufacturer = nsisEscape(vendor.ifBlank { applicationName })
+    val uninstallKey =
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\" + nsisEscape(packageName)
+    val sb = StringBuilder()
+    sb.append("Unicode true\n")
+    sb.append("Name \"").append(app).append("\"\n")
+    sb.append("OutFile \"").append(nsisEscape(outputFile.absolutePath)).append("\"\n")
+    sb.append("InstallDir \"\$PROGRAMFILES64\\").append(nsisEscape(applicationName.fileSafe())).append("\"\n")
+    sb.append("InstallDirRegKey HKLM \"").append(uninstallKey).append("\" \"InstallLocation\"\n")
+    sb.append("RequestExecutionLevel admin\n")
+    sb.append("SetCompressor /SOLID lzma\n")
+    sb.append("VIProductVersion \"").append(windowsNsisVersion(packageVersion)).append("\"\n")
+    sb.append("VIAddVersionKey \"ProductName\" \"").append(app).append("\"\n")
+    sb.append("VIAddVersionKey \"CompanyName\" \"").append(manufacturer).append("\"\n")
+    sb.append("VIAddVersionKey \"FileDescription\" \"")
+        .append(nsisEscape(description.ifBlank { applicationName })).append("\"\n")
+    sb.append("VIAddVersionKey \"FileVersion\" \"").append(nsisEscape(packageVersion)).append("\"\n\n")
+    sb.append("VIAddVersionKey \"LegalCopyright\" \"").append(manufacturer).append("\"\n\n")
+    sb.append("Page directory\nPage instfiles\nUninstPage uninstConfirm\nUninstPage instfiles\n\n")
+    sb.append("Section \"Install\"\n")
+    sb.append("  SetShellVarContext all\n")
+    sb.append("  SetRegView 64\n")
+    sb.append("  SetOutPath \"\$INSTDIR\"\n")
+    sb.append("  File /r \"").append(nsisEscape(distributionDirectory.absolutePath)).append("\\*\"\n")
+    sb.append("  WriteUninstaller \"\$INSTDIR\\Uninstall.exe\"\n")
+    sb.append("  CreateDirectory \"\$SMPROGRAMS\\").append(app).append("\"\n")
+    sb.append("  CreateShortCut \"\$SMPROGRAMS\\").append(app).append("\\").append(app)
+        .append(".lnk\" \"\$INSTDIR\\").append(nsisEscape(executableName)).append(".exe\"\n")
+    sb.append("  WriteRegStr HKLM \"").append(uninstallKey).append("\" \"DisplayName\" \"").append(app).append("\"\n")
+    sb.append("  WriteRegStr HKLM \"").append(uninstallKey).append("\" \"DisplayVersion\" \"")
+        .append(nsisEscape(packageVersion)).append("\"\n")
+    sb.append("  WriteRegStr HKLM \"").append(uninstallKey).append("\" \"Publisher\" \"").append(manufacturer).append("\"\n")
+    sb.append("  WriteRegStr HKLM \"").append(uninstallKey).append("\" \"InstallLocation\" \"\$INSTDIR\"\n")
+    sb.append("  WriteRegStr HKLM \"").append(uninstallKey)
+        .append("\" \"UninstallString\" '\"\$INSTDIR\\Uninstall.exe\"'\n")
+    sb.append("  WriteRegDWORD HKLM \"").append(uninstallKey).append("\" \"NoModify\" 1\n")
+    sb.append("  WriteRegDWORD HKLM \"").append(uninstallKey).append("\" \"NoRepair\" 1\n")
+    sb.append("SectionEnd\n\n")
+    sb.append("Section \"Uninstall\"\n")
+    sb.append("  SetShellVarContext all\n")
+    sb.append("  SetRegView 64\n")
+    sb.append("  Delete \"\$SMPROGRAMS\\").append(app).append("\\").append(app).append(".lnk\"\n")
+    sb.append("  RMDir \"\$SMPROGRAMS\\").append(app).append("\"\n")
+    sb.append("  DeleteRegKey HKLM \"").append(uninstallKey).append("\"\n")
+    sb.append("  RMDir /r \"\$INSTDIR\"\n")
+    sb.append("SectionEnd\n")
+    return sb.toString()
+}
+
+internal fun windowsMsiVersion(version: String): String {
+    val parts =
+        version.substringBefore('-').split('.').take(3).map { part ->
+            part.takeWhile(Char::isDigit).toIntOrNull() ?: 0
+        }.toMutableList()
+    while (parts.size < 3) parts += 0
+    require(parts[0] in 0..255 && parts[1] in 0..255 && parts[2] in 0..65535) {
+        "Windows MSI version '" + version + "' is outside MSI's 255.255.65535 version range"
+    }
+    return parts.joinToString(".")
+}
+
+internal fun windowsNsisVersion(version: String): String {
+    val parts = Regex("\\d+").findAll(version).map { it.value.toInt() }.take(4).toMutableList()
+    while (parts.size < 4) parts += 0
+    require(parts.all { it in 0..65535 }) {
+        "Windows installer version '" + version + "' contains a component outside 0..65535"
+    }
+    return parts.joinToString(".")
+}
+
+private fun stableInstallerId(value: String): String =
+    MessageDigest.getInstance("SHA-256")
+        .digest(value.toByteArray(Charsets.UTF_8))
+        .take(8)
+        .joinToString("") { "%02x".format(it) }
+
+private fun nsisEscape(value: String): String =
+    value.replace("$", "$$")
+        .replace("\"", "$\\\"")
+        .replace("\r", " ")
+        .replace("\n", " ")
+
+
 private fun Project.configureSingleLinuxPackagingAliases(
     targets: List<DesktopNativeApplicationTarget>
 ) {
@@ -731,6 +1429,22 @@ private fun Project.configureSingleLinuxPackagingAliases(
     tasks.register("packageReleaseAppImage") { task ->
         task.group = "distribution"
         task.dependsOn("package${target.taskSuffix}ReleaseAppImage")
+    }
+}
+
+private fun Project.configureSingleMacosPackagingAliases(
+    targets: List<DesktopNativeApplicationTarget>
+) {
+    val macosTargets = targets.filter { it.platform == NativeApplicationPlatform.MACOS }
+    if (macosTargets.size != 1) return
+    val target = macosTargets.single()
+    tasks.register("prepareMacosReleaseAppBundle") { task ->
+        task.group = "distribution"
+        task.dependsOn("prepare${target.taskSuffix}ReleaseAppBundle")
+    }
+    tasks.register("packageReleaseDmg") { task ->
+        task.group = "distribution"
+        task.dependsOn("package${target.taskSuffix}ReleaseDmg")
     }
 }
 
@@ -764,6 +1478,182 @@ private fun runtimeFileName(file: File): String =
 
 private fun File.containsSdl3Runtime(): Boolean =
     listFiles().orEmpty().any { it.isFile && it.name.startsWith("libSDL3.so") }
+
+private fun File.containsSdl3Dylib(): Boolean =
+    listFiles().orEmpty().any {
+        it.isFile && it.extension.equals("dylib", ignoreCase = true) &&
+            it.name.contains("SDL3", ignoreCase = true)
+    }
+
+private fun checkMacosHost() {
+    if (!System.getProperty("os.name").startsWith("Mac", ignoreCase = true)) {
+        throw GradleException("macOS application packaging must run on a macOS host")
+    }
+}
+
+private fun macosDylibDependencies(file: File): List<String> {
+    val otool = findOnPath("otool") ?: throw GradleException("otool was not found on PATH")
+    val process =
+        ProcessBuilder(otool, "-L", file.absolutePath).redirectErrorStream(true).start()
+    val lines = process.inputStream.bufferedReader().readLines()
+    if (process.waitFor() != 0) {
+        throw GradleException("otool -L failed for ${file.absolutePath}: ${lines.joinToString("\\n")}")
+    }
+    return lines.drop(1).mapNotNull { line ->
+        line.trim()
+            .substringBefore(" (compatibility version")
+            .substringBefore(" (current version")
+            .takeIf(String::isNotBlank)
+    }
+}
+
+private fun resolveMacosRuntimeDependency(dependency: String, configured: Set<File>): File? {
+    val name = File(dependency).name
+    fun matches(file: File): Boolean =
+        file.isFile &&
+            (file.name == name ||
+                (name.contains("SDL3", ignoreCase = true) &&
+                    file.name.contains("SDL3", ignoreCase = true)))
+    val configuredMatch =
+        configured.asSequence()
+            .flatMap { file ->
+                if (file.isDirectory) file.listFiles().orEmpty().asSequence() else sequenceOf(file)
+            }
+            .firstOrNull(::matches)
+    if (configuredMatch != null) return configuredMatch
+
+    if (dependency.startsWith('/')) {
+        File(dependency).takeIf(File::isFile)?.let { return it }
+    }
+
+    listOf("COMPOSE_MACOS_X64_SDL_DYLIB", "COMPOSE_MACOS_ARM64_SDL_DYLIB")
+        .mapNotNull(System::getenv)
+        .map(::File)
+        .firstOrNull(::matches)
+        ?.let { return it }
+
+    val searchDirectories = buildList {
+        System.getenv("DYLD_LIBRARY_PATH")
+            ?.split(File.pathSeparatorChar)
+            ?.filter(String::isNotBlank)
+            ?.mapTo(this, ::File)
+        add(File("/usr/local/lib"))
+        add(File("/opt/homebrew/lib"))
+    }
+    return searchDirectories.asSequence().map { it.resolve(name) }.firstOrNull(File::isFile)
+}
+
+private fun rewriteBundledMacosDylibs(executable: File, frameworks: File) {
+    val installNameTool =
+        findOnPath("install_name_tool")
+            ?: throw GradleException("install_name_tool was not found on PATH")
+    val bundled = frameworks.listFiles().orEmpty().filter { it.isFile && it.extension == "dylib" }
+    if (bundled.isEmpty()) return
+    val bundledByName = bundled.associateBy(File::getName)
+
+    macosDylibDependencies(executable).forEach { dependency ->
+        val dependencyName = File(dependency).name
+        val dylib =
+            bundledByName[dependencyName]
+                ?: bundled.firstOrNull {
+                    dependencyName.contains("SDL3", ignoreCase = true) &&
+                        it.name.contains("SDL3", ignoreCase = true)
+                }
+                ?: return@forEach
+        runCommand(
+            installNameTool,
+            "-change",
+            dependency,
+            "@executable_path/../Frameworks/${dylib.name}",
+            executable.absolutePath,
+        )
+    }
+
+    bundled.forEach { dylib ->
+        runCommand(installNameTool, "-id", "@rpath/${dylib.name}", dylib.absolutePath)
+        macosDylibDependencies(dylib).forEach dependencyLoop@ { dependency ->
+            val dependencyFile = bundledByName[File(dependency).name] ?: return@dependencyLoop
+            runCommand(
+                installNameTool,
+                "-change",
+                dependency,
+                "@loader_path/${dependencyFile.name}",
+                dylib.absolutePath,
+            )
+        }
+    }
+}
+
+private fun adHocSignMacosBundle(app: File) {
+    val codesign = findOnPath("codesign") ?: throw GradleException("codesign was not found on PATH")
+    runCommand(
+        codesign,
+        "--force",
+        "--deep",
+        "--sign",
+        "-",
+        "--timestamp=none",
+        app.absolutePath,
+    )
+}
+
+private fun macosInfoPlist(
+    applicationName: String,
+    packageName: String,
+    executableName: String,
+    packageVersion: String,
+    description: String,
+    vendor: String,
+    iconName: String?,
+): String {
+    val shortVersion =
+        packageVersion.substringBefore('-').takeIf { it.matches(Regex("\\d+(\\.\\d+){0,2}")) }
+            ?: "1.0.0"
+    val iconEntry =
+        iconName?.let {
+            "  <key>CFBundleIconFile</key>\n  <string>${xmlEscape(it)}</string>\n"
+        }.orEmpty()
+    val copyrightEntry =
+        vendor.takeIf(String::isNotBlank)?.let {
+            "  <key>NSHumanReadableCopyright</key>\n  <string>${xmlEscape(it)}</string>\n"
+        }.orEmpty()
+    return """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleDisplayName</key>
+  <string>${xmlEscape(applicationName)}</string>
+  <key>CFBundleExecutable</key>
+  <string>${xmlEscape(executableName)}</string>
+${iconEntry}  <key>CFBundleIdentifier</key>
+  <string>${xmlEscape(packageName)}</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleName</key>
+  <string>${xmlEscape(applicationName)}</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleShortVersionString</key>
+  <string>${xmlEscape(shortVersion)}</string>
+  <key>CFBundleVersion</key>
+  <string>${xmlEscape(shortVersion)}</string>
+  <key>CFBundleGetInfoString</key>
+  <string>${xmlEscape(description)}</string>
+${copyrightEntry}  <key>NSHighResolutionCapable</key>
+  <true/>
+</dict>
+</plist>
+"""
+}
+
+private fun xmlEscape(value: String): String =
+    value.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
 
 private fun findOnPath(name: String): String? =
     System.getenv("PATH")
@@ -890,6 +1780,7 @@ private fun String.fileSafe(): String =
 private enum class NativeApplicationPlatform {
     LINUX,
     WINDOWS,
+    MACOS,
 }
 
 private data class DesktopNativeApplicationTarget(
@@ -922,6 +1813,20 @@ private val DESKTOP_NATIVE_APPLICATION_TARGETS =
             NativeApplicationPlatform.WINDOWS,
             "x86_64",
             "Windows x64",
+        ),
+        DesktopNativeApplicationTarget(
+            "macosX64",
+            "MacosX64",
+            NativeApplicationPlatform.MACOS,
+            "x86_64",
+            "macOS x64",
+        ),
+        DesktopNativeApplicationTarget(
+            "macosArm64",
+            "MacosArm64",
+            NativeApplicationPlatform.MACOS,
+            "arm64",
+            "macOS arm64",
         ),
     )
 

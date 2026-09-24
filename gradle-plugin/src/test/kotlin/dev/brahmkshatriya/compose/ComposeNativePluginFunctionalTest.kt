@@ -276,6 +276,16 @@ class ComposeNativePluginFunctionalTest {
                             entryPoint = "com.example.main"
                         }
                     }
+                    macosX64 {
+                        binaries.executable {
+                            entryPoint = "com.example.main"
+                        }
+                    }
+                    macosArm64 {
+                        binaries.executable {
+                            entryPoint = "com.example.main"
+                        }
+                    }
 
                     sourceSets {
                         desktopNativeMain.dependencies {}
@@ -303,7 +313,13 @@ class ComposeNativePluginFunctionalTest {
                                 .attributes
                                 .getAttribute(nativeTarget) == "linux_x64"
                         )
-                        listOf("linuxX64Main", "linuxArm64Main", "mingwX64Main").forEach { name ->
+                        listOf(
+                            "linuxX64Main",
+                            "linuxArm64Main",
+                            "mingwX64Main",
+                            "macosX64Main",
+                            "macosArm64Main",
+                        ).forEach { name ->
                             check(desktopNativeMain in sourceSets.getByName(name).dependsOn)
                         }
                         listOf(
@@ -318,6 +334,13 @@ class ComposeNativePluginFunctionalTest {
                             "packageLinuxArm64ReleaseAppImage",
                             "prepareWindowsX64ReleaseDistribution",
                             "packageWindowsX64ReleaseZip",
+                            "packageWindowsX64ReleaseMsi",
+                            "packageWindowsX64ReleaseInstallerExe",
+                            "packageWindowsX64ReleaseInstaller",
+                            "prepareMacosX64ReleaseAppBundle",
+                            "packageMacosX64ReleaseDmg",
+                            "prepareMacosArm64ReleaseAppBundle",
+                            "packageMacosArm64ReleaseDmg",
                         ).forEach { name ->
                             check(tasks.findByName(name) != null)
                         }

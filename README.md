@@ -27,7 +27,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.13.0-alpha01"
-    id("dev.brahmkshatriya.compose") version "1.13.0-alpha02"
+    id("dev.brahmkshatriya.compose") version "1.13.0-alpha03"
 }
 ```
 
@@ -39,7 +39,7 @@ Use official Compose in `commonMain` and the fork only in `desktopNativeMain`. A
 JS, and Wasm continue using official Compose.
 
 ```kotlin
-val composeNativeVersion = "1.13.0-alpha02"
+val composeNativeVersion = "1.13.0-alpha03"
 
 kotlin {
     desktopNative {
@@ -77,7 +77,7 @@ Android, JVM desktop, JS, Wasm JS, and iOS. On macOS, Linux, and Windows Kotlin/
 fork version selects the larger native closure required by the native desktop backend.
 
 ```kotlin
-val composeNativeVersion = "1.13.0-alpha02"
+val composeNativeVersion = "1.13.0-alpha03"
 
 kotlin {
     desktopNative {
@@ -198,7 +198,10 @@ executable run tasks and Windows distributions.
 
 When an executable is configured, the plugin also uses `src/main/kotlin` as native desktop source
 and `src/main/composeResources` as native Compose resources. Linux builds get AppDir/AppImage tasks;
-Windows x64 gets a self-contained distribution directory and zip task.
+Windows x64 gets a self-contained distribution directory, zip, MSI, and installer EXE tasks.
+Explicit `macosX64()` and
+`macosArm64()` executable targets inherit the same `desktopNativeMain` sources and get `.app`
+bundle and `.dmg` packaging tasks.
 
 Application metadata can be customized with `composeNativeApplication`:
 
@@ -210,11 +213,42 @@ composeNativeApplication {
 }
 ```
 
+Windows x64 packaging creates `packageWindowsX64ReleaseZip`, `packageWindowsX64ReleaseMsi`, and
+`packageWindowsX64ReleaseInstallerExe` (with `packageWindowsX64ReleaseInstaller` as an alias for the
+EXE installer). The MSI task uses WiX 4+ (`wix`) or WiX 3 (`candle` + `light`); the EXE installer
+uses NSIS (`makensis`). The tools are discovered from PATH/common Windows install locations, or can
+be configured with `windowsWixExecutable` / `windowsNsisExecutable` or the
+`COMPOSE_WINDOWS_WIX` / `COMPOSE_WINDOWS_NSIS` environment variables. Both installers consume the
+same staged Windows distribution as the zip, including SDL 3, MinGW runtime DLLs, Skiko ICU data,
+Compose resources, and configured `windowsX64RuntimeFiles`.
+
+For macOS, configure the native executable explicitly:
+
+```kotlin
+kotlin {
+    macosX64 {
+        binaries.executable {
+            entryPoint = "com.example.main"
+        }
+    }
+    // Or macosArm64 { binaries.executable { ... } }
+}
+```
+
+This creates `prepareMacosX64ReleaseAppBundle` / `packageMacosX64ReleaseDmg` (or the arm64
+equivalents). If only one macOS executable target is present, `prepareMacosReleaseAppBundle` and
+`packageReleaseDmg` are also available as aliases. Packaging runs on macOS, copies Compose
+resources into `Contents/Resources`, bundles configured runtime dylibs plus SDL 3 when needed,
+rewrites their Mach-O load paths into `Contents/Frameworks`, and ad-hoc signs the resulting
+`.app`. Use `macosX64RuntimeFiles` or `macosArm64RuntimeFiles` for additional dylibs.
+Distribution outside local development still requires normal Developer ID signing and Apple
+notarization.
+
 ## Versions
 
 | Component | Version |
 | --- | --- |
-| Compose Native plugin / fork | `1.13.0-alpha02` |
+| Compose Native plugin / fork | `1.13.0-alpha03` |
 | JetBrains Compose plugin | `1.13.0-alpha01` |
 | Kotlin / Compose compiler | `2.3.20` |
 | Native Skiko | `0.153.1` |
