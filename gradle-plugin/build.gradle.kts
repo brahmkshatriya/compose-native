@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.gradle.plugin.devel.tasks.PluginUnderTestMetadata
 
 plugins {
@@ -7,10 +8,70 @@ plugins {
 }
 
 group = "dev.brahmkshatriya.compose"
-version = "1.13.0-alpha05"
+version = "1.13.0-alpha06"
 
 kotlin {
     jvmToolchain(21)
+}
+
+val composeNativeUpstreamVersionsDir =
+    layout.buildDirectory.dir("generated/composeNativeUpstreamVersions")
+val generateComposeNativeUpstreamVersions =
+    tasks.register("generateComposeNativeUpstreamVersions") {
+        val upstreamPropertiesFile = layout.projectDirectory.file("../gradle.properties")
+        val redirectVersionsFile = layout.projectDirectory.file("../redirectversions.toml")
+
+        inputs.file(upstreamPropertiesFile)
+        inputs.file(redirectVersionsFile)
+        outputs.dir(composeNativeUpstreamVersionsDir)
+
+        doLast {
+            val upstream = Properties().apply {
+                upstreamPropertiesFile.asFile.inputStream().use(::load)
+            }
+            fun upstreamVersion(name: String): String =
+                requireNotNull(upstream.getProperty("compose.native.upstream.version.$name")) {
+                    "Missing compose.native.upstream.version.$name in ${upstreamPropertiesFile.asFile}"
+                }
+            val redirectVersions =
+                Regex("""^\"([^\"]+)\"\s*=\s*\"([^\"]+)\"\s*$""")
+                    .let { pattern ->
+                        redirectVersionsFile.asFile.readLines().mapNotNull { line ->
+                            pattern.matchEntire(line.trim())?.destructured?.let { (group, version) ->
+                                group to version
+                            }
+                        }
+                    }
+                    .toMap()
+            val values =
+                linkedMapOf(
+                    "compose" to upstreamVersion("COMPOSE"),
+                    "compose.material3" to upstreamVersion("COMPOSE_MATERIAL3"),
+                    "compose.material3.adaptive" to upstreamVersion("COMPOSE_MATERIAL3_ADAPTIVE"),
+                ) + redirectVersions
+            val output =
+                composeNativeUpstreamVersionsDir.get().file("compose-native-upstream.properties").asFile
+            output.parentFile.mkdirs()
+            output.writeText(
+                values.entries
+                    .sortedBy { it.key }
+                    .joinToString(separator = "\n", postfix = "\n") { (key, value) ->
+                        "$key=$value"
+                    }
+            )
+        }
+    }
+
+sourceSets.named("main") {
+    resources.srcDir(composeNativeUpstreamVersionsDir)
+}
+tasks.named("processResources") {
+    dependsOn(generateComposeNativeUpstreamVersions)
+}
+tasks.configureEach {
+    if (name == "sourcesJar") {
+        dependsOn(generateComposeNativeUpstreamVersions)
+    }
 }
 
 val kotlinGradlePluginApiForTests by configurations.creating

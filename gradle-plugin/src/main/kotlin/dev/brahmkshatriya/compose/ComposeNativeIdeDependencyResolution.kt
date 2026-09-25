@@ -71,7 +71,6 @@ private class ComposeNativeIdeDependencyResolver(
         val result = linkedSetOf<IdeaKotlinDependency>()
         if (sourceSet.name == COMMON_MAIN_SOURCE_SET && project.hasCommonForkDependency()) {
             officialDelegate.resolve(sourceSet).filterTo(result, ::isOfficialCommonIdeDependency)
-            forkDelegate.resolve(sourceSet).filterTo(result, ::isForkCommonComposeDependency)
         }
         if (
             sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET && project.composeForkVersion() != null
@@ -95,29 +94,23 @@ private fun isOfficialCommonIdeDependency(dependency: IdeaKotlinDependency): Boo
 }
 
 internal fun isOfficialCommonIdeDependency(group: String, module: String): Boolean =
-    when (group) {
-        OFFICIAL_COMPOSE_UI_GROUP -> module !in PLATFORM_ONLY_COMPOSE_UI_MODULES
-        OFFICIAL_ANDROIDX_COMPOSE_RUNTIME_GROUP -> true
-        OFFICIAL_NAVIGATION_EVENT_GROUP -> module == NAVIGATION_EVENT_COMPOSE_MODULE
+    when {
+        group.startsWith(OFFICIAL_COMPOSE_GROUP_PREFIX) ->
+            !(group == OFFICIAL_COMPOSE_UI_GROUP && module in PLATFORM_ONLY_COMPOSE_UI_MODULES)
+        group.startsWith(OFFICIAL_ANDROIDX_GROUP_PREFIX) -> true
+        group.startsWith(ANDROIDX_GROUP_PREFIX) -> true
         else -> false
     }
 
 
-internal fun isForkCommonComposeGroup(group: String): Boolean = group in FORK_COMMON_COMPOSE_GROUPS
-private fun isForkCommonComposeDependency(dependency: IdeaKotlinDependency): Boolean =
-    dependency.binaryCoordinates()?.group in FORK_COMMON_COMPOSE_GROUPS
-
 private fun isResolvedBinaryDependency(dependency: IdeaKotlinDependency): Boolean =
     dependency is IdeaKotlinResolvedBinaryDependency
 
-private fun IdeaKotlinDependency.binaryCoordinates(): IdeaKotlinBinaryCoordinates? =
-    (this as? IdeaKotlinResolvedBinaryDependency)?.coordinates
 
 internal fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String): Configuration {
     val version = composeForkVersion() ?: return configurations.detachedConfiguration()
     val modules =
-        if (sourceSetName == COMMON_MAIN_SOURCE_SET) FORK_COMMON_IDE_MODULES
-        else FORK_DESKTOP_IDE_MODULES
+        FORK_DESKTOP_IDE_MODULES
     val desktopDependencyNotations =
         if (sourceSetName == DESKTOP_NATIVE_MAIN_SOURCE_SET) {
             officialComposeVersion()
@@ -219,22 +212,12 @@ private const val COMMON_MAIN_SOURCE_SET = "commonMain"
 private const val DESKTOP_NATIVE_MAIN_SOURCE_SET = "desktopNativeMain"
 private const val COMMON_MAIN_DEPENDENCY_CONFIGURATION_PREFIX = "commonMain"
 private const val COMPOSE_FORK_GROUP_PREFIX = "dev.brahmkshatriya.compose."
-private const val OFFICIAL_COMPOSE_GROUP_PREFIX = "org.jetbrains.compose."
 private const val OFFICIAL_COMPOSE_UI_GROUP = "org.jetbrains.compose.ui"
 private const val OFFICIAL_COMPOSE_COMPONENTS_GROUP = "org.jetbrains.compose.components"
-private const val OFFICIAL_ANDROIDX_COMPOSE_RUNTIME_GROUP = "androidx.compose.runtime"
-private const val OFFICIAL_NAVIGATION_EVENT_GROUP = "androidx.navigationevent"
+private const val ANDROIDX_GROUP_PREFIX = "androidx."
 private const val COMPONENTS_RESOURCES_MODULE = "components-resources"
-private const val NAVIGATION_EVENT_COMPOSE_MODULE = "navigationevent-compose"
 private val PLATFORM_ONLY_COMPOSE_UI_MODULES = setOf("ui-uikit", "ui-skiko")
-internal val FORK_COMMON_COMPOSE_GROUPS =
-    setOf(
-        "dev.brahmkshatriya.compose.animation",
-        "dev.brahmkshatriya.compose.foundation",
-        "dev.brahmkshatriya.compose.material",
-        "dev.brahmkshatriya.compose.material3",
-    )
-private val FORK_COMMON_IDE_MODULES =
+private val FORK_DESKTOP_IDE_MODULES =
     setOf(
         "animation" to "animation",
         "animation" to "animation-core",
@@ -244,20 +227,16 @@ private val FORK_COMMON_IDE_MODULES =
         "material" to "material",
         "material" to "material-ripple",
         "material3" to "material3",
+        "components" to "components-resources",
+        "desktop" to "desktop-native",
+        "runtime" to "runtime",
+        "runtime" to "runtime-saveable",
+        "ui" to "ui",
+        "ui" to "ui-backhandler",
+        "ui" to "ui-geometry",
+        "ui" to "ui-graphics",
+        "ui" to "ui-skiko",
+        "ui" to "ui-text",
+        "ui" to "ui-unit",
+        "ui" to "ui-util",
     )
-private val FORK_DESKTOP_IDE_MODULES =
-    FORK_COMMON_IDE_MODULES +
-        setOf(
-            "components" to "components-resources",
-            "desktop" to "desktop-native",
-            "runtime" to "runtime",
-            "runtime" to "runtime-saveable",
-            "ui" to "ui",
-            "ui" to "ui-backhandler",
-            "ui" to "ui-geometry",
-            "ui" to "ui-graphics",
-            "ui" to "ui-skiko",
-            "ui" to "ui-text",
-            "ui" to "ui-unit",
-            "ui" to "ui-util",
-        )

@@ -23,9 +23,6 @@ abstract class RepairCommonMetadataLibraries : DefaultTask() {
     @get:Classpath
     abstract val metadataArtifacts: ConfigurableFileCollection
 
-    @get:Classpath
-    abstract val transformedLibraries: ConfigurableFileCollection
-
     @get:OutputDirectory
     abstract val outputDirectory: DirectoryProperty
 
@@ -35,37 +32,68 @@ abstract class RepairCommonMetadataLibraries : DefaultTask() {
         outputRoot.deleteRecursively()
         outputRoot.mkdirs()
 
-        val existingUniqueNames =
-            transformedLibraries.files
+        val candidates =
+            metadataArtifacts.files
                 .asSequence()
-                .flatMap { file -> if (file.isDirectory) file.walkTopDown().asSequence() else sequenceOf(file) }
-                .filter(File::isFile)
-                .mapNotNull(::klibUniqueName)
-                .toMutableSet()
-
-        metadataArtifacts.files.sortedBy(File::getAbsolutePath).forEach { metadataArtifact ->
-            ZipFile(metadataArtifact).use { source ->
-                val prefix = "commonMain/"
-                val manifestEntry = source.getEntry("${prefix}default/manifest") ?: return@use
-                val manifest = source.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
-                val uniqueName = manifestValue(manifest, "unique_name") ?: return@use
-                if (!existingUniqueNames.add(uniqueName)) return@use
-
-                val output = outputRoot.resolve("${sanitizeFileName(uniqueName)}.klib")
-                val entries =
-                    source.entries().asSequence()
-                        .filter { entry -> entry.name.startsWith(prefix) && entry.name != prefix }
-                        .sortedBy { it.name }
-                        .toList()
-                ZipOutputStream(BufferedOutputStream(output.outputStream())).use { target ->
-                    entries.forEach { entry ->
-                        val relativeName = entry.name.removePrefix(prefix)
-                        if (relativeName.isEmpty()) return@forEach
-                        target.putNextEntry(ZipEntry(relativeName).apply { time = 0L })
-                        if (!entry.isDirectory) source.getInputStream(entry).use { it.copyTo(target) }
-                        target.closeEntry()
-                    }
+                .mapNotNull(::commonMetadataCandidate)
+                .groupBy(CommonMetadataCandidate::uniqueName)
+                .mapValues { (_, candidates) ->
+                    candidates.sortedWith(
+                        compareByDescending<CommonMetadataCandidate> { it.payloadSize }
+                            .thenBy { it.artifact.absolutePath }
+                    ).first()
                 }
+
+        candidates.toSortedMap().forEach { (uniqueName, candidate) ->
+            writeCommonMetadataKlib(
+                sourceArtifact = candidate.artifact,
+                output = outputRoot.resolve("${sanitizeFileName(uniqueName)}.klib"),
+            )
+        }
+    }
+}
+
+private data class CommonMetadataCandidate(
+    val artifact: File,
+    val uniqueName: String,
+    val payloadSize: Long,
+)
+
+private fun commonMetadataCandidate(artifact: File): CommonMetadataCandidate? {
+    if (!artifact.isFile) return null
+    return runCatching {
+            ZipFile(artifact).use { source ->
+                val prefix = "commonMain/"
+                val manifestEntry = source.getEntry("${prefix}default/manifest") ?: return@use null
+                val manifest = source.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
+                val uniqueName = manifestValue(manifest, "unique_name") ?: return@use null
+                val payloadSize =
+                    source.entries().asSequence()
+                        .filter { entry ->
+                            !entry.isDirectory && entry.name.startsWith(prefix) && entry.name != prefix
+                        }
+                        .sumOf { entry -> entry.size.coerceAtLeast(0L) }
+                CommonMetadataCandidate(artifact, uniqueName, payloadSize)
+            }
+        }
+        .getOrNull()
+}
+
+private fun writeCommonMetadataKlib(sourceArtifact: File, output: File) {
+    ZipFile(sourceArtifact).use { source ->
+        val prefix = "commonMain/"
+        val entries =
+            source.entries().asSequence()
+                .filter { entry -> entry.name.startsWith(prefix) && entry.name != prefix }
+                .sortedBy { it.name }
+                .toList()
+        ZipOutputStream(BufferedOutputStream(output.outputStream())).use { target ->
+            entries.forEach { entry ->
+                val relativeName = entry.name.removePrefix(prefix)
+                if (relativeName.isEmpty()) return@forEach
+                target.putNextEntry(ZipEntry(relativeName).apply { time = 0L })
+                if (!entry.isDirectory) source.getInputStream(entry).use { it.copyTo(target) }
+                target.closeEntry()
             }
         }
     }
@@ -81,9 +109,6 @@ internal fun Project.configureMetadataCompilation() {
             }
         repairCommonMetadata.configure { repair ->
             repair.dependsOn(TRANSFORM_COMMON_MAIN_METADATA_TASK)
-            repair.transformedLibraries.from(
-                layout.buildDirectory.dir("kotlinTransformedMetadataLibraries/commonMain")
-            )
         }
         val representativeNativeLibraries = objects.fileCollection()
 
@@ -104,44 +129,42 @@ internal fun Project.configureMetadataCompilation() {
             }
         }
 
-        afterEvaluate {
-            val forkMetadata = composeNativeIdeMetadataConfiguration(COMMON_MAIN_SOURCE_SET_NAME)
-            val forkCommonMetadata =
-                forkMetadata.incoming.artifactView { view ->
-                    view.componentFilter { component ->
-                        component is ModuleComponentIdentifier &&
-                            isForkCommonComposeGroup(component.group)
-                    }
-                }.files
-            repairCommonMetadata.configure { it.metadataArtifacts.from(forkCommonMetadata) }
-        }
-
         tasks.configureEach { task ->
-            when (task.name) {
-                COMPILE_COMMON_MAIN_METADATA_TASK -> {
-                    task.dependsOn(repairCommonMetadata)
-                    task.addLibraries(
-                        repairCommonMetadata.map { repair ->
-                            repair.outputDirectory.get().asFileTree.matching { it.include("*.klib") }
-                        }
-                    )
-                }
-                COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK -> {
-                    val cinteropLibraries = representativeNativeLibraries.filter(::isCInteropKlib)
-                    task.addNativeLibraryCompilerArguments(this, cinteropLibraries)
-                }
+            if (task.name.isKotlinMetadataCompilationTask()) {
+                task.dependsOn(repairCommonMetadata)
+                task.replaceLibraries(
+                    this,
+                    repairCommonMetadata.map { repair ->
+                        repair.outputDirectory.get().asFileTree.matching { it.include("*.klib") }
+                    },
+                )
+            }
+            if (task.name == COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK) {
+                val cinteropLibraries = representativeNativeLibraries.filter(::isCInteropKlib)
+                task.addNativeLibraryCompilerArguments(this, cinteropLibraries)
             }
         }
     }
 }
 
+internal fun String.isKotlinMetadataCompilationTask(): Boolean =
+    startsWith("compile") && endsWith("KotlinMetadata")
+
 @Suppress("UNCHECKED_CAST")
-private fun Task.addLibraries(libraries: Any) {
+private fun Task.replaceLibraries(project: Project, libraries: Any) {
     val target =
         javaClass.methods
             .singleOrNull { it.name == "getLibraries" && it.parameterCount == 0 }
             ?.invoke(this) as? ConfigurableFileCollection ?: return
-    target.from(libraries)
+    val originalSources = target.from.toList()
+    val repaired = project.files(libraries)
+    val repairedUniqueNames = repaired.files.mapNotNull(::klibUniqueName).toSet()
+    val originals =
+        project.files(originalSources).filter { file ->
+            val uniqueName = klibUniqueName(file)
+            uniqueName == null || uniqueName !in repairedUniqueNames
+        }
+    target.setFrom(originals, repaired)
 }
 
 @Suppress("UNCHECKED_CAST")
@@ -204,6 +227,4 @@ private const val COMMON_MAIN_RESOLVABLE_METADATA_CONFIGURATION =
     "commonMainResolvableDependenciesMetadata"
 private const val REPRESENTATIVE_NATIVE_COMPILE_LIBRARIES_CONFIGURATION = "linuxX64CompileKlibraries"
 private const val TRANSFORM_COMMON_MAIN_METADATA_TASK = "transformCommonMainDependenciesMetadata"
-private const val COMPILE_COMMON_MAIN_METADATA_TASK = "compileCommonMainKotlinMetadata"
 private const val COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK = "compileDesktopNativeMainKotlinMetadata"
-private const val COMMON_MAIN_SOURCE_SET_NAME = "commonMain"

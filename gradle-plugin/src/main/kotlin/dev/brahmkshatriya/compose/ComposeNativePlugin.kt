@@ -161,11 +161,12 @@ private fun Project.configureLocalDependencySubstitutions(
     configurations.configureEach { configuration ->
         val isAndroidConfiguration = configuration.name.isAndroidConfiguration()
         val usesNativeOverlay = configuration.name.usesNativeOverlay()
+        val isMetadataTransformation = configuration.name.isMetadataTransformationConfiguration()
         val substitutions =
             when {
-                usesNativeOverlay -> fullForkSubstitutions + nativeOverlaySubstitutions
-                configuration.name.isMetadataTransformationConfiguration() ->
-                    fullForkSubstitutions + nativeMetadataSubstitutions
+                usesNativeOverlay ->
+                    fullForkSubstitutions + nativeOverlaySubstitutions + nativeMetadataSubstitutions
+                isMetadataTransformation -> emptyMap()
                 isAndroidConfiguration -> fullForkSubstitutions + androidTargetSubstitutions
                 else -> fullForkSubstitutions
             }
@@ -175,13 +176,19 @@ private fun Project.configureLocalDependencySubstitutions(
             } else {
                 null
             }
-        if (substitutions.isEmpty() && composeForkVersion == null) return@configureEach
+        if (
+            substitutions.isEmpty() &&
+                composeForkVersion == null &&
+                !isMetadataTransformation
+        ) {
+            return@configureEach
+        }
 
         val selectedForkVersion =
-            if (usesNativeOverlay) {
-                nativeOverlayComposeVersion ?: fullForkComposeVersion
-            } else {
-                fullForkComposeVersion ?: nativeOverlayComposeVersion
+            when {
+                usesNativeOverlay -> nativeOverlayComposeVersion ?: fullForkComposeVersion
+                isMetadataTransformation -> null
+                else -> fullForkComposeVersion ?: nativeOverlayComposeVersion
             }
         if (selectedForkVersion != null) {
             configuration.resolutionStrategy.eachDependency { details ->
@@ -195,6 +202,12 @@ private fun Project.configureLocalDependencySubstitutions(
         configuration.resolutionStrategy.dependencySubstitution { rules ->
             rules.all { details ->
                 val selector = details.requested as? ModuleComponentSelector ?: return@all
+                if (isMetadataTransformation && !usesNativeOverlay) {
+                    selector.officialMetadataCoordinateOrNull()?.let { officialCoordinate ->
+                        details.useTarget(officialCoordinate)
+                        return@all
+                    }
+                }
                 if (
                     configuration.name.usesRedirectedNativeRuntime() &&
                         selector.isAndroidxRuntimeRedirectTarget()
@@ -613,13 +626,13 @@ private const val KOTLIN_NATIVE_BINARY_CONTAINER_CLASS =
 private const val COMMON_MAIN_CONFIGURATION_PREFIX = "commonMain"
 private const val DESKTOP_NATIVE_MAIN_CONFIGURATION_PREFIX = "desktopNativeMain"
 private const val RESOLVABLE_METADATA_CONFIGURATION_SUFFIX = "ResolvableDependenciesMetadata"
-private const val OFFICIAL_COMPOSE_GROUP_PREFIX = "org.jetbrains.compose."
-private const val OFFICIAL_ANDROIDX_GROUP_PREFIX = "org.jetbrains.androidx."
+internal const val OFFICIAL_COMPOSE_GROUP_PREFIX = "org.jetbrains.compose."
+internal const val OFFICIAL_ANDROIDX_GROUP_PREFIX = "org.jetbrains.androidx."
 private const val ANDROIDX_GROUP_PREFIX = "androidx."
 private const val ANDROIDX_COMPOSE_GROUP_PREFIX = "androidx.compose."
 private const val ANDROIDX_COMPOSE_RUNTIME_GROUP = "androidx.compose.runtime"
-private const val FORK_COMPOSE_GROUP_PREFIX = "dev.brahmkshatriya.compose."
-private const val FORK_ANDROIDX_GROUP_PREFIX = "dev.brahmkshatriya.androidx."
+internal const val FORK_COMPOSE_GROUP_PREFIX = "dev.brahmkshatriya.compose."
+internal const val FORK_ANDROIDX_GROUP_PREFIX = "dev.brahmkshatriya.androidx."
 private const val OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 private const val FORK_SKIKO_GROUP = "dev.brahmkshatriya.skiko"
 private const val SKIKO_MODULE = "skiko"

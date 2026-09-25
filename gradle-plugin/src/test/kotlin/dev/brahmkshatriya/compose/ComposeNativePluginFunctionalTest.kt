@@ -109,7 +109,7 @@ class ComposeNativePluginFunctionalTest {
             .writeText(
                 """
                 plugins {
-                    kotlin("multiplatform") version "2.4.10"
+                    kotlin("multiplatform") version "2.4.20"
                     id("dev.brahmkshatriya.compose")
                 }
 
@@ -120,11 +120,11 @@ class ComposeNativePluginFunctionalTest {
 
                     sourceSets {
                         commonMain.dependencies {
-                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha12")
-                            implementation("org.jetbrains.compose.ui:ui:1.12.0-rc01")
+                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha05")
+                            implementation("org.jetbrains.compose.ui:ui:1.13.0-alpha01")
                         }
                         desktopNativeMain.dependencies {
-                            implementation("dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha12")
+                            implementation("dev.brahmkshatriya.compose.desktop:desktop-native:1.13.0-alpha05")
                             implementation(project(":app"))
                         }
                     }
@@ -148,7 +148,7 @@ class ComposeNativePluginFunctionalTest {
 
                     sourceSets {
                         commonMain.dependencies {
-                            api("dev.brahmkshatriya.material-kolor:material-kolor:5.0.1")
+                            api("dev.brahmkshatriya.material-kolor:material-kolor:5.0.2")
                         }
                     }
                 }
@@ -166,31 +166,31 @@ class ComposeNativePluginFunctionalTest {
             projectDir.resolve("build/ide/dependencies/json/commonMain.json").readText()
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.ui:ui:1.12.0-rc01",
+            "org.jetbrains.compose.ui:ui:1.13.0-alpha01",
             message = "The IDE model must contain official Compose UI metadata",
         )
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.ui:ui-unit:1.12.0-rc01",
+            "org.jetbrains.compose.ui:ui-unit:1.13.0-alpha01",
             message = "The IDE model must contain the metadata that defines Dp and dp",
         )
         assertContains(
             commonMainModel,
-            "dev.brahmkshatriya.compose.foundation:foundation:commonMain:1.12.10-alpha12",
-            message = "KGP's normal transformed-metadata resolver must remain active",
+            "org.jetbrains.compose.foundation:foundation:1.13.0-alpha01",
+            message = "The IDE model must use upstream common Foundation metadata",
         )
         assertContains(
             commonMainModel,
-            "dev.brahmkshatriya.compose.foundation:foundation-layout:1.12.10-alpha12",
-            message = "The IDE model must contain transitive fork Foundation metadata",
+            "org.jetbrains.compose.foundation:foundation-layout:1.13.0-alpha01",
+            message = "The IDE model must contain transitive upstream Foundation metadata",
         )
         assertContains(
             commonMainModel,
-            "dev.brahmkshatriya.compose.animation:animation:1.12.10-alpha12",
-            message = "The IDE model must contain transitive fork Animation metadata",
+            "org.jetbrains.compose.animation:animation:1.13.0-alpha01",
+            message = "The IDE model must contain transitive upstream Animation metadata",
         )
         assertFalse(
-            "dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha12" in commonMainModel,
+            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha05" in commonMainModel,
             "The native UI overlay must not leak into commonMain",
         )
 
@@ -198,22 +198,22 @@ class ComposeNativePluginFunctionalTest {
             projectDir.resolve("build/ide/dependencies/json/desktopNativeMain.json").readText()
         assertContains(
             desktopNativeMainModel,
-            "dev.brahmkshatriya.compose.ui:ui:1.12.10-alpha12",
+            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha05",
             message = "The IDE model must contain the native UI overlay metadata",
         )
         assertContains(
             desktopNativeMainModel,
-            "dev.brahmkshatriya.compose.desktop:desktop-native:1.12.10-alpha12",
+            "dev.brahmkshatriya.compose.desktop:desktop-native:1.13.0-alpha05",
             message = "The IDE model must contain the desktop window API metadata",
         )
         assertContains(
             desktopNativeMainModel,
-            "dev.brahmkshatriya.material-kolor:material-kolor:5.0.1",
+            "dev.brahmkshatriya.material-kolor:material-kolor:5.0.2",
             message = "The IDE model must contain metadata exported by a project dependency",
         )
         assertContains(
             desktopNativeMainModel,
-            "org.jetbrains.compose.components:components-resources:1.12.0-rc01",
+            "org.jetbrains.compose.components:components-resources:1.13.0-alpha01",
             message = "The IDE model must contain Compose Resources metadata",
         )
     }
@@ -296,19 +296,180 @@ class ComposeNativePluginFunctionalTest {
     }
 
     @Test
-    fun includesNavigationEventComposeInTheCommonIdeModel() {
+    fun includesAndroidxCommonMetadataInTheCommonIdeModel() {
         assertTrue(
             isOfficialCommonIdeDependency(
                 group = "androidx.navigationevent",
                 module = "navigationevent-compose",
             )
         )
-        assertFalse(
+        assertTrue(
             isOfficialCommonIdeDependency(
                 group = "androidx.navigationevent",
                 module = "navigationevent",
             )
         )
+    }
+
+    @Test
+    fun compilesFullForkCommonMetadataWithTransitiveAndroidxMetadata() {
+        val projectDir = createTempDirectory("compose-native-common-metadata-test").toFile()
+        projectDir.deleteOnExit()
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories {
+                        mavenCentral()
+                        gradlePluginPortal()
+                    }
+                }
+                dependencyResolutionManagement {
+                    repositories {
+                        google()
+                        mavenCentral()
+                    }
+                }
+                rootProject.name = "compose-native-common-metadata-test"
+                """
+                    .trimIndent()
+            )
+        projectDir.resolve("src/commonMain/kotlin").mkdirs()
+        projectDir
+            .resolve("src/commonMain/kotlin/CommonMetadata.kt")
+            .writeText(
+                """
+                import androidx.compose.foundation.background
+                import androidx.compose.material3.Button
+                import androidx.navigationevent.compose.NavigationBackHandler
+                import androidx.savedstate.serialization.SavedStateConfiguration
+
+                fun keepSavedStateType(value: SavedStateConfiguration): SavedStateConfiguration = value
+                """
+                    .trimIndent()
+            )
+        projectDir
+            .resolve("build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "2.4.20"
+                    id("dev.brahmkshatriya.compose")
+                }
+
+                kotlin {
+                    jvm()
+                    desktopNative()
+
+                    sourceSets {
+                        commonMain.dependencies {
+                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha05")
+                            implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha05")
+                            implementation("org.jetbrains.androidx.navigation3:navigation3-ui:1.1.1")
+                            implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3:2.11.0")
+                        }
+                    }
+                }
+                """
+                    .trimIndent()
+            )
+
+        val result =
+            GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withPluginClasspath()
+                .withArguments("compileCommonMainKotlinMetadata", "--no-configuration-cache")
+                .build()
+
+        assertContains(result.output, "BUILD SUCCESSFUL")
+    }
+
+    @Test
+    fun keepsOfficialUiSkikoInCustomIntermediateMetadata() {
+        val projectDir = createTempDirectory("compose-native-skia-metadata-test").toFile()
+        projectDir.deleteOnExit()
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories {
+                        mavenCentral()
+                        gradlePluginPortal()
+                    }
+                }
+                dependencyResolutionManagement {
+                    repositories {
+                        google()
+                        mavenCentral()
+                    }
+                }
+                rootProject.name = "compose-native-skia-metadata-test"
+                """
+                    .trimIndent()
+            )
+        projectDir.resolve("src/skiaMain/kotlin").mkdirs()
+        projectDir
+            .resolve("src/skiaMain/kotlin/SkiaMetadata.kt")
+            .writeText(
+                """
+                import androidx.compose.runtime.Composable
+                import androidx.compose.runtime.staticCompositionLocalOf
+                import androidx.compose.ui.graphics.ImageBitmap
+                import androidx.compose.ui.graphics.toComposeImageBitmap
+                import org.jetbrains.skia.Image
+
+                val LocalMetadataValue = staticCompositionLocalOf { 0 }
+
+                @Composable
+                fun metadataValue(): Int = LocalMetadataValue.current
+
+                fun Image.asComposeBitmap(): ImageBitmap = toComposeImageBitmap()
+                """
+                    .trimIndent()
+            )
+        projectDir
+            .resolve("build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "2.4.20"
+                    id("dev.brahmkshatriya.compose")
+                }
+
+                kotlin {
+                    jvm()
+                    desktopNative()
+
+                    sourceSets {
+                        val skiaMain by creating {
+                            dependsOn(commonMain.get())
+                            dependencies {
+                                implementation("org.jetbrains.compose.runtime:runtime:1.13.0-alpha01")
+                                implementation("org.jetbrains.compose.ui:ui:1.13.0-alpha01")
+                                implementation("org.jetbrains.skiko:skiko:0.152.0-alpha02")
+                            }
+                        }
+                        jvmMain.get().dependsOn(skiaMain)
+                        linuxX64Main.get().dependsOn(skiaMain)
+                        desktopNativeMain.dependencies {
+                            implementation("dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha05")
+                        }
+                    }
+                }
+                """
+                    .trimIndent()
+            )
+
+        val result =
+            GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withPluginClasspath()
+                .withArguments("compileSkiaMainKotlinMetadata", "--no-configuration-cache")
+                .build()
+
+        assertContains(result.output, "BUILD SUCCESSFUL")
     }
 
     @Test

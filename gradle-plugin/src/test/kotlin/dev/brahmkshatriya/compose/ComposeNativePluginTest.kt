@@ -74,6 +74,18 @@ class ComposeNativePluginTest {
             "commonMainResolvableDependenciesMetadata".isMetadataTransformationConfiguration(),
         )
         assertEquals(
+            true,
+            "skiaMainResolvableDependenciesMetadata".isMetadataTransformationConfiguration(),
+        )
+        assertEquals(
+            true,
+            "appleMainResolvableDependenciesMetadata".isMetadataTransformationConfiguration(),
+        )
+        assertEquals(
+            true,
+            "desktopNativeMainResolvableDependenciesMetadata".isMetadataTransformationConfiguration(),
+        )
+        assertEquals(
             false,
             "allSourceSetsCompileDependenciesMetadata".isMetadataTransformationConfiguration(),
         )
@@ -85,9 +97,20 @@ class ComposeNativePluginTest {
     }
 
     @Test
+    fun identifiesKotlinMetadataCompilationTasks() {
+        assertEquals(true, "compileCommonMainKotlinMetadata".isKotlinMetadataCompilationTask())
+        assertEquals(true, "compileSkiaMainKotlinMetadata".isKotlinMetadataCompilationTask())
+        assertEquals(true, "compileAppleMainKotlinMetadata".isKotlinMetadataCompilationTask())
+        assertEquals(false, "compileKotlinLinuxX64".isKotlinMetadataCompilationTask())
+        assertEquals(false, "transformSkiaMainDependenciesMetadata".isKotlinMetadataCompilationTask())
+    }
+
+    @Test
     fun appliesNativeOverlayToConcreteAndSharedNativeConfigurations() {
         assertEquals(true, "linuxX64CompileKlibraries".usesNativeOverlay())
         assertEquals(false, "linuxMainResolvableDependenciesMetadata".usesNativeOverlay())
+        assertEquals(false, "skiaMainResolvableDependenciesMetadata".usesNativeOverlay())
+        assertEquals(false, "appleMainResolvableDependenciesMetadata".usesNativeOverlay())
         assertEquals(true, "desktopNativeMainImplementation".usesNativeOverlay())
         assertEquals(true, "macosX64CompileKlibraries".usesNativeOverlay())
         assertEquals(true, "macosArm64RuntimeKlibraries".usesNativeOverlay())
