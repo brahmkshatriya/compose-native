@@ -146,7 +146,16 @@ internal class MenuIdAllocator {
     fun next(): Int = next++
 }
 
+/** Receiver scope used by [FrameWindowScope.MenuBar]. */
 class MenuBarScope internal constructor(private val builder: NativeMenuBuilder) {
+    /**
+     * Adds a menu to the menu bar.
+     *
+     * @param text text shown in the menu bar
+     * @param mnemonic keyboard mnemonic associated with the menu, when supported by the platform
+     * @param enabled whether the menu can be opened by the user
+     * @param content content of the menu, such as items, submenus, and separators
+     */
     @Composable
     @MenuComposable
     fun Menu(
@@ -162,7 +171,16 @@ class MenuBarScope internal constructor(private val builder: NativeMenuBuilder) 
     }
 }
 
+/** Receiver scope used to describe menu content for [MenuBarScope.Menu] and [Tray]. */
 class MenuScope internal constructor(private val builder: NativeMenuBuilder) {
+    /**
+     * Adds a submenu.
+     *
+     * @param text text shown for the submenu
+     * @param enabled whether the submenu can be opened by the user
+     * @param mnemonic keyboard mnemonic associated with the submenu, when supported by the platform
+     * @param content content of the submenu
+     */
     @Composable
     @MenuComposable
     fun Menu(
@@ -177,12 +195,23 @@ class MenuScope internal constructor(private val builder: NativeMenuBuilder) {
             NativeMenuEntry.Menu(builder.nextId(), text, enabled, mnemonic, children.entries.toList())
     }
 
+    /** Adds a separator to the menu. */
     @Composable
     @MenuComposable
     fun Separator() {
         builder.entries += NativeMenuEntry.Separator(builder.nextId())
     }
 
+    /**
+     * Adds an action item to the menu.
+     *
+     * @param text text shown for the item
+     * @param icon optional icon shown with the item when supported by the platform
+     * @param enabled whether the item can be activated
+     * @param mnemonic keyboard mnemonic associated with the item, when supported by the platform
+     * @param shortcut key combination that invokes [onClick] without navigating the menu hierarchy
+     * @param onClick invoked when the item is activated
+     */
     @Composable
     @MenuComposable
     fun Item(
@@ -199,6 +228,18 @@ class MenuScope internal constructor(private val builder: NativeMenuBuilder) {
             )
     }
 
+    /**
+     * Adds a checkable item to the menu.
+     *
+     * @param text text shown for the item
+     * @param checked whether the item is currently checked
+     * @param icon optional icon shown with the item when supported by the platform
+     * @param enabled whether the item can be activated
+     * @param mnemonic keyboard mnemonic associated with the item, when supported by the platform
+     * @param shortcut key combination that invokes [onCheckedChange] without navigating the menu
+     * hierarchy
+     * @param onCheckedChange invoked with the requested checked state when the item is activated
+     */
     @Composable
     @MenuComposable
     fun CheckboxItem(
@@ -216,6 +257,17 @@ class MenuScope internal constructor(private val builder: NativeMenuBuilder) {
             ) { onCheckedChange(!checked) }
     }
 
+    /**
+     * Adds a radio-button item to the menu.
+     *
+     * @param text text shown for the item
+     * @param selected whether the item is currently selected
+     * @param icon optional icon shown with the item when supported by the platform
+     * @param enabled whether the item can be activated
+     * @param mnemonic keyboard mnemonic associated with the item, when supported by the platform
+     * @param shortcut key combination that invokes [onClick] without navigating the menu hierarchy
+     * @param onClick invoked when the item is activated
+     */
     @Composable
     @MenuComposable
     fun RadioButtonItem(
@@ -234,6 +286,11 @@ class MenuScope internal constructor(private val builder: NativeMenuBuilder) {
     }
 }
 
+/**
+ * Composes a menu bar at the top of this window.
+ *
+ * @param content content of the menu bar
+ */
 @Composable
 fun FrameWindowScope.MenuBar(
     content: @Composable @MenuComposable MenuBarScope.() -> Unit,

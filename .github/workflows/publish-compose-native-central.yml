@@ -122,10 +122,6 @@ jobs:
           if [[ "$RUNNER_OS" == 'Windows' ]]; then
             gradle_command='./gradlew.bat'
           fi
-          publication_tasks=(':mpp:publishComposeNativeToMavenLocal')
-          if [[ "$COMPOSE_PLATFORM" == 'LinuxX64' ]]; then
-            publication_tasks+=(':mpp:publishComposeForkRootsToMavenLocal')
-          fi
           "$gradle_command" \
             --no-daemon \
             --stacktrace \
@@ -139,7 +135,32 @@ jobs:
             "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
-            "${publication_tasks[@]}"
+            :mpp:publishComposeNativeToMavenLocal
+
+          if [[ "$COMPOSE_PLATFORM" == 'LinuxX64' ]]; then
+            # Root metadata must see the complete published KMP topology. A partial target set can
+            # collapse shared source sets or omit platform variants from Gradle module metadata.
+            # Configure every platform family here so KGP preserves Android/JVM/Web/iOS/Desktop
+            # Native variants while also publishing desktopNativeMain (all desktop Native targets)
+            # and linuxWindowsMain (Linux + Windows) as distinct metadata fragments. Leaf artifacts
+            # are still published by their dedicated platform shards.
+            "$gradle_command" \
+              --no-daemon \
+              --stacktrace \
+              --no-configuration-cache \
+              --no-configure-on-demand \
+              "-Dmaven.repo.local=$repository" \
+              -Pcompose.platforms=Android,Desktop,Js,WasmJs,MacosX64,MacosArm64,IosArm64,IosSimulatorArm64,LinuxX64,LinuxArm64,MingwX64 \
+              -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
+              "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
+              "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
+              "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
+              "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
+              "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+              :mpp:publishComposeForkRootsToMavenLocal \
+              -x checkKotlinGradlePluginConfigurationErrors \
+              --rerun-tasks
+          fi
 
       - name: Export only fork publications
         shell: bash
@@ -230,8 +251,11 @@ jobs:
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
             "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
             "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            ":compose:foundation:foundation:publish${COMPOSE_PLATFORM}PublicationToMavenLocal" \
-            ":compose:material3:material3:publish${COMPOSE_PLATFORM}PublicationToMavenLocal"
+            "-Pjetbrains.publication.version.NAVIGATION_3=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
+            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            :mpp:publishComposeForkPlatformsToMavenLocal
 
           if [[ "$COMPOSE_PLATFORM" == 'Android' ]]; then
             scripts/verify-fork-android-aars.py \
@@ -637,6 +661,18 @@ jobs:
               test -d "$group_root/compose/$family/$family-$suffix/$RELEASE_VERSION"
             done
           done
+          foundation_metadata="$group_root/compose/foundation/foundation/$RELEASE_VERSION/foundation-$RELEASE_VERSION.jar"
+          material3_metadata="$group_root/compose/material3/material3/$RELEASE_VERSION/material3-$RELEASE_VERSION.jar"
+          for metadata in "$foundation_metadata" "$material3_metadata"; do
+            test -s "$metadata"
+            unzip -l "$metadata" > "$RUNNER_TEMP/$(basename "$metadata").list"
+            grep -q 'commonMain/default/linkdata/module' "$RUNNER_TEMP/$(basename "$metadata").list"
+          done
+          unzip -p "$foundation_metadata" > "$RUNNER_TEMP/foundation-metadata.bin"
+          grep -a -q 'isSlidable' "$RUNNER_TEMP/foundation-metadata.bin"
+          unzip -p "$material3_metadata" > "$RUNNER_TEMP/material3-metadata.bin"
+          grep -a -q 'MenuItemShapes' "$RUNNER_TEMP/material3-metadata.bin"
+          grep -a -q 'onPointerScrollY' "$RUNNER_TEMP/material3-metadata.bin"
           ios_module_count="$(find "$group_root" \
             \( -path "*-iosarm64/$RELEASE_VERSION/*.module" \
             -o -path "*-iossimulatorarm64/$RELEASE_VERSION/*.module" \) | wc -l | tr -d ' ')"

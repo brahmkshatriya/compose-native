@@ -93,7 +93,22 @@ echo "Resolving native Skiko from Maven Central"
     "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
     "-Pjetbrains.publication.version.LIFECYCLE=$version" \
     "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
-    :mpp:publishComposeNativeToMavenLocal \
+    :mpp:publishComposeNativeToMavenLocal
+
+# A single Native target produces a marker-only KMP metadata root. Add JS only while publishing
+# roots so commonMain remains a true multiplatform compilation and fork-only common APIs are kept.
+"$compose_root/gradlew" \
+    -p "$compose_root" \
+    --no-configuration-cache \
+    "-Dmaven.repo.local=$maven_repository" \
+    -Pcompose.platforms=LinuxX64,Js \
+    "-Pjetbrains.publication.groupPrefix=$group_prefix" \
+    "-Pjetbrains.publication.version.COMPOSE=$version" \
+    "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
+    "-Pjetbrains.publication.version.NAVIGATION_3=$version" \
+    "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
+    "-Pjetbrains.publication.version.LIFECYCLE=$version" \
+    "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
     :mpp:publishComposeForkRootsToMavenLocal
 
 metadata_args=(

@@ -43,6 +43,7 @@ import org.gradle.kotlin.dsl.withType
 import org.jetbrains.androidx.build.ComposePlatforms
 import org.jetbrains.androidx.build.configureForkWebTarget
 import org.jetbrains.androidx.build.isJetBrainsAppleNativeOnlyPublication
+import org.jetbrains.androidx.build.isJetBrainsForkRootPublication
 import org.jetbrains.androidx.build.isJetBrainsMacosNativeOnlyPublication
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
@@ -946,6 +947,7 @@ abstract class AndroidXMultiplatformExtension(val project: Project) {
      */
     private fun <T> potentiallyRedirecting(targetName: String, create: () -> T): T {
         val redirectScope = redirectCoordinate ?: return create()
+        if (project.isJetBrainsForkRootPublication()) return create()
         if (project.isJetBrainsMacosNativeOnlyPublication() && targetName.startsWith("macos")) {
             return create()
         }

@@ -232,14 +232,22 @@ import sdl3.SDL_WINDOW_RESIZABLE
 import sdl3.SDL_WINDOW_TRANSPARENT
 import sdl3.SDL_WaitEventTimeout
 
+/** Receiver scope used by [application], [awaitApplication], and [launchApplication]. */
 @Stable
 interface ApplicationScope {
+    /** Closes all windows created by this application and stops the application composition. */
     fun exitApplication()
 }
 
+/** Describes how a window is placed on the screen. */
 enum class WindowPlacement {
+    /** The window can be moved and resized by the user and does not occupy all available space. */
     Floating,
+
+    /** The window occupies the available work area, excluding system UI such as taskbars or docks. */
     Maximized,
+
+    /** The window occupies the full display, including the area normally reserved for system UI. */
     Fullscreen,
 }
 
@@ -324,27 +332,49 @@ internal fun nativeResizeStyleEnabled(resizable: Boolean, placement: WindowPlace
 internal fun placementAfterExitingFullscreen(previous: WindowPlacement): WindowPlacement =
     previous.takeUnless { it == WindowPlacement.Fullscreen } ?: WindowPlacement.Floating
 
-/** Defines which application windows are blocked while a dialog is visible. */
+/** Describes which application windows are blocked while a [DialogWindow] is visible. */
 class DialogModalityType private constructor(val name: String) {
     override fun toString(): String = name
 
     companion object {
+        /** A non-modal dialog that does not block any application window. */
         val Modeless = DialogModalityType("Modeless")
+
+        /** A dialog that blocks its owner window while it is visible. */
         val DocumentModal = DialogModalityType("Document")
+
+        /** A dialog that blocks every window in the application while it is visible. */
         val ApplicationModal = DialogModalityType("Application")
     }
 }
 
+/** Constructs a [WindowPosition.Absolute] from [x] and [y] coordinates in [Dp]. */
 fun WindowPosition(x: Dp, y: Dp): WindowPosition = WindowPosition.Absolute(x, y)
 
+/** Constructs a [WindowPosition.Aligned] from [alignment]. */
 fun WindowPosition(alignment: Alignment): WindowPosition = WindowPosition.Aligned(alignment)
 
+/** Position of a window or dialog on the screen in [Dp]. */
 @Immutable
 sealed class WindowPosition {
+    /** The horizontal position of the window in [Dp]. */
     abstract val x: Dp
+
+    /** The vertical position of the window in [Dp]. */
     abstract val y: Dp
+
+    /**
+     * Whether this position contains absolute screen coordinates.
+     *
+     * This is `false` for [PlatformDefault] and [Aligned] until the window is shown.
+     */
     abstract val isSpecified: Boolean
 
+    /**
+     * A platform-defined initial position.
+     *
+     * Once the window is shown, its state is updated with an absolute [WindowPosition].
+     */
     object PlatformDefault : WindowPosition() {
         override val x = Dp.Unspecified
         override val y = Dp.Unspecified
@@ -353,6 +383,7 @@ sealed class WindowPosition {
         override fun toString() = "PlatformDefault"
     }
 
+    /** Positions a window in the current display's available work area using [alignment]. */
     @Immutable
     data class Aligned(val alignment: Alignment) : WindowPosition() {
         override val x = Dp.Unspecified
@@ -360,17 +391,36 @@ sealed class WindowPosition {
         override val isSpecified = false
     }
 
+    /** An absolute position on the current display. */
     @Immutable
     data class Absolute(override val x: Dp, override val y: Dp) : WindowPosition() {
         override val isSpecified = true
     }
 }
 
+/** A state object that can be hoisted to control and observe window attributes. */
 @Stable
 interface WindowState {
+    /** Describes how the window is placed on the screen. */
     var placement: WindowPlacement
+
+    /** `true` when the window is minimized. */
     var isMinimized: Boolean
+
+    /**
+     * The current position of the window.
+     *
+     * If [WindowPosition.isSpecified] is `false`, this is replaced with an absolute position after
+     * the window is shown.
+     */
     var position: WindowPosition
+
+    /**
+     * The current size of the window.
+     *
+     * A dimension may be [Dp.Unspecified] before the window is first measured. The state is updated
+     * with the actual size once the native window is shown.
+     */
     var size: DpSize
 }
 
@@ -386,6 +436,14 @@ private class WindowStateImpl(
     override var size by androidx.compose.runtime.mutableStateOf(size)
 }
 
+/**
+ * Creates a [WindowState] that can be hoisted to control and observe a window.
+ *
+ * @param placement the initial value for [WindowState.placement]
+ * @param isMinimized the initial value for [WindowState.isMinimized]
+ * @param position the initial value for [WindowState.position]
+ * @param size the initial value for [WindowState.size]
+ */
 fun WindowState(
     placement: WindowPlacement = WindowPlacement.Floating,
     isMinimized: Boolean = false,
@@ -393,6 +451,15 @@ fun WindowState(
     size: DpSize = DpSize(800.dp, 600.dp),
 ): WindowState = WindowStateImpl(placement, isMinimized, position, size)
 
+/**
+ * Creates a [WindowState] that can be hoisted to control and observe a window.
+ *
+ * @param placement the initial value for [WindowState.placement]
+ * @param isMinimized the initial value for [WindowState.isMinimized]
+ * @param position the initial value for [WindowState.position]
+ * @param width the initial width of [WindowState.size]
+ * @param height the initial height of [WindowState.size]
+ */
 fun WindowState(
     placement: WindowPlacement = WindowPlacement.Floating,
     isMinimized: Boolean = false,
@@ -401,6 +468,16 @@ fun WindowState(
     height: Dp,
 ): WindowState = WindowState(placement, isMinimized, position, DpSize(width, height))
 
+/**
+ * Creates a [WindowState] that is remembered across compositions.
+ *
+ * Changes to the provided initial values do not recreate or update an existing remembered state.
+ *
+ * @param placement the initial value for [WindowState.placement]
+ * @param isMinimized the initial value for [WindowState.isMinimized]
+ * @param position the initial value for [WindowState.position]
+ * @param size the initial value for [WindowState.size]
+ */
 @Composable
 fun rememberWindowState(
     placement: WindowPlacement = WindowPlacement.Floating,
@@ -409,6 +486,17 @@ fun rememberWindowState(
     size: DpSize = DpSize(800.dp, 600.dp),
 ): WindowState = remember { WindowState(placement, isMinimized, position, size) }
 
+/**
+ * Creates a [WindowState] that is remembered across compositions.
+ *
+ * Changes to the provided initial values do not recreate or update an existing remembered state.
+ *
+ * @param placement the initial value for [WindowState.placement]
+ * @param isMinimized the initial value for [WindowState.isMinimized]
+ * @param position the initial value for [WindowState.position]
+ * @param width the initial width of [WindowState.size]
+ * @param height the initial height of [WindowState.size]
+ */
 @Composable
 fun rememberWindowState(
     placement: WindowPlacement = WindowPlacement.Floating,
@@ -418,58 +506,79 @@ fun rememberWindowState(
     height: Dp = 600.dp,
 ): WindowState = remember { WindowState(placement, isMinimized, position, width, height) }
 
+/** Receiver scope used by [Window] and [DialogWindow]. */
 @Stable
 interface WindowScope {
+    /** The native Compose window associated with this scope. */
     val window: ComposeWindow
 }
 
-@Stable interface FrameWindowScope : WindowScope
+/** Receiver scope used by [Window]. */
+@Stable
+interface FrameWindowScope : WindowScope
 
+/**
+ * Native desktop window created by Compose.
+ *
+ * Prefer controlling ordinary window state through [WindowState]. This handle exposes additional
+ * native window properties that are useful from [FrameWindowScope].
+ */
 open class ComposeWindow internal constructor(internal val host: NativeWindowHost) {
+    /** The minimum size to which the window may be resized. */
     var minimumSize: DpSize
         get() = host.minimumSize
         set(value) {
             host.minimumSize = value
         }
 
+    /** The maximum size to which the window may be resized. */
     var maximumSize: DpSize
         get() = host.maximumSize
         set(value) {
             host.maximumSize = value
         }
 
+    /** The current size of the window. */
     val size: DpSize
         get() = host.state.size
 
+    /** Whether the window is currently maximized. */
     val isMaximized: Boolean
         get() = host.isMaximized
 
+    /** Controls how the window is placed on the screen. */
     var placement: WindowPlacement
         get() = host.state.placement
         set(value) {
             host.state.placement = value
         }
 
+    /** Controls whether the window is minimized. */
     var isMinimized: Boolean
         get() = host.state.isMinimized
         set(value) {
             host.state.isMinimized = value
         }
 
+    /** The current position of the window. */
     var position: WindowPosition
         get() = host.state.position
         set(value) {
             host.state.position = value
         }
 
+    /** Minimizes the window. */
     fun minimize() = host.minimize()
 
+    /** Maximizes the window, or restores it if it is already maximized. */
     fun toggleMaximized() = host.toggleMaximized()
 
+    /** Requests input focus for this window. */
     fun requestFocus() {
         host.requestFocus()
     }
 
+    /** Requests that this window close, invoking its close-request callback. */
     fun close() = host.requestClose()
 
     /** Installs the root listener used by Compose UI test hosts. */
@@ -503,16 +612,28 @@ open class ComposeWindow internal constructor(internal val host: NativeWindowHos
     internal fun removeDraggableArea(key: Any) = host.removeDraggableArea(key)
 }
 
+/** Native desktop dialog created by Compose. */
 class ComposeDialog internal constructor(host: NativeWindowHost) : ComposeWindow(host)
 
+/** Receiver scope used by [DialogWindow]. */
 @Stable
 interface DialogWindowScope : WindowScope {
+    /** The [ComposeDialog] created by [DialogWindow]. */
     override val window: ComposeDialog
 }
 
+/** A state object that can be hoisted to control and observe dialog attributes. */
 @Stable
 interface DialogState {
+    /**
+     * The current position of the dialog.
+     *
+     * If [WindowPosition.isSpecified] is false, this is replaced with an absolute position after
+     * the dialog is shown.
+     */
     var position: WindowPosition
+
+    /** The current size of the dialog. */
     var size: DpSize
 }
 
@@ -521,23 +642,53 @@ private class DialogStateImpl(position: WindowPosition, size: DpSize) : DialogSt
     override var size by androidx.compose.runtime.mutableStateOf(size)
 }
 
+/**
+ * Creates a [DialogState] that can be hoisted to control and observe a dialog.
+ *
+ * @param position the initial value for [DialogState.position]
+ * @param size the initial value for [DialogState.size]
+ */
 fun DialogState(
     position: WindowPosition = WindowPosition(Alignment.Center),
     size: DpSize = DpSize(400.dp, 300.dp),
 ): DialogState = DialogStateImpl(position, size)
 
+/**
+ * Creates a [DialogState] that can be hoisted to control and observe a dialog.
+ *
+ * @param position the initial value for [DialogState.position]
+ * @param width the initial width of [DialogState.size]
+ * @param height the initial height of [DialogState.size]
+ */
 fun DialogState(
     position: WindowPosition = WindowPosition(Alignment.Center),
     width: Dp = 400.dp,
     height: Dp = 300.dp,
 ): DialogState = DialogState(position, DpSize(width, height))
 
+/**
+ * Creates a [DialogState] that is remembered across compositions.
+ *
+ * Changes to the provided initial values do not recreate or update an existing remembered state.
+ *
+ * @param position the initial value for [DialogState.position]
+ * @param size the initial value for [DialogState.size]
+ */
 @Composable
 fun rememberDialogState(
     position: WindowPosition = WindowPosition(Alignment.Center),
     size: DpSize = DpSize(400.dp, 300.dp),
 ): DialogState = remember { DialogState(position, size) }
 
+/**
+ * Creates a [DialogState] that is remembered across compositions.
+ *
+ * Changes to the provided initial values do not recreate or update an existing remembered state.
+ *
+ * @param position the initial value for [DialogState.position]
+ * @param width the initial width of [DialogState.size]
+ * @param height the initial height of [DialogState.size]
+ */
 @Composable
 fun rememberDialogState(
     position: WindowPosition = WindowPosition(Alignment.Center),
@@ -569,6 +720,37 @@ private class DialogWindowState(private val dialogState: DialogState) : WindowSt
 
 private val LocalNativeWindowHost = staticCompositionLocalOf<NativeWindowHost?> { null }
 
+/**
+ * Composes a native platform dialog in the current composition.
+ *
+ * When [DialogWindow] enters the composition, a native dialog is created and receives focus. When
+ * it leaves the composition, the dialog is disposed and closed.
+ *
+ * By default the dialog is document-modal, so it blocks input to the owner window in whose
+ * composition it was created. Use [modalityType] to change that behavior.
+ *
+ * @param onCloseRequest called when the user requests that the dialog close. The callback must
+ * decide what should happen, for example by removing [DialogWindow] from the composition.
+ * @param state the state object used to control and observe the dialog position and size
+ * @param visible whether the dialog is visible. Hiding a dialog preserves its state and native
+ * resources until it leaves the composition.
+ * @param title the title shown by the platform window decoration
+ * @param icon the window icon on platforms that support per-window icons
+ * @param undecorated whether the platform decoration is disabled
+ * @param transparent whether the dialog background may be transparent. Transparent dialogs must be
+ * undecorated.
+ * @param resizable whether the user can resize the dialog. The application can still resize it by
+ * changing [state].
+ * @param enabled whether the dialog reacts to input events
+ * @param focusable whether the dialog can receive input focus
+ * @param alwaysOnTop whether the dialog stays above other application windows and dialogs
+ * @param modalityType which application windows are blocked while this dialog is visible
+ * @param onPreviewKeyEvent invoked before a key event is dispatched to [content]. Return true to
+ * consume the event.
+ * @param onKeyEvent invoked after a key event was offered to [content], if it was not consumed.
+ * Return true to consume the event.
+ * @param content composable content of the dialog
+ */
 @Composable
 @ComposableOpenTarget(-1)
 fun DialogWindow(
@@ -625,15 +807,37 @@ private val LocalNativeApplication =
     }
 
 /**
- * Opens a native Compose window.
+ * Composes a native platform window in the current composition.
  *
- * @param titleBar how the window presents its title bar. [TitleBar.Native] keeps the system title
- *   bar. [TitleBar.Auto] and [TitleBar.Custom] extend the client area underneath the title bar and
- *   draw only the caption controls; no title text or title bar background is rendered. In
- *   fullscreen, the caption controls are hidden and slide down while the pointer hovers over the
- *   top edge of the window. Outside fullscreen, Compose draws platform-style caption controls over
- *   the extended client area. The occupied area is exposed through `WindowInsets.captionBar` and
- *   `WindowInsets.systemBars`. This option has no effect on undecorated windows.
+ * When [Window] enters the composition, a native window is created. When it leaves the composition,
+ * the window is disposed and closed. Initial size, position, placement, and minimized state are
+ * controlled by [state], which is also updated when the user changes the native window.
+ *
+ * [onCloseRequest] does not close the window automatically. A typical application removes the
+ * window from the composition or calls [ApplicationScope.exitApplication].
+ *
+ * @param onCloseRequest called when the user requests that the window close
+ * @param state the state object used to control and observe the window
+ * @param visible whether the window is visible. Hiding a window preserves its state and native
+ * resources until it leaves the composition.
+ * @param title the title shown by the platform window decoration
+ * @param icon the window icon on platforms that support per-window icons
+ * @param undecorated whether the platform decoration is disabled
+ * @param transparent whether the window background may be transparent. Transparent windows must be
+ * undecorated.
+ * @param resizable whether the user can resize the window. The application can still resize it by
+ * changing [state].
+ * @param enabled whether the window reacts to input events
+ * @param focusable whether the window can receive input focus
+ * @param alwaysOnTop whether the window stays above other application windows and dialogs
+ * @param titleBar how the title bar is presented. [TitleBar.Native] keeps the system title bar.
+ * [TitleBar.Auto] and [TitleBar.Custom] extend the client area into the title bar and draw caption
+ * controls in Compose. This has no effect on undecorated windows.
+ * @param onPreviewKeyEvent invoked before a key event is dispatched to [content]. Return true to
+ * consume the event.
+ * @param onKeyEvent invoked after a key event was offered to [content], if it was not consumed.
+ * Return true to consume the event.
+ * @param content composable content of the window
  */
 @Composable
 @ComposableOpenTarget(-1)
@@ -838,6 +1042,19 @@ internal fun configureNativeComposeUiFlags() {
     ComposeUiFlags.isDialogAnimationEnabled = true
 }
 
+/**
+ * Entry point for a native Compose desktop application.
+ *
+ * This function initializes the native desktop runtime, starts the application composition, and
+ * blocks until [ApplicationScope.exitApplication] is called or the application composition ends.
+ * Windows and dialogs can be created declaratively from [content].
+ *
+ * Set [exitProcessOnExit] to false when code must continue running after the Compose application
+ * has finished.
+ *
+ * @param exitProcessOnExit whether the process is terminated after the application exits
+ * @param content the application-level composable content
+ */
 fun application(
     exitProcessOnExit: Boolean = true,
     content: @Composable ApplicationScope.() -> Unit,
@@ -879,10 +1096,24 @@ fun application(
     if (exitProcessOnExit) exitProcess(0)
 }
 
+/**
+ * Runs a native Compose desktop application without terminating the process when it exits.
+ *
+ * This is the suspending counterpart of [application] with exit-process behavior disabled.
+ *
+ * @param content the application-level composable content
+ */
 suspend fun awaitApplication(content: @Composable ApplicationScope.() -> Unit) {
     application(exitProcessOnExit = false, content = content)
 }
 
+/**
+ * Launches a native Compose desktop application in this [CoroutineScope].
+ *
+ * The returned [Job] completes when the application exits.
+ *
+ * @param content the application-level composable content
+ */
 fun CoroutineScope.launchApplication(content: @Composable ApplicationScope.() -> Unit): Job =
     launch {
         awaitApplication(content)
@@ -951,13 +1182,32 @@ private val NativeWindowSelfTestContent: @Composable ApplicationScope.() -> Unit
 }
 
 /**
- * Opens a native Compose application containing a single window.
+ * Entry point for a native Compose application containing a single top-level [Window].
  *
- * @param titleBar how the window presents its title bar. [TitleBar.Native] keeps the system title
- *   bar. [TitleBar.Auto] and [TitleBar.Custom] extend the client area underneath the title bar and
- *   draw only the caption controls; no title text or title bar background is rendered. In
- *   fullscreen, the caption controls are hidden and slide down while the pointer hovers over the
- *   top edge of the window.
+ * Use [application] directly when the application needs multiple top-level windows or custom
+ * window-closing behavior.
+ *
+ * Set [exitProcessOnExit] to false when code must continue running after the window is closed.
+ *
+ * @param state the state object used to control and observe the window
+ * @param visible whether the window is visible
+ * @param title the title shown by the platform window decoration
+ * @param icon the window icon on platforms that support per-window icons
+ * @param undecorated whether the platform decoration is disabled
+ * @param transparent whether the window background may be transparent. Transparent windows must be
+ * undecorated.
+ * @param resizable whether the user can resize the window. The application can still resize it by
+ * changing [state].
+ * @param enabled whether the window reacts to input events
+ * @param focusable whether the window can receive input focus
+ * @param alwaysOnTop whether the window stays above other application windows and dialogs
+ * @param titleBar how the title bar is presented. See [TitleBar].
+ * @param onPreviewKeyEvent invoked before a key event is dispatched to [content]. Return true to
+ * consume the event.
+ * @param onKeyEvent invoked after a key event was offered to [content], if it was not consumed.
+ * Return true to consume the event.
+ * @param exitProcessOnExit whether the process is terminated after the application exits
+ * @param content composable content of the window
  */
 fun singleWindowApplication(
     state: WindowState = WindowState(),

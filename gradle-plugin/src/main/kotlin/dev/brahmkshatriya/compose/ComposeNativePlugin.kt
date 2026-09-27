@@ -21,7 +21,6 @@ class ComposeNativePlugin : Plugin<Project> {
         project.addDesktopNativeSourceSets()
         project.createComposeNativeApplicationExtension()
         project.configureDesktopNativeApplicationConventions()
-        project.configureSharedNativeMetadataTarget()
         project.configureMetadataCompilation()
         project.configureIdeDependencyResolution()
         project.configureSkikoCapabilityResolution()
@@ -50,16 +49,6 @@ internal fun String?.requiresRequestedCoordinateMatchingFlag(): Boolean {
     val major = components.getOrNull(0)?.toIntOrNull() ?: return true
     val minor = components.getOrNull(1)?.toIntOrNull() ?: return true
     return major < 2 || major == 2 && minor < 4
-}
-
-private fun Project.configureSharedNativeMetadataTarget() {
-    configurations.configureEach { configuration ->
-        if (!configuration.name.isSharedNativeMetadataConfiguration()) return@configureEach
-        configuration.attributes.attribute(
-            Attribute.of(KOTLIN_NATIVE_TARGET_ATTRIBUTE, String::class.java),
-            DESKTOP_NATIVE_METADATA_TARGET,
-        )
-    }
 }
 
 private fun Project.configureSkikoCapabilityResolution() {
@@ -144,8 +133,11 @@ private fun Project.configureDependencySubstitutions() {
             nativeOverlayComposeVersion = nativeOverlayComposeVersion,
             nativeMetadataSubstitutions = nativeMetadataSubstitutions,
         )
-        if (androidApplicationConsumerSubstitutions.isNotEmpty()) {
-            configureAndroidApplicationConsumers(androidApplicationConsumerSubstitutions)
+        if (fullForkSubstitutions.isNotEmpty()) {
+            configureProjectConsumers(
+                fullForkSubstitutions,
+                androidApplicationConsumerSubstitutions,
+            )
         }
     }
 }
@@ -166,7 +158,10 @@ private fun Project.configureLocalDependencySubstitutions(
             when {
                 usesNativeOverlay ->
                     fullForkSubstitutions + nativeOverlaySubstitutions + nativeMetadataSubstitutions
-                isMetadataTransformation -> emptyMap()
+                isMetadataTransformation ->
+                    fullForkSubstitutions.filterValues {
+                        !it.targetsRedirectedCommonMetadataModule()
+                    }
                 isAndroidConfiguration -> fullForkSubstitutions + androidTargetSubstitutions
                 else -> fullForkSubstitutions
             }
@@ -174,12 +169,11 @@ private fun Project.configureLocalDependencySubstitutions(
             if (usesNativeOverlay) {
                 nativeOverlayComposeVersion ?: fullForkComposeVersion
             } else {
-                null
+                fullForkComposeVersion
             }
         if (
             substitutions.isEmpty() &&
-                composeForkVersion == null &&
-                !isMetadataTransformation
+                composeForkVersion == null
         ) {
             return@configureEach
         }
@@ -187,7 +181,6 @@ private fun Project.configureLocalDependencySubstitutions(
         val selectedForkVersion =
             when {
                 usesNativeOverlay -> nativeOverlayComposeVersion ?: fullForkComposeVersion
-                isMetadataTransformation -> null
                 else -> fullForkComposeVersion ?: nativeOverlayComposeVersion
             }
         if (selectedForkVersion != null) {
@@ -202,20 +195,32 @@ private fun Project.configureLocalDependencySubstitutions(
         configuration.resolutionStrategy.dependencySubstitution { rules ->
             rules.all { details ->
                 val selector = details.requested as? ModuleComponentSelector ?: return@all
-                if (isMetadataTransformation && !usesNativeOverlay) {
+                if (
+                    isMetadataTransformation &&
+                        !usesNativeOverlay &&
+                        selector.isRedirectedCommonMetadataModule()
+                ) {
                     selector.officialMetadataCoordinateOrNull()?.let { officialCoordinate ->
                         details.useTarget(officialCoordinate)
                         return@all
                     }
                 }
-                if (
-                    configuration.name.usesRedirectedNativeRuntime() &&
-                        selector.isAndroidxRuntimeRedirectTarget()
-                ) {
-                    // Linux/Windows Runtime publications are redirect shims whose real
-                    // implementation lives in AndroidX. Do not redirect their target back to the
-                    // fork or the dependency graph loops on the shim and the Compose compiler
-                    // never sees the real Runtime KLIB.
+                val redirectImplementation =
+                    when {
+                        configuration.name.usesRedirectedNativeTarget() ->
+                            selector.nativeRedirectImplementationCoordinateOrNull()
+                        configuration.name.usesRedirectedWebTarget() ->
+                            selector.webRedirectImplementationCoordinateOrNull()
+                        else -> null
+                    }
+                if (redirectImplementation != null) {
+                    // Some fork Native publications are intentionally empty redirect shims whose
+                    // real implementation lives in the upstream AndroidX/JetBrains artifact. The
+                    // same redirect model is used by JS/Wasm for Runtime and AndroidX families.
+                    // Normalize stale JetBrains/AndroidX coordinates to the redirect version, and
+                    // do not substitute that dependency back to the fork or the graph loops on the
+                    // empty shim and the platform compiler never sees the real target KLIB.
+                    details.useTarget(redirectImplementation)
                     return@all
                 }
                 val substitution = substitutions["${selector.group}:${selector.module}"]
@@ -233,9 +238,9 @@ private fun Project.configureLocalDependencySubstitutions(
                             selector.group,
                             selector.module,
                             it,
-                            includeNativeOnlyCompose = true,
-                            includeJetBrainsAndroidx = true,
-                            includeAndroidx = true,
+                            useDesktopNativeFork = usesNativeOverlay,
+                            includeJetBrainsAndroidx = usesNativeOverlay,
+                            includeAndroidx = usesNativeOverlay,
                         )
                     } ?: return@all
                 details.useTarget(composeTarget)
@@ -308,20 +313,25 @@ internal fun String.isDesktopNativePublicationMetadataTask(): Boolean =
         contains(targetName, ignoreCase = true)
     }
 
-private fun Project.configureAndroidApplicationConsumers(
-    fullForkSubstitutions: Map<String, ModuleSubstitution>
+private fun Project.configureProjectConsumers(
+    fullForkSubstitutions: Map<String, ModuleSubstitution>,
+    androidApplicationConsumerSubstitutions: Map<String, ModuleSubstitution>,
 ) {
     rootProject.allprojects { consumer ->
         if (consumer == this) return@allprojects
-        consumer.pluginManager.withPlugin(ANDROID_APPLICATION_PLUGIN_ID) {
-            val configureConsumer = {
-                if (consumer.directlyDependsOn(this)) {
-                    consumer.configureFullForkSubstitutions(fullForkSubstitutions)
-                }
+        val configureConsumer = {
+            if (consumer.directlyDependsOn(this)) {
+                val substitutions =
+                    if (consumer.pluginManager.hasPlugin(ANDROID_APPLICATION_PLUGIN_ID)) {
+                        androidApplicationConsumerSubstitutions
+                    } else {
+                        fullForkSubstitutions
+                    }
+                consumer.configureConsumerSubstitutions(substitutions)
             }
-            if (consumer.state.executed) configureConsumer()
-            else consumer.afterEvaluate { configureConsumer() }
         }
+        if (consumer.state.executed) configureConsumer()
+        else consumer.afterEvaluate { configureConsumer() }
     }
 }
 
@@ -332,11 +342,23 @@ internal fun Project.directlyDependsOn(producer: Project): Boolean =
         }
     }
 
-private fun Project.configureFullForkSubstitutions(substitutions: Map<String, ModuleSubstitution>) {
+private fun Project.configureConsumerSubstitutions(substitutions: Map<String, ModuleSubstitution>) {
     configurations.configureEach { configuration ->
         configuration.resolutionStrategy.dependencySubstitution { rules ->
             rules.all { details ->
                 val selector = details.requested as? ModuleComponentSelector ?: return@all
+                val redirectImplementation =
+                    when {
+                        configuration.name.usesRedirectedNativeTarget() ->
+                            selector.nativeRedirectImplementationCoordinateOrNull()
+                        configuration.name.usesRedirectedWebTarget() ->
+                            selector.webRedirectImplementationCoordinateOrNull()
+                        else -> null
+                    }
+                if (redirectImplementation != null) {
+                    details.useTarget(redirectImplementation)
+                    return@all
+                }
                 val substitution =
                     substitutions["${selector.group}:${selector.module}"] ?: return@all
                 details.useTarget(substitution.forkCoordinate)
@@ -360,15 +382,15 @@ internal fun composeForkCoordinateFor(
     group: String,
     module: String,
     version: String,
-    includeNativeOnlyCompose: Boolean = false,
+    useDesktopNativeFork: Boolean = false,
     includeJetBrainsAndroidx: Boolean = true,
     includeAndroidx: Boolean,
 ): String? {
     if (group.startsWith(OFFICIAL_COMPOSE_GROUP_PREFIX)) {
         val family = group.removePrefix(OFFICIAL_COMPOSE_GROUP_PREFIX)
         if (
-            family in COMPOSE_FAMILIES &&
-                (family !in NATIVE_ONLY_COMPOSE_FAMILIES || includeNativeOnlyCompose)
+            (useDesktopNativeFork && family in COMPOSE_FAMILIES) ||
+                "$family:$module" in CROSS_PLATFORM_COMPOSE_MODULES
         ) {
             return "$FORK_COMPOSE_GROUP_PREFIX$family:$module:$version"
         }
@@ -389,6 +411,7 @@ internal fun composeForkCoordinateFor(
         val family = group.removePrefix(ANDROIDX_COMPOSE_GROUP_PREFIX)
         if (
             family in ANDROIDX_COMPOSE_FAMILIES &&
+                (family != "ui" || useDesktopNativeFork) &&
                 module.removeSuffix("-android") in ANDROIDX_COMPOSE_FORK_MODULES
         ) {
             return "$FORK_COMPOSE_GROUP_PREFIX$family:$module:$version"
@@ -398,6 +421,26 @@ internal fun composeForkCoordinateFor(
 }
 
 internal data class ModuleSubstitution(val officialCoordinate: String, val forkCoordinate: String)
+
+private fun ModuleSubstitution.targetsRedirectedCommonMetadataModule(): Boolean {
+    val group = forkCoordinate.substringBefore(':')
+    val module = forkCoordinate.substringAfter(':').substringBefore(':')
+    return isRedirectedCommonMetadataModule(group, module)
+}
+
+private fun ModuleComponentSelector.isRedirectedCommonMetadataModule(): Boolean =
+    isRedirectedCommonMetadataModule(group, module)
+
+internal fun isRedirectedCommonMetadataModule(group: String, module: String): Boolean =
+    when {
+        group == "${FORK_COMPOSE_GROUP_PREFIX}runtime" ->
+            module in REDIRECTED_COMMON_METADATA_RUNTIME_MODULES
+        group == "${FORK_COMPOSE_GROUP_PREFIX}ui" -> module == "ui-skiko"
+        group.startsWith(FORK_ANDROIDX_GROUP_PREFIX) ->
+            group.removePrefix(FORK_ANDROIDX_GROUP_PREFIX) in
+                REDIRECTED_COMMON_METADATA_ANDROIDX_FAMILIES
+        else -> false
+    }
 
 internal fun overlaySubstitutionFor(dependency: Dependency): ModuleSubstitution? {
     val group = dependency.group ?: return null
@@ -482,13 +525,133 @@ internal fun String.isMetadataTransformationConfiguration(): Boolean =
 internal fun String.usesNativeOverlay(): Boolean =
     isDesktopNativeConfiguration() || isSharedNativeMetadataConfiguration()
 
-internal fun String.usesRedirectedNativeRuntime(): Boolean {
+internal fun String.usesRedirectedNativeTarget(): Boolean {
     val normalized = lowercase()
-    return REDIRECTED_NATIVE_RUNTIME_CONFIGURATION_MARKERS.any(normalized::contains)
+    return REDIRECTED_NATIVE_CONFIGURATION_MARKERS.any(normalized::contains)
 }
 
-internal fun ModuleComponentSelector.isAndroidxRuntimeRedirectTarget(): Boolean =
-    group == ANDROIDX_COMPOSE_RUNTIME_GROUP && module in ANDROIDX_RUNTIME_REDIRECT_MODULES
+internal fun String.usesRedirectedWebTarget(): Boolean {
+    val normalized = lowercase()
+    return normalized.startsWith("wasmjs") || normalized.startsWith("js")
+}
+
+internal fun ModuleComponentSelector.isNativeRedirectImplementation(): Boolean =
+    isNativeRedirectImplementation(group, module)
+
+internal fun ModuleComponentSelector.nativeRedirectImplementationCoordinateOrNull(): String? =
+    nativeRedirectImplementationCoordinateOrNull(group, module)
+
+internal fun ModuleComponentSelector.webRedirectImplementationCoordinateOrNull(): String? =
+    webRedirectImplementationCoordinateOrNull(group, module)
+
+internal fun nativeRedirectImplementationCoordinateOrNull(group: String, module: String): String? {
+    val rootModule = module.withoutRedirectPlatformSuffix()
+    val family = redirectImplementationFamilyOrNull(group) ?: return null
+    if (!isNativeRedirectImplementation(group, rootModule)) return null
+    return redirectImplementationCoordinate(family, module)
+}
+
+internal fun webRedirectImplementationCoordinateOrNull(group: String, module: String): String? {
+    val rootModule = module.withoutRedirectPlatformSuffix()
+    val family = redirectImplementationFamilyOrNull(group) ?: return null
+    if (!isWebRedirectImplementation(group, rootModule)) return null
+    return redirectImplementationCoordinate(family, module)
+}
+
+private fun redirectImplementationCoordinate(family: String, module: String): String? {
+    val version = ComposeNativeUpstreamVersions.androidx(family) ?: return null
+    val upstreamGroup = if (family == "compose") ANDROIDX_COMPOSE_RUNTIME_GROUP else "androidx.$family"
+    return "$upstreamGroup:$module:$version"
+}
+
+private fun redirectImplementationFamilyOrNull(group: String): String? =
+    when {
+        group in
+            setOf(
+                ANDROIDX_COMPOSE_RUNTIME_GROUP,
+                "${OFFICIAL_COMPOSE_GROUP_PREFIX}runtime",
+                "${FORK_COMPOSE_GROUP_PREFIX}runtime",
+            ) -> "compose"
+        group in setOf("androidx.collection", "org.jetbrains.androidx.collection") -> "collection"
+        group == "${FORK_ANDROIDX_GROUP_PREFIX}collection" -> "collection"
+        group in setOf("androidx.lifecycle", "org.jetbrains.androidx.lifecycle") -> "lifecycle"
+        group == "${FORK_ANDROIDX_GROUP_PREFIX}lifecycle" -> "lifecycle"
+        group in setOf("androidx.navigation", "org.jetbrains.androidx.navigation") -> "navigation"
+        group == "${FORK_ANDROIDX_GROUP_PREFIX}navigation" -> "navigation"
+        group in setOf("androidx.navigation3", "org.jetbrains.androidx.navigation3") -> "navigation3"
+        group == "${FORK_ANDROIDX_GROUP_PREFIX}navigation3" -> "navigation3"
+        group in setOf("androidx.navigationevent", "org.jetbrains.androidx.navigationevent") ->
+            "navigationevent"
+        group == "${FORK_ANDROIDX_GROUP_PREFIX}navigationevent" -> "navigationevent"
+        group in setOf("androidx.savedstate", "org.jetbrains.androidx.savedstate") -> "savedstate"
+        group == "${FORK_ANDROIDX_GROUP_PREFIX}savedstate" -> "savedstate"
+        else -> null
+    }
+
+internal fun isNativeRedirectImplementation(group: String, module: String): Boolean {
+    val rootModule = module.withoutRedirectPlatformSuffix()
+    return when (group) {
+        ANDROIDX_COMPOSE_RUNTIME_GROUP,
+        "${OFFICIAL_COMPOSE_GROUP_PREFIX}runtime",
+        "${FORK_COMPOSE_GROUP_PREFIX}runtime" ->
+            rootModule in REDIRECTED_NATIVE_RUNTIME_MODULES
+        "androidx.collection",
+        "org.jetbrains.androidx.collection",
+        "${FORK_ANDROIDX_GROUP_PREFIX}collection" -> rootModule == "collection"
+        "androidx.lifecycle",
+        "org.jetbrains.androidx.lifecycle",
+        "${FORK_ANDROIDX_GROUP_PREFIX}lifecycle" -> true
+        "androidx.navigation",
+        "org.jetbrains.androidx.navigation",
+        "${FORK_ANDROIDX_GROUP_PREFIX}navigation" ->
+            rootModule in REDIRECTED_NATIVE_NAVIGATION_MODULES
+        "androidx.navigation3",
+        "org.jetbrains.androidx.navigation3",
+        "${FORK_ANDROIDX_GROUP_PREFIX}navigation3" ->
+            rootModule == "navigation3-runtime"
+        "androidx.navigationevent",
+        "org.jetbrains.androidx.navigationevent",
+        "${FORK_ANDROIDX_GROUP_PREFIX}navigationevent" ->
+            rootModule in REDIRECTED_NATIVE_NAVIGATION_EVENT_MODULES
+        "androidx.savedstate",
+        "org.jetbrains.androidx.savedstate",
+        "${FORK_ANDROIDX_GROUP_PREFIX}savedstate" ->
+            rootModule in REDIRECTED_NATIVE_SAVEDSTATE_MODULES
+        else -> false
+    }
+}
+
+internal fun isWebRedirectImplementation(group: String, module: String): Boolean {
+    val rootModule = module.withoutRedirectPlatformSuffix()
+    return when (group) {
+        ANDROIDX_COMPOSE_RUNTIME_GROUP,
+        "${OFFICIAL_COMPOSE_GROUP_PREFIX}runtime",
+        "${FORK_COMPOSE_GROUP_PREFIX}runtime" -> rootModule in REDIRECTED_WEB_RUNTIME_MODULES
+        "androidx.lifecycle",
+        "org.jetbrains.androidx.lifecycle",
+        "${FORK_ANDROIDX_GROUP_PREFIX}lifecycle" -> true
+        "androidx.navigation",
+        "org.jetbrains.androidx.navigation",
+        "${FORK_ANDROIDX_GROUP_PREFIX}navigation" ->
+            rootModule in REDIRECTED_NATIVE_NAVIGATION_MODULES
+        "androidx.navigation3",
+        "org.jetbrains.androidx.navigation3",
+        "${FORK_ANDROIDX_GROUP_PREFIX}navigation3" -> rootModule == "navigation3-runtime"
+        "androidx.navigationevent",
+        "org.jetbrains.androidx.navigationevent",
+        "${FORK_ANDROIDX_GROUP_PREFIX}navigationevent" ->
+            rootModule in REDIRECTED_NATIVE_NAVIGATION_EVENT_MODULES
+        "androidx.savedstate",
+        "org.jetbrains.androidx.savedstate",
+        "${FORK_ANDROIDX_GROUP_PREFIX}savedstate" -> rootModule in REDIRECTED_NATIVE_SAVEDSTATE_MODULES
+        else -> false
+    }
+}
+
+private fun String.withoutRedirectPlatformSuffix(): String {
+    val suffix = REDIRECT_PLATFORM_MODULE_SUFFIXES.firstOrNull { endsWith(it) } ?: return this
+    return removeSuffix(suffix)
+}
 
 internal fun nativeMetadataSubstitutionsFor(version: String): Map<String, ModuleSubstitution> =
     NATIVE_INTERNAL_COMPOSE_MODULES.associate { (family, module) ->
@@ -592,12 +755,24 @@ private fun Project.addDesktopNativeSourceSets() {
                 .invoke(kotlin) as NamedDomainObjectContainer<Any>
         val desktopNativeMain = sourceSets.maybeCreate("desktopNativeMain")
         val desktopNativeTest = sourceSets.maybeCreate("desktopNativeTest")
+        val linuxWindowsMain = sourceSets.maybeCreate("linuxWindowsMain")
+        val linuxWindowsTest = sourceSets.maybeCreate("linuxWindowsTest")
 
         desktopNativeMain.dependsOnSourceSet(sourceSets.getByName("commonMain"))
         desktopNativeTest.dependsOnSourceSet(sourceSets.getByName("commonTest"))
+        linuxWindowsMain.dependsOnSourceSet(desktopNativeMain)
+        linuxWindowsTest.dependsOnSourceSet(desktopNativeTest)
 
         afterEvaluate {
-            DESKTOP_NATIVE_SOURCE_SET_NAMES.forEach { sourceSetPrefix ->
+            LINUX_WINDOWS_SOURCE_SET_NAMES.forEach { sourceSetPrefix ->
+                sourceSets
+                    .findByName("${sourceSetPrefix}Main")
+                    ?.dependsOnSourceSet(linuxWindowsMain)
+                sourceSets
+                    .findByName("${sourceSetPrefix}Test")
+                    ?.dependsOnSourceSet(linuxWindowsTest)
+            }
+            MACOS_SOURCE_SET_NAMES.forEach { sourceSetPrefix ->
                 sourceSets
                     .findByName("${sourceSetPrefix}Main")
                     ?.dependsOnSourceSet(desktopNativeMain)
@@ -605,8 +780,23 @@ private fun Project.addDesktopNativeSourceSets() {
                     .findByName("${sourceSetPrefix}Test")
                     ?.dependsOnSourceSet(desktopNativeTest)
             }
+            // Compile shared Skia implementations in each concrete target, as with explicit srcDir calls.
+            val skiaSources = layout.projectDirectory.dir("src/skiaTargetMain/kotlin").asFile
+            SKIA_TARGET_MAIN_SOURCE_SET_NAMES.forEach { sourceSetName ->
+                sourceSets.findByName(sourceSetName)?.addKotlinSourceDirectory(skiaSources)
+            }
         }
     }
+}
+
+private fun Any.addKotlinSourceDirectory(directory: java.io.File) {
+    val kotlinSources =
+        javaClass.methods
+            .single { it.name == "getKotlin" && it.parameterCount == 0 }
+            .invoke(this)
+    kotlinSources.javaClass.methods
+        .first { it.name == "srcDir" && it.parameterCount == 1 }
+        .invoke(kotlinSources, directory)
 }
 
 private fun Any.dependsOnSourceSet(sourceSet: Any) {
@@ -619,8 +809,6 @@ private const val KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multipl
 private const val ANDROID_APPLICATION_PLUGIN_ID = "com.android.application"
 private const val KMP_MATCH_REQUESTED_COORDINATES_PROPERTY =
     "kotlin.internal.kmp.allowMatchingByRequestedCoordinatesInMetadataTransformations"
-private const val KOTLIN_NATIVE_TARGET_ATTRIBUTE = "org.jetbrains.kotlin.native.target"
-private const val DESKTOP_NATIVE_METADATA_TARGET = "linux_x64"
 private const val KOTLIN_NATIVE_BINARY_CONTAINER_CLASS =
     "org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer"
 private const val COMMON_MAIN_CONFIGURATION_PREFIX = "commonMain"
@@ -664,7 +852,7 @@ private val ANDROIDX_COMPOSE_FORK_MODULES =
         "ui-util",
     )
 private val COMPOSE_FAMILIES = ANDROIDX_COMPOSE_FAMILIES + setOf("components", "desktop")
-private val NATIVE_ONLY_COMPOSE_FAMILIES = setOf("components", "desktop")
+private val CROSS_PLATFORM_COMPOSE_MODULES = setOf("foundation:foundation", "material3:material3")
 private val FORK_ANDROIDX_FAMILIES =
     setOf("collection", "lifecycle", "navigation", "navigation3", "navigationevent", "savedstate")
 private val OFFICIAL_SKIKO_DEPENDENCY_REGEX =
@@ -674,11 +862,52 @@ private val OFFICIAL_SKIKO_DEPENDENCY_REGEX =
 private val DEFAULT_LINUX_LINKER_OPTIONS = listOf("-L/usr/lib")
 private val DESKTOP_NATIVE_CONFIGURATION_MARKERS =
     listOf("desktopnative", "linuxx64", "linuxarm64", "mingwx64", "macosx64", "macosarm64")
-private val REDIRECTED_NATIVE_RUNTIME_CONFIGURATION_MARKERS =
-    listOf("linuxx64", "linuxarm64", "mingwx64")
-private val ANDROIDX_RUNTIME_REDIRECT_MODULES = setOf("runtime", "runtime-annotation")
-private val SHARED_NATIVE_MAIN_CONFIGURATION_PREFIXES = listOf("desktopNativeMain")
+private val REDIRECTED_NATIVE_CONFIGURATION_MARKERS =
+    listOf(
+        "linuxx64",
+        "linuxarm64",
+        "mingwx64",
+        "macosarm64",
+        "iosarm64",
+        "iossimulatorarm64",
+        "iosx64",
+        "watchos",
+        "tvos",
+    )
+private val REDIRECTED_NATIVE_NAVIGATION_MODULES =
+    setOf("navigation-common", "navigation-runtime", "navigation-testing")
+private val REDIRECTED_NATIVE_NAVIGATION_EVENT_MODULES =
+    setOf("navigationevent", "navigationevent-compose")
+private val REDIRECTED_NATIVE_SAVEDSTATE_MODULES = setOf("savedstate", "savedstate-compose")
+private val REDIRECT_PLATFORM_MODULE_SUFFIXES =
+    listOf(
+        "-wasm-js",
+        "-js",
+        "-linuxx64",
+        "-linuxarm64",
+        "-mingwx64",
+        "-macosarm64",
+        "-iosarm64",
+        "-iossimulatorarm64",
+        "-iosx64",
+        "-watchosarm64",
+        "-watchosdevicearm64",
+        "-watchossimulatorarm64",
+        "-watchosx64",
+        "-tvosarm64",
+        "-tvossimulatorarm64",
+        "-tvosx64",
+    )
+private val SHARED_NATIVE_MAIN_CONFIGURATION_PREFIXES =
+    listOf("desktopNativeMain", "linuxWindowsMain")
 private val NATIVE_INTERNAL_COMPOSE_MODULES = setOf("ui" to "ui-skiko")
+private val REDIRECTED_COMMON_METADATA_RUNTIME_MODULES =
+    setOf("runtime", "runtime-annotation", "runtime-saveable")
+private val REDIRECTED_NATIVE_RUNTIME_MODULES =
+    REDIRECTED_COMMON_METADATA_RUNTIME_MODULES + "runtime-retain"
+private val REDIRECTED_WEB_RUNTIME_MODULES = REDIRECTED_NATIVE_RUNTIME_MODULES
+private val REDIRECTED_COMMON_METADATA_ANDROIDX_FAMILIES =
+    setOf("lifecycle", "navigation", "navigation3", "navigationevent", "savedstate")
 
 private val DESKTOP_NATIVE_TARGET_SOURCE_SETS =
     mapOf(
@@ -689,4 +918,14 @@ private val DESKTOP_NATIVE_TARGET_SOURCE_SETS =
         "macos_arm64" to "macosArm64",
     )
 private val DESKTOP_NATIVE_SOURCE_SET_NAMES = DESKTOP_NATIVE_TARGET_SOURCE_SETS.values
+private val LINUX_WINDOWS_SOURCE_SET_NAMES = listOf("linuxX64", "linuxArm64", "mingwX64")
+private val MACOS_SOURCE_SET_NAMES = listOf("macosX64", "macosArm64")
+private val SKIA_TARGET_MAIN_SOURCE_SET_NAMES =
+    listOf(
+        "desktopNativeMain",
+        "iosArm64Main",
+        "iosSimulatorArm64Main",
+        "iosX64Main",
+        "wasmJsMain",
+    )
 private val DESKTOP_NATIVE_PUBLICATION_TARGET_NAMES = DESKTOP_NATIVE_SOURCE_SET_NAMES

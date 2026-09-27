@@ -84,8 +84,8 @@ androidXMultiplatform {
             api(project(":compose:ui:ui-unit"))
             api(project(":compose:ui:ui-util"))
 
-            api("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.9.6")
-            api("androidx.savedstate:savedstate-compose:1.4.0")
+            api(project(":lifecycle:lifecycle-runtime-compose"))
+            api(project(":savedstate:savedstate-compose"))
         }
 
         commonTest.dependencies {
@@ -100,7 +100,6 @@ androidXMultiplatform {
         jvmAndAndroidMain.dependencies {
         }
 
-        def lifecycleVersion = project.redirectVersions.get('androidx.lifecycle')
         // Backend-neutral implementation shared by desktop, native, and web targets.
         skikoMain {
             dependsOn(commonMain)
@@ -108,8 +107,8 @@ androidXMultiplatform {
                 implementation(libs.atomicFu)
 
                 implementation(project(":navigationevent:navigationevent-compose"))
-                implementation("androidx.lifecycle:lifecycle-viewmodel-compose:$lifecycleVersion")
-                implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:$lifecycleVersion")
+                implementation(project(":lifecycle:lifecycle-viewmodel-compose"))
+                implementation(project(":lifecycle:lifecycle-viewmodel-savedstate"))
             }
         }
 
@@ -158,8 +157,8 @@ androidXMultiplatform {
             dependencies {
                 // To comply with Klib resolver until https://youtrack.jetbrains.com/issue/KT-61096 is fixed
                 implementation(project(":compose:ui:ui-backhandler"))
-                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel:2.9.6")
-                implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate:2.9.6")
+                implementation(project(":lifecycle:lifecycle-viewmodel"))
+                implementation(project(":lifecycle:lifecycle-viewmodel-savedstate"))
             }
         }
 
@@ -175,25 +174,25 @@ androidXMultiplatform {
             dependsOn(nonJvmTest)
         }
 
-        desktopNativeHostMain {
+        desktopNativeMain {
             dependsOn(nativeMain)
         }
 
-        desktopNativeMain {
-            dependsOn(desktopNativeHostMain)
+        linuxWindowsMain {
+            dependsOn(desktopNativeMain)
             dependsOn(skikoBackendMain)
         }
 
         linuxMain {
-            dependsOn(desktopNativeMain)
+            dependsOn(linuxWindowsMain)
         }
 
         mingwX64Main {
-            dependsOn(desktopNativeMain)
+            dependsOn(linuxWindowsMain)
         }
 
         macosMain {
-            dependsOn(desktopNativeHostMain)
+            dependsOn(desktopNativeMain)
             dependsOn(skikoBackendMain)
         }
 

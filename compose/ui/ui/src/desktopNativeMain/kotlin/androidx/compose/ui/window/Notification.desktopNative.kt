@@ -26,7 +26,13 @@ import androidx.compose.ui.platform.NativeNotificationHint
 import androidx.compose.ui.platform.NativeProgressUpdate
 import kotlin.math.roundToInt
 
-/** Creates and remembers a desktop [Notification]. */
+/**
+ * Creates a desktop [Notification] that is remembered across compositions.
+ *
+ * @param title title of the notification
+ * @param message main text of the notification
+ * @param type type used by the platform to choose presentation such as icon and urgency
+ */
 @Composable
 fun rememberNotification(
     title: String,
@@ -34,8 +40,18 @@ fun rememberNotification(
     type: Notification.Type = Notification.Type.None,
 ): Notification = remember(title, message, type) { Notification(title, message, type) }
 
-/** A compact notification model compatible with the Compose Desktop API. */
+/**
+ * Notification that can be sent to the desktop and shown to the user.
+ *
+ * When creating a notification from a composable, prefer [rememberNotification] to avoid creating
+ * a new instance on every recomposition.
+ *
+ * @param title title of the notification
+ * @param message main text of the notification
+ * @param type type used by the platform to choose presentation such as icon and urgency
+ */
 class Notification(val title: String, val message: String, val type: Type = Type.None) {
+    /** Returns a copy of this notification, optionally replacing its fields. */
     fun copy(title: String = this.title, message: String = this.message, type: Type = this.type) =
         Notification(title, message, type)
 
@@ -54,10 +70,18 @@ class Notification(val title: String, val message: String, val type: Type = Type
         return result
     }
 
+    /** Describes the presentation type of a notification. */
     enum class Type {
+        /** Notification without a specific semantic type. */
         None,
+
+        /** Informational notification. */
         Info,
+
+        /** Warning notification. */
         Warning,
+
+        /** Error notification. */
         Error,
     }
 }
@@ -112,38 +136,65 @@ data class NotificationRequest(
     val replacesId: UInt = 0u,
 )
 
+/** Event reported by an active [NotificationHandle]. */
 sealed interface NotificationEvent {
+    /** The user invoked the notification action identified by [actionId]. */
     data class ActionInvoked(val actionId: String) : NotificationEvent
 
+    /** The notification was closed by the desktop notification service. */
     data class Closed(val reason: Reason) : NotificationEvent {
+        /** Reason reported by the desktop for closing a notification. */
         enum class Reason {
+            /** The notification expired according to its timeout. */
             Expired,
+
+            /** The user dismissed the notification. */
             DismissedByUser,
+
+            /** The application requested that the notification close. */
             ClosedByApplication,
+
+            /** The desktop did not provide a recognized reason. */
             Undefined,
         }
     }
 }
 
+/** Subscription returned by [NotificationHandle.addEventListener]. */
 fun interface NotificationEventSubscription {
+    /** Stops delivering events to the associated listener. */
     fun dispose()
 }
 
+/**
+ * Handle to a notification currently managed by a [NotificationBackend].
+ *
+ * A handle can update or close the notification and observe user actions until the notification is
+ * closed by the desktop.
+ */
 interface NotificationHandle {
+    /** Identifier assigned by the backend, or `0u` after the notification is no longer active. */
     val id: UInt
 
+    /** Replaces the current notification contents with [request]. */
     fun update(request: NotificationRequest)
 
+    /** Requests that the notification close. */
     fun close()
 
+    /** Adds an event listener and returns a subscription that removes it. */
     fun addEventListener(listener: (NotificationEvent) -> Unit): NotificationEventSubscription
 }
 
 /** Service-provider interface for custom, test, or desktop-specific notification pipelines. */
 interface NotificationBackend {
+    /** Whether this backend can currently show notifications. */
     val isSupported: Boolean
+
+    /** Optional notification features supported by this backend. */
     val capabilities: Set<NotificationCapability>
 
+    /** Shows [request] and returns a handle used to manage the resulting notification. */
     fun show(request: NotificationRequest): NotificationHandle
 }
 
@@ -264,14 +315,29 @@ object PlatformNotificationBackend : NotificationBackend {
     }
 }
 
+/** `true` when the active native desktop host can show system notifications. */
 val isNotificationSupported: Boolean
     get() = PlatformNotificationBackend.isSupported
 
+/**
+ * Shows [request] using [backend].
+ *
+ * @return a handle that can update, close, and observe the notification
+ */
 fun sendNotification(
     request: NotificationRequest,
     backend: NotificationBackend = PlatformNotificationBackend,
 ): NotificationHandle = backend.show(request)
 
+/**
+ * Shows a Compose Desktop-compatible [notification] using [backend].
+ *
+ * @param notification notification contents to show
+ * @param applicationName application name reported to the desktop notification service
+ * @param timeoutMillis requested timeout in milliseconds, or `-1` to use the server default
+ * @param backend notification backend to use
+ * @return a handle that can update, close, and observe the notification
+ */
 fun sendNotification(
     notification: Notification,
     applicationName: String = "Compose",
@@ -288,6 +354,16 @@ fun sendNotification(
         )
     )
 
+/**
+ * Describes a long-running operation that can be exposed through desktop progress UI.
+ *
+ * @param title user-visible title of the operation
+ * @param applicationName application name reported to the desktop service
+ * @param iconName platform icon name associated with the operation
+ * @param totalBytes total amount of work in bytes, or `0uL` when the total is unknown
+ * @param cancellable whether the desktop may offer a cancel action
+ * @param suspendable whether the desktop may offer suspend and resume actions
+ */
 data class ProgressJobRequest(
     val title: String,
     val applicationName: String = "Compose",
@@ -297,6 +373,14 @@ data class ProgressJobRequest(
     val suspendable: Boolean = false,
 )
 
+/**
+ * Current progress of a [ProgressJobHandle].
+ *
+ * @param processedBytes amount of work completed so far
+ * @param bytesPerSecond current transfer or processing rate, when known
+ * @param elapsedMillis elapsed operation time in milliseconds, when known
+ * @param message optional user-visible status text
+ */
 data class ProgressJobUpdate(
     val processedBytes: ULong,
     val bytesPerSecond: ULong = 0u,
@@ -304,31 +388,45 @@ data class ProgressJobUpdate(
     val message: String = "",
 )
 
+/** User action requested through desktop progress UI. */
 sealed interface ProgressJobEvent {
+    /** The user requested cancellation. */
     data object CancelRequested : ProgressJobEvent
 
+    /** The user requested that the operation be suspended. */
     data object SuspendRequested : ProgressJobEvent
 
+    /** The user requested that a suspended operation resume. */
     data object ResumeRequested : ProgressJobEvent
 }
 
+/** Subscription returned by [ProgressJobHandle.addEventListener]. */
 fun interface ProgressJobEventSubscription {
+    /** Stops delivering events to the associated listener. */
     fun dispose()
 }
 
+/** Handle to a progress job currently managed by a [ProgressJobBackend]. */
 interface ProgressJobHandle {
+    /** Updates the progress shown by the desktop. */
     fun update(update: ProgressJobUpdate)
 
+    /** Marks the operation as completed successfully. */
     fun complete()
 
+    /** Marks the operation as failed and presents [message] when supported. */
     fun fail(message: String)
 
+    /** Adds an event listener and returns a subscription that removes it. */
     fun addEventListener(listener: (ProgressJobEvent) -> Unit): ProgressJobEventSubscription
 }
 
+/** Service-provider interface for desktop progress-job implementations. */
 interface ProgressJobBackend {
+    /** Whether this backend can currently present progress jobs. */
     val isSupported: Boolean
 
+    /** Starts [request] and returns a handle used to update and finish the operation. */
     fun start(request: ProgressJobRequest): ProgressJobHandle
 }
 
@@ -515,11 +613,21 @@ object NotificationProgressJobBackend : ProgressJobBackend {
     }
 }
 
+/**
+ * Starts a desktop progress job using [backend].
+ *
+ * @return a handle used to update, finish, and observe the operation
+ */
 fun startProgressJob(
     request: ProgressJobRequest,
     backend: ProgressJobBackend = PlatformProgressJobBackend,
 ): ProgressJobHandle = backend.start(request)
 
+/**
+ * Delivers pending native desktop events to active notification and progress-job handles.
+ *
+ * This is called by the native desktop host as part of its event loop.
+ */
 @InternalComposeUiApi
 fun dispatchNativeDesktopEvents() {
     val services = NativeDesktopPlatformServicesRegistry.current() ?: return

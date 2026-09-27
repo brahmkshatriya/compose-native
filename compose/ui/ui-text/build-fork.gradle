@@ -130,16 +130,16 @@ androidXMultiplatform {
             dependsOn(nonJvmTest)
         }
 
-        desktopNativeMain {
+        linuxWindowsMain {
             dependsOn(nativeMain)
         }
 
         linuxMain {
-            dependsOn(desktopNativeMain)
+            dependsOn(linuxWindowsMain)
         }
 
         mingwX64Main {
-            dependsOn(desktopNativeMain)
+            dependsOn(linuxWindowsMain)
         }
 
         darwinMain {

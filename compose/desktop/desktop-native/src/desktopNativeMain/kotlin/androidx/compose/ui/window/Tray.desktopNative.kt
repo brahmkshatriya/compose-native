@@ -36,14 +36,37 @@ import nativedesktop.kld_tray_poll
 import nativedesktop.kld_tray_supported
 import nativedesktop.kld_tray_update
 
-/** Whether the current desktop session exposes a StatusNotifier watcher. */
+/**
+ * `true` when the current desktop session supports tray icons.
+ *
+ * Check this value before composing [Tray] when tray support is optional for the application.
+ */
 val isTraySupported: Boolean
     get() = kld_tray_supported() != 0
 
+/**
+ * State object associated with a [Tray].
+ *
+ * In most cases this should be created with [rememberTrayState].
+ */
 class TrayState {}
 
-@Composable fun rememberTrayState(): TrayState = remember { TrayState() }
+/** Creates a [TrayState] that is remembered across compositions. */
+@Composable
+fun rememberTrayState(): TrayState = remember { TrayState() }
 
+/**
+ * Adds a tray icon to the desktop session.
+ *
+ * The tray icon and its menu remain registered while this composable is in the composition.
+ * Use [isTraySupported] to determine whether the current desktop session supports tray icons.
+ *
+ * @param icon icon shown in the system tray
+ * @param state state associated with this tray
+ * @param tooltip text shown when the desktop presents a tooltip for the tray icon
+ * @param onAction invoked for the tray icon's primary activation action
+ * @param menu context-menu content associated with the tray icon
+ */
 @Composable
 fun ApplicationScope.Tray(
     icon: Painter,

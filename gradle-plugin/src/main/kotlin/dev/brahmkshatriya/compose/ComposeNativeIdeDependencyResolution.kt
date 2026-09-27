@@ -11,7 +11,9 @@ import org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinBinaryCoordinates
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinDependency
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinResolvedBinaryDependency
+import org.jetbrains.kotlin.gradle.idea.tcs.extras.sourcesClasspath
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
+import org.jetbrains.kotlin.gradle.plugin.ide.IdeAdditionalArtifactResolver
 import org.jetbrains.kotlin.gradle.plugin.ide.IdeDependencyResolver
 import org.jetbrains.kotlin.gradle.plugin.ide.IdeMultiplatformImport
 import org.jetbrains.kotlin.gradle.plugin.ide.dependencyResolvers.IdeBinaryDependencyResolver
@@ -43,8 +45,8 @@ internal fun Project.configureIdeDependencyResolution() {
                     composeNativeIdeMetadataConfiguration(sourceSet.name)
                 }
             )
-        IdeMultiplatformImport.instance(this)
-            .registerDependencyResolver(
+        val ideImport = IdeMultiplatformImport.instance(this)
+        ideImport.registerDependencyResolver(
                 ComposeNativeIdeDependencyResolver(
                     project = this,
                     officialDelegate =
@@ -59,7 +61,64 @@ internal fun Project.configureIdeDependencyResolution() {
                 IdeMultiplatformImport.DependencyResolutionPhase.PostDependencyResolution,
                 IdeMultiplatformImport.Priority.high,
             )
+        ideImport.registerAdditionalArtifactResolver(
+            IdeAdditionalArtifactResolver { sourceSet, dependencies ->
+                if (sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET) {
+                    propagateRootSourcesToTransformedDependencies(dependencies)
+                }
+            },
+            IdeMultiplatformImport.SourceSetConstraint { sourceSet ->
+                sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET
+            },
+            IdeMultiplatformImport.AdditionalArtifactResolutionPhase.PostAdditionalArtifactResolution,
+            IdeMultiplatformImport.Priority.high,
+        )
     }
+}
+
+internal fun propagateRootSourcesToTransformedDependencies(
+    dependencies: Set<IdeaKotlinDependency>
+) {
+    val resolvedDependencies = dependencies.filterIsInstance<IdeaKotlinResolvedBinaryDependency>()
+    val rootSourcesByModule =
+        resolvedDependencies
+            .filter { dependency ->
+                val coordinates = dependency.coordinates ?: return@filter false
+                coordinates.sourceSetName == null &&
+                    coordinates.group.startsWith(COMPOSE_FORK_GROUP_PREFIX) &&
+                    dependency.sourcesClasspath.isNotEmpty()
+            }
+            .groupBy(::moduleCoordinates)
+
+    resolvedDependencies.forEach { dependency ->
+        val coordinates = dependency.coordinates ?: return@forEach
+        if (
+            coordinates.sourceSetName == null ||
+                !coordinates.group.startsWith(COMPOSE_FORK_GROUP_PREFIX)
+        ) {
+            return@forEach
+        }
+        rootSourcesByModule[moduleCoordinates(dependency)]
+            .orEmpty()
+            .forEach { rootDependency ->
+                dependency.sourcesClasspath.addAll(rootDependency.sourcesClasspath)
+            }
+    }
+}
+
+private data class ModuleCoordinates(
+    val group: String,
+    val module: String,
+    val version: String?,
+)
+
+private fun moduleCoordinates(dependency: IdeaKotlinResolvedBinaryDependency): ModuleCoordinates {
+    val coordinates = requireNotNull(dependency.coordinates)
+    return ModuleCoordinates(
+        group = coordinates.group,
+        module = coordinates.module,
+        version = coordinates.version,
+    )
 }
 
 private class ComposeNativeIdeDependencyResolver(

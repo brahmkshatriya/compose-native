@@ -21,6 +21,14 @@ internal fun Project.isJetBrainsAppleNativeOnlyPublication(): Boolean {
         platforms.all { it.startsWith("Ios") || it.startsWith("Macos") }
 }
 
+/** True while publishing the fork KMP roots with the complete cross-host metadata graph. */
+internal fun Project.isJetBrainsForkRootPublication(): Boolean {
+    if (!isJetBrainsFork(this)) return false
+    return gradle.startParameter.taskNames.any { taskName ->
+        taskName.substringAfterLast(':') == "publishComposeForkRootsToMavenLocal"
+    }
+}
+
 /** True when the isolated Apple publication contains only macOS targets. */
 internal fun Project.isJetBrainsMacosNativeOnlyPublication(): Boolean {
     if (!isJetBrainsFork(this)) return false

@@ -532,5 +532,3 @@ includeRequestedProjectsAndDependencies()
 gradle.ext.allProjectConsumers = allProjectsConsumers(projectDependencyGraph)
 
 include(":demo")
-include(":text-morph-demo")
-include(":windows-native-demo")

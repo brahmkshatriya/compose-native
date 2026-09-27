@@ -84,7 +84,7 @@ def create_desktop_native_metadata(
     root_group: str,
     root_module: str,
     version: str,
-) -> dict[str, object] | None:
+) -> tuple[dict[str, object], dict[str, object]] | None:
     """Create the shared desktopNativeMain fragment from a published target KLIB.
 
     Kotlin/Native cannot compile this intermediate source set directly because Skiko exposes
@@ -147,10 +147,37 @@ def create_desktop_native_metadata(
     if not klib_file.is_file():
         return None
 
+    sources_variant = next(
+        (
+            variant
+            for variant in platform_metadata.get("variants", [])
+            if variant.get("attributes", {}).get("org.jetbrains.kotlin.native.target")
+            == template_native_target
+            and variant.get("attributes", {}).get("org.gradle.docstype") == "sources"
+        ),
+        None,
+    )
+    source_file_entry = (
+        next(iter(sources_variant.get("files", [])), None)
+        if sources_variant is not None
+        else None
+    )
+    source_jar = (
+        platform_directory / str(source_file_entry["url"])
+        if source_file_entry is not None
+        else None
+    )
+    if source_jar is None or not source_jar.is_file():
+        raise FileNotFoundError(
+            f"Missing desktop-native sources artifact for {platform_suffix}: {source_jar}"
+        )
+
     root_directory = repository.joinpath(*root_group.split("."), root_module, version)
     root_directory.mkdir(parents=True, exist_ok=True)
     metadata_jar = root_directory / f"{root_module}-{version}.jar"
     temporary_jar = metadata_jar.with_suffix(".jar.tmp")
+    root_sources_jar = root_directory / f"{root_module}-{version}-sources.jar"
+    temporary_sources_jar = root_sources_jar.with_suffix(".jar.tmp")
     project_structure = {
         "projectStructure": {
             "formatVersion": "0.3.3",
@@ -254,12 +281,30 @@ def create_desktop_native_metadata(
             )
     temporary_jar.replace(metadata_jar)
 
+    with zipfile.ZipFile(source_jar) as source, zipfile.ZipFile(
+        temporary_sources_jar, "w", compression=zipfile.ZIP_DEFLATED
+    ) as destination:
+        for entry in source.infolist():
+            if entry.is_dir() or not entry.filename.startswith("desktopNativeMain/"):
+                continue
+            write_metadata_jar_entry(
+                destination,
+                entry.filename,
+                source.read(entry.filename),
+            )
+    temporary_sources_jar.replace(root_sources_jar)
+
     metadata_file = {
         "name": f"{root_module}-metadata-{version}.jar",
         "url": metadata_jar.name,
         **file_hashes(metadata_jar),
     }
-    return {
+    sources_file = {
+        "name": f"{root_module}-kotlin-{version}-sources.jar",
+        "url": root_sources_jar.name,
+        **file_hashes(root_sources_jar),
+    }
+    metadata_variant = {
         "name": "metadataApiElements",
         "attributes": {
             "org.gradle.category": "library",
@@ -271,6 +316,19 @@ def create_desktop_native_metadata(
         "dependencyConstraints": api_variant.get("dependencyConstraints", []),
         "files": [metadata_file],
     }
+    sources_root_variant = {
+        "name": "metadataSourcesElements",
+        "attributes": {
+            "org.gradle.category": "documentation",
+            "org.gradle.dependency.bundling": "external",
+            "org.gradle.docstype": "sources",
+            "org.gradle.jvm.environment": "non-jvm",
+            "org.gradle.usage": "kotlin-runtime",
+            "org.jetbrains.kotlin.platform.type": "common",
+        },
+        "files": [sources_file],
+    }
+    return metadata_variant, sources_root_variant
 
 
 def upstream_group_for_fork_dependency(group: str, group_prefix: str) -> str | None:
@@ -313,6 +371,10 @@ def rewrite_module_dependency_groups(
     native_skiko_version: str,
 ) -> int:
     metadata = json.loads(module_file.read_text(encoding="utf-8"))
+    is_root_metadata_publication = any(
+        str(variant.get("name", "")).startswith("metadata")
+        for variant in metadata.get("variants", [])
+    )
     rewritten = 0
     for variant in metadata.get("variants", []):
         rewritten += remove_unpublished_stub_dependencies(variant)
@@ -346,9 +408,17 @@ def rewrite_module_dependency_groups(
                     group, group_prefix
                 )
                 was_fork_dependency = upstream_group is not None
-                if was_fork_dependency:
+                if was_fork_dependency and is_root_metadata_publication:
                     dependency["group"] = upstream_group
                     rewritten += 1
+                elif was_fork_dependency:
+                    # Platform KLIBs must keep the exact fork dependency graph they were compiled
+                    # against. Rewriting these leaves to the older upstream Compose coordinate can
+                    # silently change the AndroidX Runtime ABI underneath an already-compiled KLIB
+                    # (for example Wasm DisposableEffect linkage). Root metadata is normalized
+                    # separately because it represents common source-set dependencies rather than
+                    # a concrete platform binary ABI.
+                    continue
                 else:
                     upstream_group = group
                 upstream_version = upstream_version_for_dependency(
@@ -382,6 +452,14 @@ def rewrite_pom_dependency_groups(
 ) -> int:
     pom = pom_file.read_text(encoding="utf-8")
     rewritten = 0
+    module_file = pom_file.with_suffix(".module")
+    is_root_metadata_publication = False
+    if module_file.is_file():
+        module_metadata = json.loads(module_file.read_text(encoding="utf-8"))
+        is_root_metadata_publication = any(
+            str(variant.get("name", "")).startswith("metadata")
+            for variant in module_metadata.get("variants", [])
+        )
     artifact = pom_file.parent.parent.name
     is_desktop_native = any(
         artifact.endswith(f"-{platform_suffix}")
@@ -426,13 +504,15 @@ def rewrite_pom_dependency_groups(
             group = "androidx.navigation3"
             rewritten += 1
         upstream_group = upstream_group_for_fork_dependency(group, group_prefix)
-        if upstream_group is not None:
+        if upstream_group is not None and is_root_metadata_publication:
             dependency = dependency.replace(
                 f"<groupId>{group}</groupId>",
                 f"<groupId>{upstream_group}</groupId>",
                 1,
             )
             rewritten += 1
+        elif upstream_group is not None:
+            return dependency
         else:
             upstream_group = group
 
@@ -704,9 +784,8 @@ def main() -> None:
             repository, root_group, root_module, version
         )
         if desktop_native_metadata is not None:
-            variants_by_name[desktop_native_metadata["name"]] = (
-                desktop_native_metadata
-            )
+            for variant in desktop_native_metadata:
+                variants_by_name[variant["name"]] = variant
         variants_by_name.update((variant["name"], variant) for variant in variants)
         for variant in variants_by_name.values():
             remove_unpublished_stub_dependencies(variant)

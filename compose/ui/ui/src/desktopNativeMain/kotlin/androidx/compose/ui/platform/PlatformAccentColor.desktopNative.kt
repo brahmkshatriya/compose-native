@@ -20,8 +20,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
- * The native desktop accent color reported by the operating system.
+ * CompositionLocal that provides the accent color reported by the native desktop environment.
  *
- * This is `null` when the current desktop does not expose a valid accent color.
+ * The value is `null` when the current desktop does not expose an accent color.
  */
 val LocalPlatformAccentColor = staticCompositionLocalOf<Color?> { null }

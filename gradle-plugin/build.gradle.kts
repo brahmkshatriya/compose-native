@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "dev.brahmkshatriya.compose"
-version = "1.13.0-alpha06"
+version = "1.13.0-alpha07"
 
 kotlin {
     jvmToolchain(21)

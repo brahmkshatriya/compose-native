@@ -107,9 +107,12 @@ internal fun Project.configureMetadataCompilation() {
                     layout.buildDirectory.dir("kotlinComposeNativeMetadataLibraries/commonMain")
                 )
             }
-        repairCommonMetadata.configure { repair ->
-            repair.dependsOn(TRANSFORM_COMMON_MAIN_METADATA_TASK)
-        }
+        val repairedCommonLibraries =
+            files(
+                repairCommonMetadata.map { repair ->
+                    repair.outputDirectory.get().asFileTree.matching { it.include("*.klib") }
+                }
+            )
         val representativeNativeLibraries = objects.fileCollection()
 
         configurations.configureEach { configuration ->
@@ -132,16 +135,22 @@ internal fun Project.configureMetadataCompilation() {
         tasks.configureEach { task ->
             if (task.name.isKotlinMetadataCompilationTask()) {
                 task.dependsOn(repairCommonMetadata)
-                task.replaceLibraries(
-                    this,
-                    repairCommonMetadata.map { repair ->
-                        repair.outputDirectory.get().asFileTree.matching { it.include("*.klib") }
-                    },
-                )
+                task.replaceLibraries(this, repairedCommonLibraries)
+                if (task.hasKotlinNativeCompilerOptions()) {
+                    task.addNativeLibraryCompilerArguments(
+                        this,
+                        repairedCommonLibraries,
+                        "composeNativeCommonMetadataLibraries",
+                    )
+                }
             }
             if (task.name == COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK) {
                 val cinteropLibraries = representativeNativeLibraries.filter(::isCInteropKlib)
-                task.addNativeLibraryCompilerArguments(this, cinteropLibraries)
+                task.addNativeLibraryCompilerArguments(
+                    this,
+                    cinteropLibraries,
+                    "composeNativeSharedCInteropLibraries",
+                )
             }
         }
     }
@@ -158,17 +167,29 @@ private fun Task.replaceLibraries(project: Project, libraries: Any) {
             ?.invoke(this) as? ConfigurableFileCollection ?: return
     val originalSources = target.from.toList()
     val repaired = project.files(libraries)
-    val repairedUniqueNames = repaired.files.mapNotNull(::klibUniqueName).toSet()
+    val repairedUniqueNames =
+        project.providers.provider { repaired.files.mapNotNull(::klibUniqueName).toSet() }
     val originals =
         project.files(originalSources).filter { file ->
             val uniqueName = klibUniqueName(file)
-            uniqueName == null || uniqueName !in repairedUniqueNames
+            uniqueName == null || uniqueName !in repairedUniqueNames.get()
         }
     target.setFrom(originals, repaired)
 }
 
+private fun Task.hasKotlinNativeCompilerOptions(): Boolean =
+    javaClass.methods.any { method ->
+        method.name == "getCompilerOptions" &&
+            method.parameterCount == 0 &&
+            method.returnType.name == "org.jetbrains.kotlin.gradle.dsl.KotlinNativeCompilerOptions"
+    }
+
 @Suppress("UNCHECKED_CAST")
-private fun Task.addNativeLibraryCompilerArguments(project: Project, libraries: FileCollection) {
+private fun Task.addNativeLibraryCompilerArguments(
+    project: Project,
+    libraries: FileCollection,
+    inputPropertyName: String,
+) {
     val compilerOptions =
         javaClass.methods
             .firstOrNull { method ->
@@ -181,7 +202,7 @@ private fun Task.addNativeLibraryCompilerArguments(project: Project, libraries: 
         compilerOptions.javaClass.methods
             .singleOrNull { it.name == "getFreeCompilerArgs" && it.parameterCount == 0 }
             ?.invoke(compilerOptions) as? ListProperty<String> ?: return
-    inputs.files(libraries).withPropertyName("composeNativeSharedCInteropLibraries")
+    inputs.files(libraries).withPropertyName(inputPropertyName)
     freeCompilerArgs.addAll(
         project.providers.provider {
             libraries.files.sortedBy(File::getAbsolutePath).flatMap { file ->
@@ -226,5 +247,4 @@ private const val METADATA_KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotli
 private const val COMMON_MAIN_RESOLVABLE_METADATA_CONFIGURATION =
     "commonMainResolvableDependenciesMetadata"
 private const val REPRESENTATIVE_NATIVE_COMPILE_LIBRARIES_CONFIGURATION = "linuxX64CompileKlibraries"
-private const val TRANSFORM_COMMON_MAIN_METADATA_TASK = "transformCommonMainDependenciesMetadata"
 private const val COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK = "compileDesktopNativeMainKotlinMetadata"

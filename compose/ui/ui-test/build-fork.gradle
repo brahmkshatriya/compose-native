@@ -148,7 +148,7 @@ androidXMultiplatform {
             dependsOn(nonJvmTest)
         }
 
-        desktopNativeMain {
+        linuxWindowsMain {
             dependsOn(nativeMain)
             dependencies {
                 implementation(project(":compose:desktop:desktop-native"))
@@ -156,11 +156,11 @@ androidXMultiplatform {
         }
 
         linuxMain {
-            dependsOn(desktopNativeMain)
+            dependsOn(linuxWindowsMain)
         }
 
         mingwX64Main {
-            dependsOn(desktopNativeMain)
+            dependsOn(linuxWindowsMain)
         }
 
         linuxTest.dependencies {

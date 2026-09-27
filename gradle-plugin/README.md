@@ -13,13 +13,20 @@ dependencies or choose dependency versions.
   Skiko modules only in Linux and Windows configurations.
 - Explicit fork Compose dependencies in `commonMain` replace matching transitive JetBrains Compose
   modules in all configurations and matching AndroidX `-android` modules on Android. The plugin
-  also carries those substitutions into a separate Android application project that directly
-  depends on the multiplatform project. Android configurations target the fork's published
-  `-android` artifact directly instead of relying on root-module variant selection.
+  also carries those substitutions into separate application projects that directly depend on the
+  multiplatform project. Android application configurations target the fork's published `-android`
+  artifact directly instead of relying on root-module variant selection.
+- Automatic transitive fork selection outside desktop Native is limited to the published
+  Foundation and Material3 root modules. Other Compose modules, including UI, use their official
+  JetBrains artifacts on Android, iOS, JVM, JS, and Wasm.
 - The plugin creates `desktopNativeMain` and connects it to configured Linux and Windows native
   targets so native desktop dependencies can be declared once. Its shared metadata resolver uses
   `linux_x64` as the representative native variant when a native-only dependency exposes separate
   Linux x64, Linux ARM64, and MinGW variants, avoiding ambiguous variant selection.
+- Kotlin files in `src/skiaTargetMain/kotlin` are included automatically in `desktopNativeMain`,
+  configured iOS source sets (`iosArm64Main`, `iosSimulatorArm64Main`, and `iosX64Main`), and
+  `wasmJsMain`. Android source sets are excluded. This directory is shared as source input to each
+  target, so its code can use target-specific Skia APIs.
 - Add all five desktop-native targets (Linux x64, Linux ARM64, MinGW x64, macOS x64, and macOS
   ARM64) without repeating target blocks:
 
@@ -59,6 +66,7 @@ layout as shared desktop-application input:
 - `src/main/kotlin` is added to `desktopNativeMain`.
 - `src/main/composeResources` is registered as a `desktopNativeMain` Compose resource directory.
 - Compose resources are copied next to debug and release Native executables.
+- `runDebugExecutableDesktop` runs the debug executable for the current host OS and architecture.
 - Linux x64/arm64 executables get architecture-specific AppDir and AppImage tasks.
 - Windows x64 executables get a self-contained distribution directory plus zip, MSI, and installer
   EXE tasks.

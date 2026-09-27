@@ -79,6 +79,7 @@ paparazzi = "1.0.0"
 paparazziNative = "2022.1.1-canary-f5f9f71"
 shadow = "8.1.1"
 skiko = "0.152.0-alpha02"
+skikoWasm = "0.152.0-alpha04"
 skikoNative = { strictly = "0.153.1" }
 spdxGradlePlugin = "0.6.0"
 sqldelight = "1.3.0"
@@ -304,7 +305,7 @@ skikoAwtRuntimeWindowsArm64 = { module = "org.jetbrains.skiko:skiko-awt-runtime-
 skikoAwtRuntimeLinuxX64 = { module = "org.jetbrains.skiko:skiko-awt-runtime-linux-x64", version.ref = "skiko" }
 skikoAwtRuntimeLinuxArm64 = { module = "org.jetbrains.skiko:skiko-awt-runtime-linux-arm64", version.ref = "skiko" }
 skikoAwtRuntime = { module = "org.jetbrains.skiko:skiko-awt-runtime-all", version.ref = "skiko" }
-skikoWasmJs = { module = "org.jetbrains.skiko:skiko-wasm-js", version.ref = "skiko" }
+skikoWasmJs = { module = "org.jetbrains.skiko:skiko-wasm-js", version.ref = "skikoWasm" }
 skiko-skottie = { module = "org.jetbrains.skiko:skiko-skottie", version.ref = "skiko" }
 skikoSkottieAwtRuntime = { module = "org.jetbrains.skiko:skiko-skottie-awt-runtime-all", version.ref = "skiko" }
 spdxGradlePluginz = { module = "org.spdx:spdx-gradle-plugin", version.ref = "spdxGradlePlugin" }

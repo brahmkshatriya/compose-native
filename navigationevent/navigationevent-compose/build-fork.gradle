@@ -60,7 +60,7 @@ androidXMultiplatform {
             // Keep direct references to fork versions to correctly resolve
             // new redirections to Google's artifacts.
             api(project(":navigationevent:navigationevent"))
-            api("org.jetbrains.compose.runtime:runtime:1.11.0")
+            api(project(":compose:runtime:runtime"))
             implementation(libs.kotlinCoroutinesCore)
         }
 

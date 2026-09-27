@@ -9,6 +9,189 @@ import org.gradle.testkit.runner.GradleRunner
 
 class ComposeNativePluginFunctionalTest {
     @Test
+    fun substitutesForkComposeModulesInAWebApplicationConsumingTheSharedProject() {
+        val projectDir = createTempDirectory("compose-native-web-consumer-test").toFile()
+        projectDir.deleteOnExit()
+        projectDir.resolve("settings.gradle.kts").writeText(
+            """
+            pluginManagement {
+                repositories { google(); mavenCentral(); gradlePluginPortal() }
+            }
+            dependencyResolutionManagement {
+                repositories { google(); mavenCentral() }
+            }
+            rootProject.name = "compose-native-web-consumer-test"
+            include(":shared", ":web")
+            """.trimIndent()
+        )
+        projectDir.resolve("shared").mkdirs()
+        projectDir.resolve("shared/build.gradle.kts").writeText(
+            """
+            plugins {
+                kotlin("multiplatform") version "2.4.20"
+                id("dev.brahmkshatriya.compose")
+            }
+            kotlin {
+                @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+                wasmJs()
+                sourceSets.commonMain.dependencies {
+                    implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
+                    implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+                }
+            }
+            """.trimIndent()
+        )
+        projectDir.resolve("web").mkdirs()
+        projectDir.resolve("web/build.gradle.kts").writeText(
+            """
+            plugins { kotlin("multiplatform") version "2.4.20" }
+            kotlin {
+                @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+                wasmJs()
+                sourceSets.wasmJsMain.dependencies {
+                    implementation(project(":shared"))
+                    implementation("org.jetbrains.compose.material:material-ripple:1.13.0-alpha01")
+                    implementation("org.jetbrains.compose.material3:material3:1.13.0-alpha01")
+                    implementation("org.jetbrains.compose.runtime:runtime:1.13.0-alpha01")
+                    implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+                    implementation("org.jetbrains.androidx.navigation3:navigation3-runtime:1.1.1")
+                    implementation("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.1.0")
+                    implementation("org.jetbrains.androidx.savedstate:savedstate-compose:1.4.0")
+                }
+            }
+            """.trimIndent()
+        )
+
+        val result =
+            GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withPluginClasspath()
+                .withArguments(
+                    ":web:dependencies",
+                    "--configuration",
+                    "wasmJsCompileClasspath",
+                    "--no-configuration-cache",
+                )
+                .build()
+
+        assertContains(
+            result.output,
+            "org.jetbrains.compose.foundation:foundation:1.13.0-alpha01 -> dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06",
+        )
+        assertContains(
+            result.output,
+            "org.jetbrains.compose.material3:material3:1.13.0-alpha01 -> dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06",
+        )
+        assertContains(
+            result.output,
+            "org.jetbrains.compose.runtime:runtime:1.13.0-alpha01 -> androidx.compose.runtime:runtime:1.13.0-alpha03",
+        )
+        assertContains(
+            result.output,
+            "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.10.0 -> androidx.lifecycle:lifecycle-runtime-compose:2.11.0",
+        )
+        assertContains(
+            result.output,
+            "org.jetbrains.androidx.navigation3:navigation3-runtime:1.1.1 -> androidx.navigation3:navigation3-runtime:1.2.0-rc01",
+        )
+        assertContains(
+            result.output,
+            "org.jetbrains.androidx.navigationevent:navigationevent-compose:1.1.0 -> androidx.navigationevent:navigationevent-compose:1.1.1",
+        )
+        assertContains(
+            result.output,
+            "org.jetbrains.androidx.savedstate:savedstate-compose:1.4.0 -> androidx.savedstate:savedstate-compose:1.5.0-alpha01",
+        )
+        assertFalse(result.output.contains("org.jetbrains.compose.foundation:foundation-wasm-js:"))
+        assertFalse(result.output.contains("org.jetbrains.compose.material3:material3-wasm-js:"))
+    }
+
+    @Test
+    fun exposesTransitiveCommonMetadataToConcreteNativeCompiles() {
+        val projectDir = createTempDirectory("compose-native-native-common-metadata-test").toFile()
+        projectDir.deleteOnExit()
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories {
+                        google()
+                        mavenCentral()
+                        gradlePluginPortal()
+                    }
+                }
+                dependencyResolutionManagement {
+                    repositories {
+                        google()
+                        mavenCentral()
+                    }
+                }
+                rootProject.name = "compose-native-native-common-metadata-test"
+                """
+                    .trimIndent()
+            )
+        projectDir.resolve("src/commonMain/kotlin").mkdirs()
+        projectDir
+            .resolve("src/commonMain/kotlin/Example.kt")
+            .writeText(
+                """
+                import androidx.compose.runtime.Composable
+                import androidx.compose.runtime.saveable.rememberSaveable
+                import androidx.navigation3.runtime.NavKey
+                import androidx.navigationevent.NavigationEventInfo
+                import androidx.navigationevent.compose.rememberNavigationEventState
+                import androidx.savedstate.serialization.SavedStateConfiguration
+
+                private class ExampleInfo : NavigationEventInfo()
+
+                fun consumeNavKey(key: NavKey): NavKey = key
+                fun savedStateConfiguration(): SavedStateConfiguration = SavedStateConfiguration.DEFAULT
+
+                @Composable
+                fun Example() {
+                    rememberSaveable { 0 }
+                    rememberNavigationEventState(ExampleInfo())
+                }
+                """
+                    .trimIndent()
+            )
+        projectDir
+            .resolve("build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "2.4.20"
+                    id("org.jetbrains.kotlin.plugin.compose") version "2.4.20"
+                    id("dev.brahmkshatriya.compose")
+                }
+
+                kotlin {
+                    linuxX64()
+
+                    sourceSets {
+                        commonMain.dependencies {
+                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
+                            implementation("dev.brahmkshatriya.androidx.navigation3:navigation3-ui:1.13.0-alpha06")
+                            implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3:2.11.0")
+                        }
+                    }
+                }
+                """
+                    .trimIndent()
+            )
+
+        val result =
+            GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withPluginClasspath()
+                .withArguments("compileKotlinLinuxX64", "--no-configuration-cache", "--stacktrace")
+                .build()
+
+        assertContains(result.output, "BUILD SUCCESSFUL")
+    }
+
+    @Test
     fun resolvesRealAndroidxRuntimeBehindLinuxNativeRedirectShim() {
         val projectDir = createTempDirectory("compose-native-runtime-redirect-test").toFile()
         projectDir.deleteOnExit()
@@ -120,7 +303,7 @@ class ComposeNativePluginFunctionalTest {
 
                     sourceSets {
                         commonMain.dependencies {
-                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha05")
+                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha14")
                             implementation("org.jetbrains.compose.ui:ui:1.13.0-alpha01")
                         }
                         desktopNativeMain.dependencies {
@@ -176,17 +359,17 @@ class ComposeNativePluginFunctionalTest {
         )
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.foundation:foundation:1.13.0-alpha01",
-            message = "The IDE model must use upstream common Foundation metadata",
+            "dev.brahmkshatriya.compose.foundation:foundation:commonMain:1.12.10-alpha14",
+            message = "The IDE model must preserve full-fork common Foundation metadata",
         )
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.foundation:foundation-layout:1.13.0-alpha01",
+            "org.jetbrains.compose.foundation:foundation-layout:1.12.0-rc01",
             message = "The IDE model must contain transitive upstream Foundation metadata",
         )
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.animation:animation:1.13.0-alpha01",
+            "org.jetbrains.compose.animation:animation:1.12.0-rc01",
             message = "The IDE model must contain transitive upstream Animation metadata",
         )
         assertFalse(
@@ -198,23 +381,16 @@ class ComposeNativePluginFunctionalTest {
             projectDir.resolve("build/ide/dependencies/json/desktopNativeMain.json").readText()
         assertContains(
             desktopNativeMainModel,
-            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha05",
-            message = "The IDE model must contain the native UI overlay metadata",
+            "dev.brahmkshatriya.compose.desktop:desktop-native:desktopNativeMain:1.13.0-alpha05",
+            message = "The IDE model must contain shared desktop-native metadata",
         )
-        assertContains(
-            desktopNativeMainModel,
-            "dev.brahmkshatriya.compose.desktop:desktop-native:1.13.0-alpha05",
-            message = "The IDE model must contain the desktop window API metadata",
+        assertFalse(
+            "dev.brahmkshatriya.compose.ui:ui-linuxx64:" in desktopNativeMainModel,
+            "The all-desktop source set must not be modeled as a Linux leaf target",
         )
-        assertContains(
-            desktopNativeMainModel,
-            "dev.brahmkshatriya.material-kolor:material-kolor:5.0.2",
-            message = "The IDE model must contain metadata exported by a project dependency",
-        )
-        assertContains(
-            desktopNativeMainModel,
-            "org.jetbrains.compose.components:components-resources:1.13.0-alpha01",
-            message = "The IDE model must contain Compose Resources metadata",
+        assertFalse(
+            "dev.brahmkshatriya.material-kolor:material-kolor-linuxx64:" in desktopNativeMainModel,
+            "Project dependencies must not leak Linux leaf KLIBs into desktopNativeMain",
         )
     }
 
@@ -312,7 +488,7 @@ class ComposeNativePluginFunctionalTest {
     }
 
     @Test
-    fun compilesFullForkCommonMetadataWithTransitiveAndroidxMetadata() {
+    fun keepsFullForkCommonMetadataCoordinatesOnFork() {
         val projectDir = createTempDirectory("compose-native-common-metadata-test").toFile()
         projectDir.deleteOnExit()
         projectDir
@@ -335,20 +511,6 @@ class ComposeNativePluginFunctionalTest {
                 """
                     .trimIndent()
             )
-        projectDir.resolve("src/commonMain/kotlin").mkdirs()
-        projectDir
-            .resolve("src/commonMain/kotlin/CommonMetadata.kt")
-            .writeText(
-                """
-                import androidx.compose.foundation.background
-                import androidx.compose.material3.Button
-                import androidx.navigationevent.compose.NavigationBackHandler
-                import androidx.savedstate.serialization.SavedStateConfiguration
-
-                fun keepSavedStateType(value: SavedStateConfiguration): SavedStateConfiguration = value
-                """
-                    .trimIndent()
-            )
         projectDir
             .resolve("build.gradle.kts")
             .writeText(
@@ -359,15 +521,15 @@ class ComposeNativePluginFunctionalTest {
                 }
 
                 kotlin {
-                    jvm()
-                    desktopNative()
+                    linuxX64()
+                    js()
 
                     sourceSets {
                         commonMain.dependencies {
-                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha05")
-                            implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha05")
-                            implementation("org.jetbrains.androidx.navigation3:navigation3-ui:1.1.1")
-                            implementation("org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-navigation3:2.11.0")
+                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
+                            implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+                            implementation("dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06")
+                            implementation("dev.brahmkshatriya.androidx.collection:collection:1.13.0-alpha06")
                         }
                     }
                 }
@@ -379,10 +541,30 @@ class ComposeNativePluginFunctionalTest {
             GradleRunner.create()
                 .withProjectDir(projectDir)
                 .withPluginClasspath()
-                .withArguments("compileCommonMainKotlinMetadata", "--no-configuration-cache")
+                .withArguments(
+                    "dependencies",
+                    "--configuration",
+                    "commonMainResolvableDependenciesMetadata",
+                    "--no-configuration-cache",
+                )
                 .build()
 
-        assertContains(result.output, "BUILD SUCCESSFUL")
+        assertContains(
+            result.output,
+            "dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06",
+        )
+        assertContains(
+            result.output,
+            "dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06",
+        )
+        assertContains(
+            result.output,
+            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06",
+        )
+        assertContains(
+            result.output,
+            "dev.brahmkshatriya.androidx.collection:collection:1.13.0-alpha06",
+        )
     }
 
     @Test
@@ -529,6 +711,11 @@ class ComposeNativePluginFunctionalTest {
                             entryPoint = "com.example.main"
                         }
                     }
+                    iosArm64()
+                    iosSimulatorArm64()
+                    iosX64()
+                    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+                    wasmJs()
 
                     sourceSets {
                         desktopNativeMain.dependencies {}
@@ -544,6 +731,16 @@ class ComposeNativePluginFunctionalTest {
                                 .sourceSets
                         val desktopNativeMain = sourceSets.getByName("desktopNativeMain")
                         check(file("src/main/kotlin") in desktopNativeMain.kotlin.srcDirs)
+                        val skiaSources = file("src/skiaTargetMain/kotlin")
+                        listOf(
+                            "desktopNativeMain",
+                            "iosArm64Main",
+                            "iosSimulatorArm64Main",
+                            "iosX64Main",
+                            "wasmJsMain",
+                        ).forEach { name ->
+                            check(skiaSources in sourceSets.getByName(name).kotlin.srcDirs)
+                        }
                         check(project.extensions.findByName("composeNativeApplication") != null)
                         val nativeTarget =
                             org.gradle.api.attributes.Attribute.of(
@@ -554,16 +751,21 @@ class ComposeNativePluginFunctionalTest {
                             configurations
                                 .getByName("desktopNativeMainResolvableDependenciesMetadata")
                                 .attributes
-                                .getAttribute(nativeTarget) == "linux_x64"
+                                .getAttribute(nativeTarget) == null
                         )
+                        val linuxWindowsMain = sourceSets.getByName("linuxWindowsMain")
+                        check(desktopNativeMain in linuxWindowsMain.dependsOn)
                         listOf(
                             "linuxX64Main",
                             "linuxArm64Main",
                             "mingwX64Main",
-                            "macosX64Main",
-                            "macosArm64Main",
                         ).forEach { name ->
-                            check(desktopNativeMain in sourceSets.getByName(name).dependsOn)
+                            check(linuxWindowsMain in sourceSets.getByName(name).dependsOn)
+                        }
+                        listOf("macosX64Main", "macosArm64Main").forEach { name ->
+                            val sourceSet = sourceSets.getByName(name)
+                            check(desktopNativeMain in sourceSet.dependsOn)
+                            check(linuxWindowsMain !in sourceSet.dependsOn)
                         }
                         listOf(
                             "linkDebugExecutableLinuxX64",
@@ -590,6 +792,7 @@ class ComposeNativePluginFunctionalTest {
                         val runTask = tasks.getByName("runDebugExecutableLinuxX64")
                         val copyTask = tasks.getByName("copyDebugLinuxX64ExecutableResources")
                         check(copyTask in runTask.taskDependencies.getDependencies(runTask))
+                        check(tasks.findByName("runDebugExecutableDesktop") != null)
 
                         listOf("Debug", "Release").forEach { buildType ->
                             val windowsRunTask =

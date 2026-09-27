@@ -671,6 +671,7 @@ internal fun Project.configureDesktopNativeApplicationConventions() {
             }
         if (executableTargets.isEmpty()) return@afterEvaluate
 
+        registerHostDesktopRunTask()
         addConventionalMainKotlinSources()
         addConventionalMainComposeResources()
         executableTargets.forEach(::configureExecutableResourceCopyTasks)
@@ -686,6 +687,41 @@ internal fun Project.configureDesktopNativeApplicationConventions() {
         configureSingleLinuxPackagingAliases(executableTargets)
         configureSingleMacosPackagingAliases(executableTargets)
     }
+}
+
+private fun Project.registerHostDesktopRunTask() {
+    val osName = System.getProperty("os.name")
+    val architecture = System.getProperty("os.arch")
+    val hostRunTask = hostDesktopDebugRunTaskName(osName, architecture)
+    tasks.register("runDebugExecutableDesktop") { task ->
+        task.group = "run"
+        task.description = "Runs the debug desktop executable for the current host."
+        if (hostRunTask != null && tasks.findByName(hostRunTask) != null) {
+            task.dependsOn(hostRunTask)
+        } else {
+            task.doFirst {
+                throw GradleException(
+                    "No debug desktop executable is available for $osName ($architecture)."
+                )
+            }
+        }
+    }
+}
+
+internal fun hostDesktopDebugRunTaskName(osName: String, architecture: String): String? {
+    val os = osName.lowercase()
+    val arch = architecture.lowercase()
+    val x64 = arch in setOf("amd64", "x86_64", "x64")
+    val arm64 = arch in setOf("aarch64", "arm64")
+    val target = when {
+        os.contains("linux") && x64 -> "LinuxX64"
+        os.contains("linux") && arm64 -> "LinuxArm64"
+        os.contains("windows") && x64 -> "MingwX64"
+        os.contains("mac") && x64 -> "MacosX64"
+        os.contains("mac") && arm64 -> "MacosArm64"
+        else -> return null
+    }
+    return "runDebugExecutable$target"
 }
 
 private fun Project.addConventionalMainKotlinSources() {

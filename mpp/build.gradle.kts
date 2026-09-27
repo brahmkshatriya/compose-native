@@ -4,12 +4,26 @@ import org.jetbrains.androidx.build.ComposeProperties
 import org.jetbrains.androidx.build.JetBrainsPublication
 
 val parsedComposeProperties = ComposeProperties(project)
+val requestedRegisteredComponents =
+    JetBrainsPublication.platformGraphComponents.filter { component ->
+        component.supportedPlatforms.any { it in parsedComposeProperties.targetPlatforms }
+    }
+val publishesForkRoots =
+    gradle.startParameter.taskNames.any { taskName ->
+        taskName.substringAfterLast(':') == "publishComposeForkRootsToMavenLocal"
+    }
 
-// Publication tasks inspect target-specific tasks from the projects they publish. Filtered
-// Each release shard should evaluate only the projects it actually publishes so unrelated
-// platform projects do not get configured or built.
+// Publication tasks inspect target-specific tasks from the projects they publish. Each release
+// shard should evaluate only the projects it actually publishes so unrelated
+// platform projects do not get configured or built. Fork KMP roots need the complete native
+// publication graph, but not unrelated Compose projects such as ui-tooling that may have no target
+// under the root-publication platform filter.
 val projectsRequiredForPublication =
     when {
+        publishesForkRoots ->
+            JetBrainsPublication.nativeComponents
+                .mapNotNull { rootProject.findProject(it.path) }
+                .toSet()
         parsedComposeProperties.targetPlatforms == setOf(ComposePlatforms.Desktop) ->
             JetBrainsPublication.jvmComponents.mapNotNull { rootProject.findProject(it.path) }.toSet()
         parsedComposeProperties.targetPlatforms.isNotEmpty() &&
@@ -27,7 +41,7 @@ val projectsRequiredForPublication =
             parsedComposeProperties.targetPlatforms.all {
                 it in (ComposePlatforms.ANDROID + ComposePlatforms.WEB)
             } ->
-            JetBrainsPublication.forkComposeComponents
+            requestedRegisteredComponents
                 .mapNotNull { rootProject.findProject(it.path) }
                 .toSet()
         else -> rootProject.allprojects - project
@@ -72,12 +86,12 @@ tasks.register("publishComposeNativeToMavenLocal", ComposePublishingTask::class)
 
 tasks.register("publishComposeForkPlatformsToMavenLocal", ComposePublishingTask::class) {
     group = "Compose Multiplatform"
-    description = "Publishes forked Compose target modules without incomplete KMP roots"
+    description = "Publishes the complete registered fork graph for the requested target platforms"
     repository = "MavenLocal"
     composeProperties = parsedComposeProperties
 
-    JetBrainsPublication.forkComposeComponents.forEach {
-        publishPlatformsOnly(rootProject, it)
+    requestedRegisteredComponents.forEach {
+        publishAvailablePlatformsOnly(rootProject, it)
     }
 }
 
