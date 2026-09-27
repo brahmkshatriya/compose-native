@@ -11,10 +11,7 @@ open class DesktopNativeTargets internal constructor(private val project: Projec
         project.configureDesktopNativeExecutable(executable)
     }
     val binaries: DesktopNativeBinaries
-        get() {
-            createTargets()
-            return binaryContainer
-        }
+        get() = binaryContainer
 
     operator fun invoke() {
         createTargets()
@@ -54,5 +51,34 @@ open class DesktopNativeExecutable {
             "desktopNative.binaries.executable requires a non-blank entryPoint"
         }
         return entryPoint
+    }
+}
+
+internal data class HostDesktopNativeTarget(
+    val factoryMethodName: String,
+    val nativeTarget: String,
+    val concreteTaskSuffix: String,
+)
+
+internal fun hostDesktopNativeTarget(
+    osName: String,
+    architecture: String,
+): HostDesktopNativeTarget? {
+    val os = osName.lowercase()
+    val arch = architecture.lowercase()
+    val x64 = arch in setOf("amd64", "x86_64", "x64")
+    val arm64 = arch in setOf("aarch64", "arm64")
+    return when {
+        os.contains("linux") && x64 ->
+            HostDesktopNativeTarget("linuxX64", "linux_x64", "LinuxX64")
+        os.contains("linux") && arm64 ->
+            HostDesktopNativeTarget("linuxArm64", "linux_arm64", "LinuxArm64")
+        os.contains("windows") && x64 ->
+            HostDesktopNativeTarget("mingwX64", "mingw_x64", "MingwX64")
+        os.contains("mac") && x64 ->
+            HostDesktopNativeTarget("macosX64", "macos_x64", "MacosX64")
+        os.contains("mac") && arm64 ->
+            HostDesktopNativeTarget("macosArm64", "macos_arm64", "MacosArm64")
+        else -> null
     }
 }

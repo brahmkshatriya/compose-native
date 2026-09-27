@@ -28,7 +28,10 @@ internal object ComposeNativeUpstreamVersions {
     fun androidx(family: String): String? = values["androidx.$family"]
 }
 
-internal fun ModuleComponentSelector.officialMetadataCoordinateOrNull(): String? {
+internal fun ModuleComponentSelector.officialMetadataCoordinateOrNull(): String? =
+    officialMetadataCoordinateOrNull(group, module)
+
+internal fun officialMetadataCoordinateOrNull(group: String, module: String): String? {
     if (group.startsWith(FORK_COMPOSE_GROUP_PREFIX)) {
         val family = group.removePrefix(FORK_COMPOSE_GROUP_PREFIX)
         val version = ComposeNativeUpstreamVersions.compose(family) ?: return null
@@ -40,6 +43,15 @@ internal fun ModuleComponentSelector.officialMetadataCoordinateOrNull(): String?
         return "androidx.$family:$module:$version"
     }
     return null
+}
+
+internal fun androidOfficialCoordinateOrNull(group: String, module: String): String? {
+    if (group == "${FORK_COMPOSE_GROUP_PREFIX}runtime") {
+        val rootModule = module.removeSuffix("-android")
+        val version = ComposeNativeUpstreamVersions.androidx("compose") ?: return null
+        return "androidx.compose.runtime:$rootModule:$version"
+    }
+    return officialMetadataCoordinateOrNull(group, module)
 }
 
 private val COMMON_COMPOSE_FAMILIES =

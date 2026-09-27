@@ -165,6 +165,155 @@ class ComposeNativePluginTest {
     }
 
     @Test
+    fun keepsOnlyCrossPlatformForkRootsOnNonDesktopTargets() {
+        assertEquals(
+            true,
+            isCrossPlatformForkModule(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation",
+            ),
+        )
+        assertEquals(
+            true,
+            isCrossPlatformForkModule(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation-android",
+            ),
+        )
+        assertEquals(
+            true,
+            isCrossPlatformForkModule(
+                "dev.brahmkshatriya.compose.material3",
+                "material3-iosarm64",
+            ),
+        )
+        assertEquals(
+            false,
+            isCrossPlatformForkModule("dev.brahmkshatriya.compose.ui", "ui-iosarm64"),
+        )
+        assertEquals(
+            false,
+            isCrossPlatformForkModule(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation-layout-iosarm64",
+            ),
+        )
+
+        assertNull(
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation",
+                useNativeRedirects = true,
+            )
+        )
+        assertNull(
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.material3",
+                "material3-android",
+                useNativeRedirects = false,
+            )
+        )
+        assertEquals(
+            "org.jetbrains.compose.ui:ui:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.ui",
+                "ui",
+                useNativeRedirects = true,
+            ),
+        )
+        assertEquals(
+            "org.jetbrains.compose.animation:animation:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.animation",
+                "animation",
+                useNativeRedirects = true,
+            ),
+        )
+        assertEquals(
+            "androidx.compose.runtime:runtime:1.13.0-alpha03",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.runtime",
+                "runtime",
+                useNativeRedirects = true,
+            ),
+        )
+        assertEquals(
+            "androidx.compose.runtime:runtime:1.13.0-alpha03",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.runtime",
+                "runtime",
+                useNativeRedirects = false,
+            ),
+        )
+        assertNull(
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation-wasm-js",
+                useNativeRedirects = false,
+                useWebRedirects = true,
+            )
+        )
+        assertEquals(
+            "org.jetbrains.compose.animation:animation-wasm-js:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.animation",
+                "animation-wasm-js",
+                useNativeRedirects = false,
+                useWebRedirects = true,
+            ),
+        )
+        assertEquals(
+            "androidx.compose.runtime:runtime-wasm-js:1.13.0-alpha03",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.runtime",
+                "runtime-wasm-js",
+                useNativeRedirects = false,
+                useWebRedirects = true,
+            ),
+        )
+        assertEquals(
+            "org.jetbrains.compose.ui:ui-android:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.ui",
+                "ui-android",
+                useNativeRedirects = false,
+            ),
+        )
+        assertEquals(
+            "org.jetbrains.compose.animation:animation:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.animation",
+                "animation",
+                useNativeRedirects = false,
+            ),
+        )
+        assertEquals(
+            "org.jetbrains.compose.foundation:foundation-layout:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation-layout",
+                useNativeRedirects = false,
+            ),
+        )
+        assertEquals(
+            "org.jetbrains.compose.material:material-ripple:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.material",
+                "material-ripple",
+                useNativeRedirects = false,
+            ),
+        )
+        assertEquals(
+            "org.jetbrains.compose.material3:material3-ripple:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.material3",
+                "material3-ripple",
+                useNativeRedirects = false,
+            ),
+        )
+    }
+
+    @Test
     fun identifiesKotlinMetadataCompilationTasks() {
         assertEquals(true, "compileCommonMainKotlinMetadata".isKotlinMetadataCompilationTask())
         assertEquals(true, "compileSkiaMainKotlinMetadata".isKotlinMetadataCompilationTask())

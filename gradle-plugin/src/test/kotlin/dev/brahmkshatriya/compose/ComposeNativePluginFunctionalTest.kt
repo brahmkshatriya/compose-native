@@ -628,7 +628,7 @@ class ComposeNativePluginFunctionalTest {
                         val skiaMain by creating {
                             dependsOn(commonMain.get())
                             dependencies {
-                                implementation("org.jetbrains.compose.runtime:runtime:1.13.0-alpha01")
+                                implementation("androidx.compose.runtime:runtime:1.13.0-alpha03")
                                 implementation("org.jetbrains.compose.ui:ui:1.13.0-alpha01")
                                 implementation("org.jetbrains.skiko:skiko:0.152.0-alpha02")
                             }
@@ -722,6 +722,14 @@ class ComposeNativePluginFunctionalTest {
                     }
                 }
 
+                val kotlinForVerification = project.extensions.getByName("kotlin")
+                @Suppress("UNCHECKED_CAST")
+                val targetsForVerification =
+                    kotlinForVerification.javaClass.methods
+                        .first { it.name == "getTargets" && it.parameterCount == 0 }
+                        .invoke(kotlinForVerification) as org.gradle.api.NamedDomainObjectContainer<Any>
+                val linuxX64TargetForVerification = targetsForVerification.getByName("linuxX64")
+
                 tasks.register("linuxX64AggregateResources")
 
                 tasks.register("verifyDesktopNativeExecutables") {
@@ -767,11 +775,14 @@ class ComposeNativePluginFunctionalTest {
                             check(desktopNativeMain in sourceSet.dependsOn)
                             check(linuxWindowsMain !in sourceSet.dependsOn)
                         }
+                        check(sourceSets.findByName("desktopMain") == null)
                         listOf(
                             "linkDebugExecutableLinuxX64",
-                            "linkDebugExecutableLinuxArm64",
-                            "linkDebugExecutableMingwX64",
-                            "copyDebugMingwX64ExecutableRuntime",
+                            "linkReleaseExecutableLinuxX64",
+                            "linkReleaseExecutableLinuxArm64",
+                            "linkReleaseExecutableMingwX64",
+                            "linkReleaseExecutableMacosX64",
+                            "linkReleaseExecutableMacosArm64",
                             "copyReleaseMingwX64ExecutableRuntime",
                             "prepareLinuxX64ReleaseAppDir",
                             "packageLinuxX64ReleaseAppImage",
@@ -789,27 +800,54 @@ class ComposeNativePluginFunctionalTest {
                         ).forEach { name ->
                             check(tasks.findByName(name) != null)
                         }
-                        val runTask = tasks.getByName("runDebugExecutableLinuxX64")
+                        check(tasks.findByName("runDebugExecutableLinuxX64") != null)
+                        listOf(
+                            "runDebugExecutableMingwX64",
+                            "runDebugExecutableMacosX64",
+                            "runDebugExecutableMacosArm64",
+                        ).forEach { name ->
+                            check(tasks.findByName(name) == null)
+                        }
+                        val runTask = tasks.getByName("runDebugExecutableDesktop")
+                        check(runTask is org.gradle.api.tasks.Exec)
                         val copyTask = tasks.getByName("copyDebugLinuxX64ExecutableResources")
                         check(copyTask in runTask.taskDependencies.getDependencies(runTask))
-                        check(tasks.findByName("runDebugExecutableDesktop") != null)
+                        check(tasks.findByName("runReleaseExecutableDesktop") is org.gradle.api.tasks.Exec)
 
-                        listOf("Debug", "Release").forEach { buildType ->
-                            val windowsRunTask =
-                                tasks.getByName("run${'$'}{buildType}ExecutableMingwX64")
-                            val runtimeCopyTask =
-                                tasks.getByName("copy${'$'}{buildType}MingwX64ExecutableRuntime")
-                            val windowsLinkTask =
-                                tasks.getByName("link${'$'}{buildType}ExecutableMingwX64")
-                            check(
-                                runtimeCopyTask in
-                                    windowsRunTask.taskDependencies.getDependencies(windowsRunTask)
-                            )
-                            check(
-                                windowsLinkTask in
-                                    runtimeCopyTask.taskDependencies.getDependencies(runtimeCopyTask)
-                            )
-                        }
+                        val importedTargetName =
+                            linuxX64TargetForVerification.javaClass.methods
+                                .first { it.name == "getTargetName" && it.parameterCount == 0 }
+                                .invoke(linuxX64TargetForVerification)
+                        check(importedTargetName == "linuxX64")
+
+                        val binaries =
+                            linuxX64TargetForVerification.javaClass.methods
+                                .first { it.name == "getBinaries" && it.parameterCount == 0 }
+                                .invoke(linuxX64TargetForVerification) as Iterable<*>
+                        val debugExecutable =
+                            binaries.filterNotNull().first { binary ->
+                                binary.javaClass.methods
+                                    .firstOrNull {
+                                        it.name == "getName" && it.parameterCount == 0
+                                    }
+                                    ?.invoke(binary)
+                                    ?.toString() == "debugExecutable"
+                            }
+                        val importedRunTaskName =
+                            debugExecutable.javaClass.methods
+                                .first { it.name == "getRunTaskName" && it.parameterCount == 0 }
+                                .invoke(debugExecutable)
+                        check(importedRunTaskName == "runDebugExecutableLinuxX64")
+
+                        val windowsRunTask = tasks.getByName("runReleaseExecutableMingwX64")
+                        val runtimeCopyTask = tasks.getByName("copyReleaseMingwX64ExecutableRuntime")
+                        val windowsLinkTask = tasks.getByName("linkReleaseExecutableMingwX64")
+                        check(
+                            runtimeCopyTask in windowsRunTask.taskDependencies.getDependencies(windowsRunTask)
+                        )
+                        check(
+                            windowsLinkTask in runtimeCopyTask.taskDependencies.getDependencies(runtimeCopyTask)
+                        )
                     }
                 }
                 """
@@ -819,7 +857,11 @@ class ComposeNativePluginFunctionalTest {
         GradleRunner.create()
             .withProjectDir(projectDir)
             .withPluginClasspath()
-            .withArguments("verifyDesktopNativeExecutables", "--no-configuration-cache")
+            .withArguments(
+                "-Didea.sync.active=true",
+                "verifyDesktopNativeExecutables",
+                "--no-configuration-cache",
+            )
             .build()
     }
 

@@ -14,6 +14,8 @@ import org.gradle.api.artifacts.component.ModuleComponentSelector
 import org.gradle.api.attributes.Attribute
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.publish.tasks.GenerateModuleMetadata
+import org.gradle.api.tasks.Exec
+import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
 
 class ComposeNativePlugin : Plugin<Project> {
     override fun apply(project: Project) {
@@ -24,9 +26,100 @@ class ComposeNativePlugin : Plugin<Project> {
         project.configureMetadataCompilation()
         project.configureIdeDependencyResolution()
         project.configureSkikoCapabilityResolution()
+        project.configureNonDesktopForkSupportRouting()
+        project.configureAndroidApplicationForkSupportRouting()
         project.configureDependencySubstitutions()
         project.configureNativeSkikoPublicationMetadata()
     }
+}
+
+private fun Project.configureNonDesktopForkSupportRouting() {
+    configurations.configureEach { configuration ->
+        val usesNativeOverlay = configuration.name.usesNativeOverlay()
+        val isNonDesktopNative =
+            !usesNativeOverlay && configuration.name.usesRedirectedNativeTarget()
+        val isWeb = configuration.name.usesRedirectedWebTarget()
+        val isAndroid = configuration.name.isAndroidConfiguration()
+        if (!isNonDesktopNative && !isWeb && !isAndroid) return@configureEach
+
+        configuration.configureOfficialForkSupportRouting(
+            useNativeRedirects = isNonDesktopNative,
+            useWebRedirects = isWeb,
+        )
+    }
+}
+
+private fun Project.configureAndroidApplicationForkSupportRouting() {
+    rootProject.allprojects { consumer ->
+        consumer.pluginManager.withPlugin(ANDROID_APPLICATION_PLUGIN_ID) {
+            val extraProperties = consumer.extensions.extraProperties
+            if (!extraProperties.has(ANDROID_SUPPORT_ROUTING_MARKER)) {
+                extraProperties.set(ANDROID_SUPPORT_ROUTING_MARKER, true)
+                consumer.configurations.configureEach { configuration ->
+                    configuration.configureOfficialForkSupportRouting(
+                        useNativeRedirects = false,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun org.gradle.api.artifacts.Configuration.configureOfficialForkSupportRouting(
+    useNativeRedirects: Boolean,
+    useWebRedirects: Boolean = false,
+) {
+    resolutionStrategy.eachDependency { details ->
+        val coordinate =
+            nonDesktopForkSupportCoordinateOrNull(
+                group = details.requested.group,
+                module = details.requested.name,
+                useNativeRedirects = useNativeRedirects,
+                useWebRedirects = useWebRedirects,
+            )
+        if (coordinate != null) {
+            details.useTarget(coordinate)
+            details.because("Keep non-desktop Compose support dependencies on official coordinates")
+        }
+    }
+    resolutionStrategy.dependencySubstitution { rules ->
+        rules.all { details ->
+            val selector = details.requested as? ModuleComponentSelector ?: return@all
+            val coordinate =
+                nonDesktopForkSupportCoordinateOrNull(
+                    group = selector.group,
+                    module = selector.module,
+                    useNativeRedirects = useNativeRedirects,
+                    useWebRedirects = useWebRedirects,
+                )
+            if (coordinate != null) details.useTarget(coordinate)
+        }
+    }
+}
+
+internal fun nonDesktopForkSupportCoordinateOrNull(
+    group: String,
+    module: String,
+    useNativeRedirects: Boolean,
+    useWebRedirects: Boolean = false,
+): String? {
+    if (isCrossPlatformForkModule(group, module)) return null
+    if (useNativeRedirects) {
+        nativeRedirectImplementationCoordinateOrNull(group, module)?.let { return it }
+        return officialMetadataCoordinateOrNull(group, module)
+    }
+    if (useWebRedirects) {
+        webRedirectImplementationCoordinateOrNull(group, module)?.let { return it }
+        return officialMetadataCoordinateOrNull(group, module)
+    }
+    return androidOfficialCoordinateOrNull(group, module)
+}
+
+internal fun isCrossPlatformForkModule(group: String, module: String): Boolean {
+    if (!group.startsWith(FORK_COMPOSE_GROUP_PREFIX)) return false
+    val family = group.removePrefix(FORK_COMPOSE_GROUP_PREFIX)
+    val rootModule = module.removeSuffix("-android").withoutRedirectPlatformSuffix()
+    return "$family:$rootModule" in CROSS_PLATFORM_COMPOSE_MODULES
 }
 
 private fun Project.enableRequestedCoordinateMatching() {
@@ -185,7 +278,14 @@ private fun Project.configureLocalDependencySubstitutions(
             }
         if (selectedForkVersion != null) {
             configuration.resolutionStrategy.eachDependency { details ->
-                if (details.requested.group.startsWith(FORK_COMPOSE_GROUP_PREFIX)) {
+                if (
+                    details.requested.group.startsWith(FORK_COMPOSE_GROUP_PREFIX) &&
+                        (usesNativeOverlay ||
+                            isCrossPlatformForkModule(
+                                details.requested.group,
+                                details.requested.name,
+                            ))
+                ) {
                     details.useVersion(selectedForkVersion)
                     details.because("Keep Compose Native fork modules on one release")
                 }
@@ -321,12 +421,29 @@ private fun Project.configureProjectConsumers(
         if (consumer == this) return@allprojects
         val configureConsumer = {
             if (consumer.directlyDependsOn(this)) {
+                val isAndroidApplication =
+                    consumer.pluginManager.hasPlugin(ANDROID_APPLICATION_PLUGIN_ID)
+                val isNonDesktopNativeConsumer = consumer.isNonDesktopNativeConsumer()
                 val substitutions =
-                    if (consumer.pluginManager.hasPlugin(ANDROID_APPLICATION_PLUGIN_ID)) {
-                        androidApplicationConsumerSubstitutions
-                    } else {
-                        fullForkSubstitutions
+                    when {
+                        isAndroidApplication -> androidApplicationConsumerSubstitutions
+                        isNonDesktopNativeConsumer -> emptyMap()
+                        else -> fullForkSubstitutions
                     }
+                if (isNonDesktopNativeConsumer) {
+                    consumer.configurations.configureEach { configuration ->
+                        configuration.configureOfficialForkSupportRouting(
+                            useNativeRedirects = true,
+                        )
+                    }
+                }
+                consumer.configurations.configureEach { configuration ->
+                    if (!configuration.name.usesRedirectedWebTarget()) return@configureEach
+                    configuration.configureOfficialForkSupportRouting(
+                        useNativeRedirects = false,
+                        useWebRedirects = true,
+                    )
+                }
                 consumer.configureConsumerSubstitutions(substitutions)
             }
         }
@@ -334,6 +451,10 @@ private fun Project.configureProjectConsumers(
         else consumer.afterEvaluate { configureConsumer() }
     }
 }
+
+internal fun Project.isNonDesktopNativeConsumer(): Boolean =
+    configurations.any { configuration -> configuration.name.usesRedirectedNativeTarget() } &&
+        configurations.none { configuration -> configuration.name.usesNativeOverlay() }
 
 internal fun Project.directlyDependsOn(producer: Project): Boolean =
     configurations.any { configuration ->
@@ -666,46 +787,30 @@ internal fun nativeMetadataSubstitutionsFor(version: String): Map<String, Module
 private fun String.isAndroidConfiguration(): Boolean = contains("android", ignoreCase = true)
 
 internal fun Project.configureDesktopNativeExecutable(executableSpec: DesktopNativeExecutable) {
-    val entryPoint = executableSpec.requiredEntryPoint()
+    executableSpec.requiredEntryPoint()
     val kotlin = extensions.getByName("kotlin")
     @Suppress("UNCHECKED_CAST")
     val targets =
         kotlin.javaClass.methods
             .single { it.name == "getTargets" && it.parameterCount == 0 }
             .invoke(kotlin) as NamedDomainObjectContainer<Any>
-    DESKTOP_NATIVE_TARGET_SOURCE_SETS.forEach { (nativeTarget, targetName) ->
-        val target = targets.getByName(targetName)
-        val binaries =
-            target.javaClass.methods
-                .single {
-                    it.name == "getBinaries" &&
-                        it.parameterCount == 0 &&
-                        it.returnType.name == KOTLIN_NATIVE_BINARY_CONTAINER_CLASS
-                }
-                .invoke(target)
-        val existingExecutables =
-            (binaries as Iterable<*>).filterNotNull().filter { binary ->
-                binary.javaClass.methods.any {
-                    it.name == "setEntryPoint" && it.parameterCount == 1
-                }
-            }
-        if (existingExecutables.isNotEmpty()) {
-            existingExecutables.forEach { binary ->
-                binary.configureNativeExecutable(executableSpec, nativeTarget)
-            }
-            return@forEach
-        }
-        val executable =
-            binaries.javaClass.methods.single {
-                it.name == "executable" &&
-                    it.parameterCount == 1 &&
-                    it.parameterTypes.single() == Action::class.java
-            }
-        executable.invoke(
-            binaries,
-            Action<Any> { binary -> binary.configureNativeExecutable(executableSpec, nativeTarget) },
+    val hostTarget =
+        hostDesktopNativeTarget(System.getProperty("os.name"), System.getProperty("os.arch"))
+    DESKTOP_NATIVE_TARGET_SOURCE_SETS.forEach { (nativeTarget, conventionalTargetName) ->
+        val isHostTarget = nativeTarget == hostTarget?.nativeTarget
+        val target = targets.getByName(conventionalTargetName)
+        target.configureNativeExecutable(
+            executableSpec = executableSpec,
+            nativeTarget = nativeTarget,
+            buildTypes =
+                if (isHostTarget) {
+                    setOf(NativeBuildType.DEBUG, NativeBuildType.RELEASE)
+                } else {
+                    setOf(NativeBuildType.RELEASE)
+                },
         )
     }
+    if (hostTarget != null) configureHostDesktopRunAliases(hostTarget)
 }
 
 internal fun Project.createDesktopNativeTargets() {
@@ -717,6 +822,75 @@ internal fun Project.createDesktopNativeTargets() {
                 .invoke(kotlin)
         }
     }
+}
+
+private fun Project.configureHostDesktopRunAliases(hostTarget: HostDesktopNativeTarget) {
+    afterEvaluate {
+        listOf("Debug", "Release").forEach { buildType ->
+            val sourceTaskName = "run${buildType}Executable${hostTarget.concreteTaskSuffix}"
+            val sourceTask = tasks.findByName(sourceTaskName) as? Exec ?: return@forEach
+            val aliasTaskName = "run${buildType}Executable$HOST_DESKTOP_TARGET_NAME_CAPITALIZED"
+            if (tasks.findByName(aliasTaskName) == null) {
+                tasks.register(aliasTaskName, Exec::class.java) { alias ->
+                    alias.group = sourceTask.group
+                    alias.description =
+                        "Executes Kotlin/Native ${buildType.lowercase()} executable for the current desktop host."
+                    alias.enabled = sourceTask.enabled
+                    alias.commandLine(sourceTask.commandLine)
+                    alias.workingDir = sourceTask.workingDir
+                    alias.environment(sourceTask.environment)
+                    alias.dependsOn(sourceTask.taskDependencies.getDependencies(sourceTask))
+                }
+            }
+        }
+    }
+}
+
+private fun Any.configureNativeExecutable(
+    executableSpec: DesktopNativeExecutable,
+    nativeTarget: String,
+    buildTypes: Set<NativeBuildType>,
+) {
+    val binaries =
+        javaClass.methods
+            .single {
+                it.name == "getBinaries" &&
+                    it.parameterCount == 0 &&
+                    it.returnType.name == KOTLIN_NATIVE_BINARY_CONTAINER_CLASS
+            }
+            .invoke(this)
+    val existingExecutables =
+        (binaries as Iterable<*>).filterNotNull().filter { binary ->
+            binary.javaClass.methods.any { it.name == "setEntryPoint" && it.parameterCount == 1 }
+        }
+    val configuredBuildTypes =
+        existingExecutables.mapNotNull { binary ->
+            val buildType =
+                binary.javaClass.methods
+                    .firstOrNull { it.name == "getBuildType" && it.parameterCount == 0 }
+                    ?.invoke(binary) as? NativeBuildType
+            if (buildType in buildTypes) {
+                binary.configureNativeExecutable(executableSpec, nativeTarget)
+                buildType
+            } else {
+                null
+            }
+        }
+    val missingBuildTypes = buildTypes - configuredBuildTypes.toSet()
+    if (missingBuildTypes.isEmpty()) return
+
+    val executable =
+        binaries.javaClass.methods.single {
+            it.name == "executable" &&
+                it.parameterCount == 2 &&
+                Collection::class.java.isAssignableFrom(it.parameterTypes[0]) &&
+                it.parameterTypes[1] == Action::class.java
+        }
+    executable.invoke(
+        binaries,
+        missingBuildTypes,
+        Action<Any> { binary -> binary.configureNativeExecutable(executableSpec, nativeTarget) },
+    )
 }
 
 private fun Any.configureNativeExecutable(
@@ -807,10 +981,14 @@ private fun Any.dependsOnSourceSet(sourceSet: Any) {
 
 private const val KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multiplatform"
 private const val ANDROID_APPLICATION_PLUGIN_ID = "com.android.application"
+private const val ANDROID_SUPPORT_ROUTING_MARKER =
+    "dev.brahmkshatriya.compose.androidSupportRouting"
 private const val KMP_MATCH_REQUESTED_COORDINATES_PROPERTY =
     "kotlin.internal.kmp.allowMatchingByRequestedCoordinatesInMetadataTransformations"
 private const val KOTLIN_NATIVE_BINARY_CONTAINER_CLASS =
     "org.jetbrains.kotlin.gradle.dsl.KotlinNativeBinaryContainer"
+private const val HOST_DESKTOP_TARGET_NAME = "desktop"
+private const val HOST_DESKTOP_TARGET_NAME_CAPITALIZED = "Desktop"
 private const val COMMON_MAIN_CONFIGURATION_PREFIX = "commonMain"
 private const val DESKTOP_NATIVE_MAIN_CONFIGURATION_PREFIX = "desktopNativeMain"
 private const val RESOLVABLE_METADATA_CONFIGURATION_SUFFIX = "ResolvableDependenciesMetadata"
@@ -861,7 +1039,14 @@ private val OFFICIAL_SKIKO_DEPENDENCY_REGEX =
     )
 private val DEFAULT_LINUX_LINKER_OPTIONS = listOf("-L/usr/lib")
 private val DESKTOP_NATIVE_CONFIGURATION_MARKERS =
-    listOf("desktopnative", "linuxx64", "linuxarm64", "mingwx64", "macosx64", "macosarm64")
+    listOf(
+        "desktopnative",
+        "linuxx64",
+        "linuxarm64",
+        "mingwx64",
+        "macosx64",
+        "macosarm64",
+    )
 private val REDIRECTED_NATIVE_CONFIGURATION_MARKERS =
     listOf(
         "linuxx64",

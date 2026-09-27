@@ -666,12 +666,12 @@ internal fun Project.configureDesktopNativeApplicationConventions() {
     afterEvaluate {
         val executableTargets =
             DESKTOP_NATIVE_APPLICATION_TARGETS.filter { target ->
-                tasks.findByName("linkDebugExecutable${target.taskSuffix}") != null ||
-                    tasks.findByName("linkReleaseExecutable${target.taskSuffix}") != null
+                val binaryTaskSuffix = target.taskSuffix
+                tasks.findByName("linkDebugExecutable$binaryTaskSuffix") != null ||
+                    tasks.findByName("linkReleaseExecutable$binaryTaskSuffix") != null
             }
         if (executableTargets.isEmpty()) return@afterEvaluate
 
-        registerHostDesktopRunTask()
         addConventionalMainKotlinSources()
         addConventionalMainComposeResources()
         executableTargets.forEach(::configureExecutableResourceCopyTasks)
@@ -687,41 +687,6 @@ internal fun Project.configureDesktopNativeApplicationConventions() {
         configureSingleLinuxPackagingAliases(executableTargets)
         configureSingleMacosPackagingAliases(executableTargets)
     }
-}
-
-private fun Project.registerHostDesktopRunTask() {
-    val osName = System.getProperty("os.name")
-    val architecture = System.getProperty("os.arch")
-    val hostRunTask = hostDesktopDebugRunTaskName(osName, architecture)
-    tasks.register("runDebugExecutableDesktop") { task ->
-        task.group = "run"
-        task.description = "Runs the debug desktop executable for the current host."
-        if (hostRunTask != null && tasks.findByName(hostRunTask) != null) {
-            task.dependsOn(hostRunTask)
-        } else {
-            task.doFirst {
-                throw GradleException(
-                    "No debug desktop executable is available for $osName ($architecture)."
-                )
-            }
-        }
-    }
-}
-
-internal fun hostDesktopDebugRunTaskName(osName: String, architecture: String): String? {
-    val os = osName.lowercase()
-    val arch = architecture.lowercase()
-    val x64 = arch in setOf("amd64", "x86_64", "x64")
-    val arm64 = arch in setOf("aarch64", "arm64")
-    val target = when {
-        os.contains("linux") && x64 -> "LinuxX64"
-        os.contains("linux") && arm64 -> "LinuxArm64"
-        os.contains("windows") && x64 -> "MingwX64"
-        os.contains("mac") && x64 -> "MacosX64"
-        os.contains("mac") && arm64 -> "MacosArm64"
-        else -> return null
-    }
-    return "runDebugExecutable$target"
 }
 
 private fun Project.addConventionalMainKotlinSources() {
@@ -768,13 +733,15 @@ private fun Project.addConventionalMainComposeResources() {
 }
 
 private fun Project.configureExecutableResourceCopyTasks(target: DesktopNativeApplicationTarget) {
-    val aggregateTaskName = "${target.sourceSetPrefix}AggregateResources"
+    val binarySourceSetPrefix = target.sourceSetPrefix
+    val binaryTaskSuffix = target.taskSuffix
+    val aggregateTaskName = "${binarySourceSetPrefix}AggregateResources"
     if (tasks.findByName(aggregateTaskName) == null) return
     listOf("debug", "release").forEach { buildType ->
         val capitalizedBuildType = buildType.replaceFirstChar(Char::uppercaseChar)
-        val linkTaskName = "link${capitalizedBuildType}Executable${target.taskSuffix}"
+        val linkTaskName = "link${capitalizedBuildType}Executable$binaryTaskSuffix"
         val linkTask = tasks.findByName(linkTaskName) ?: return@forEach
-        val copyTaskName = "copy${capitalizedBuildType}${target.taskSuffix}ExecutableResources"
+        val copyTaskName = "copy${capitalizedBuildType}${binaryTaskSuffix}ExecutableResources"
         val copyTask =
             tasks.findByName(copyTaskName)
                 ?: tasks
@@ -782,33 +749,35 @@ private fun Project.configureExecutableResourceCopyTasks(target: DesktopNativeAp
                         task.dependsOn(aggregateTaskName)
                         task.from(
                             layout.buildDirectory.dir(
-                                "kotlin-multiplatform-resources/aggregated-resources/${target.sourceSetPrefix}"
+                                "kotlin-multiplatform-resources/aggregated-resources/$binarySourceSetPrefix"
                             )
                         )
                         task.into(
                             layout.buildDirectory.dir(
-                                "bin/${target.sourceSetPrefix}/${buildType}Executable/resources"
+                                "bin/$binarySourceSetPrefix/${buildType}Executable/resources"
                             )
                         )
                     }
                     .get()
         linkTask.finalizedBy(copyTask)
         tasks
-            .findByName("run${capitalizedBuildType}Executable${target.taskSuffix}")
+            .findByName("run${capitalizedBuildType}Executable$binaryTaskSuffix")
             ?.dependsOn(copyTask)
     }
 }
 
 private fun Project.configureLinuxPackaging(target: DesktopNativeApplicationTarget) {
     val extension = extensions.getByType(ComposeNativeApplicationExtension::class.java)
+    val binarySourceSetPrefix = target.sourceSetPrefix
+    val binaryTaskSuffix = target.taskSuffix
     val releaseExecutable =
         layout.buildDirectory.file(
             extension.binaryName.map { binary ->
-                "bin/${target.sourceSetPrefix}/releaseExecutable/$binary.kexe"
+                "bin/$binarySourceSetPrefix/releaseExecutable/$binary.kexe"
             }
         )
     val resourceDirectory =
-        layout.buildDirectory.dir("bin/${target.sourceSetPrefix}/releaseExecutable/resources")
+        layout.buildDirectory.dir("bin/$binarySourceSetPrefix/releaseExecutable/resources")
     val appDir =
         extension.distributionDirectory.dir(
             extension.applicationName.zip(extension.packageVersion) { app, version ->
@@ -821,8 +790,8 @@ private fun Project.configureLinuxPackaging(target: DesktopNativeApplicationTarg
         } else {
             extension.linuxX64RuntimeFiles
         }
-    val linkTaskName = "linkReleaseExecutable${target.taskSuffix}"
-    val copyTaskName = "copyRelease${target.taskSuffix}ExecutableResources"
+    val linkTaskName = "linkReleaseExecutable$binaryTaskSuffix"
+    val copyTaskName = "copyRelease${binaryTaskSuffix}ExecutableResources"
     val prepareTaskName = "prepare${target.taskSuffix}ReleaseAppDir"
     val prepare =
         tasks.register(prepareTaskName, PrepareLinuxAppDirTask::class.java) { task ->
@@ -869,14 +838,16 @@ private fun Project.configureLinuxPackaging(target: DesktopNativeApplicationTarg
 
 private fun Project.configureMacosPackaging(target: DesktopNativeApplicationTarget) {
     val extension = extensions.getByType(ComposeNativeApplicationExtension::class.java)
+    val binarySourceSetPrefix = target.sourceSetPrefix
+    val binaryTaskSuffix = target.taskSuffix
     val releaseExecutable =
         layout.buildDirectory.file(
             extension.binaryName.map { binary ->
-                "bin/${target.sourceSetPrefix}/releaseExecutable/$binary.kexe"
+                "bin/$binarySourceSetPrefix/releaseExecutable/$binary.kexe"
             }
         )
     val resourceDirectory =
-        layout.buildDirectory.dir("bin/${target.sourceSetPrefix}/releaseExecutable/resources")
+        layout.buildDirectory.dir("bin/$binarySourceSetPrefix/releaseExecutable/resources")
     val appBundle =
         extension.distributionDirectory.dir(
             extension.applicationName.zip(extension.packageVersion) { app, version ->
@@ -886,8 +857,8 @@ private fun Project.configureMacosPackaging(target: DesktopNativeApplicationTarg
     val runtimeFiles =
         if (target.sourceSetPrefix == "macosArm64") extension.macosArm64RuntimeFiles
         else extension.macosX64RuntimeFiles
-    val linkTaskName = "linkReleaseExecutable${target.taskSuffix}"
-    val copyTaskName = "copyRelease${target.taskSuffix}ExecutableResources"
+    val linkTaskName = "linkReleaseExecutable$binaryTaskSuffix"
+    val copyTaskName = "copyRelease${binaryTaskSuffix}ExecutableResources"
     val prepare =
         tasks.register(
             "prepare${target.taskSuffix}ReleaseAppBundle",
@@ -933,14 +904,16 @@ private fun Project.configureMacosPackaging(target: DesktopNativeApplicationTarg
 
 private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTarget) {
     val extension = extensions.getByType(ComposeNativeApplicationExtension::class.java)
+    val binarySourceSetPrefix = target.sourceSetPrefix
+    val binaryTaskSuffix = target.taskSuffix
     val releaseExecutable =
         layout.buildDirectory.file(
             extension.binaryName.map { binary ->
-                "bin/${target.sourceSetPrefix}/releaseExecutable/$binary.exe"
+                "bin/$binarySourceSetPrefix/releaseExecutable/$binary.exe"
             }
         )
     val resourceDirectory =
-        layout.buildDirectory.dir("bin/${target.sourceSetPrefix}/releaseExecutable/resources")
+        layout.buildDirectory.dir("bin/$binarySourceSetPrefix/releaseExecutable/resources")
     val distributionDirectory =
         extension.distributionDirectory.dir(
             extension.applicationName.zip(extension.packageVersion) { app, version ->
@@ -959,8 +932,8 @@ private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTa
     configureWindowsSdlLinker(target, sdl)
     val icu = configureWindowsIcuData()
     configureWindowsExecutableRuntimeCopyTasks(target, extension, sdl, icu)
-    val linkTaskName = "linkReleaseExecutable${target.taskSuffix}"
-    val copyTaskName = "copyRelease${target.taskSuffix}ExecutableResources"
+    val linkTaskName = "linkReleaseExecutable$binaryTaskSuffix"
+    val copyTaskName = "copyRelease${binaryTaskSuffix}ExecutableResources"
     val prepare =
         tasks.register(
             "prepareWindowsX64ReleaseDistribution",
@@ -1050,11 +1023,13 @@ private fun Project.configureWindowsExecutableRuntimeCopyTasks(
     sdl: org.gradle.api.tasks.TaskProvider<PrepareWindowsSdlRuntimeTask>,
     icu: FileCollection,
 ) {
+    val binarySourceSetPrefix = target.sourceSetPrefix
+    val binaryTaskSuffix = target.taskSuffix
     listOf("debug", "release").forEach { buildType ->
         val capitalizedBuildType = buildType.replaceFirstChar(Char::uppercaseChar)
-        val linkTaskName = "link${capitalizedBuildType}Executable${target.taskSuffix}"
+        val linkTaskName = "link${capitalizedBuildType}Executable$binaryTaskSuffix"
         val linkTask = tasks.findByName(linkTaskName) ?: return@forEach
-        val copyTaskName = "copy${capitalizedBuildType}${target.taskSuffix}ExecutableRuntime"
+        val copyTaskName = "copy${capitalizedBuildType}${binaryTaskSuffix}ExecutableRuntime"
         val copyTask =
             tasks.register(copyTaskName, Copy::class.java) { task ->
                 task.group = "build"
@@ -1068,7 +1043,7 @@ private fun Project.configureWindowsExecutableRuntimeCopyTasks(
                 task.from(icu)
                 task.into(
                     layout.buildDirectory.dir(
-                        "bin/${target.sourceSetPrefix}/${buildType}Executable"
+                        "bin/$binarySourceSetPrefix/${buildType}Executable"
                     )
                 )
                 task.rename { fileName ->
@@ -1083,7 +1058,7 @@ private fun Project.configureWindowsExecutableRuntimeCopyTasks(
                 }
             }
         tasks
-            .findByName("run${capitalizedBuildType}Executable${target.taskSuffix}")
+            .findByName("run${capitalizedBuildType}Executable$binaryTaskSuffix")
             ?.dependsOn(copyTask)
     }
 }
@@ -1092,6 +1067,8 @@ private fun Project.configureWindowsSdlLinker(
     target: DesktopNativeApplicationTarget,
     sdl: org.gradle.api.tasks.TaskProvider<PrepareWindowsSdlRuntimeTask>,
 ) {
+    val binarySourceSetPrefix = target.sourceSetPrefix
+    val binaryTaskSuffix = target.taskSuffix
     val libraryDirectory = sdl.get().outputDirectory.get().asFile
     val kotlin = extensions.getByName("kotlin")
     @Suppress("UNCHECKED_CAST")
@@ -1099,7 +1076,7 @@ private fun Project.configureWindowsSdlLinker(
         kotlin.javaClass.methods
             .first { it.name == "getTargets" && it.parameterCount == 0 }
             .invoke(kotlin) as NamedDomainObjectContainer<Any>
-    val nativeTarget = targets.getByName(target.sourceSetPrefix)
+    val nativeTarget = targets.getByName(binarySourceSetPrefix)
     val binaries =
         nativeTarget.javaClass.methods
             .first { it.name == "getBinaries" && it.parameterCount == 0 }
@@ -1114,7 +1091,7 @@ private fun Project.configureWindowsSdlLinker(
         linkerOpts.invoke(binary, listOf("-L${libraryDirectory.absolutePath}"))
     }
     listOf("Debug", "Release").forEach { buildType ->
-        tasks.findByName("link${buildType}Executable${target.taskSuffix}")?.dependsOn(sdl)
+        tasks.findByName("link${buildType}Executable$binaryTaskSuffix")?.dependsOn(sdl)
     }
 }
 
