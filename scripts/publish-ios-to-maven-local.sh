@@ -53,12 +53,7 @@ echo "Publishing forked Compose iOS targets as $group_prefix:*:$version"
     "-Dmaven.repo.local=$maven_repository" \
     -Pcompose.platforms=IosArm64,IosSimulatorArm64 \
     "-Pjetbrains.publication.groupPrefix=$group_prefix" \
-    "-Pjetbrains.publication.version.COMPOSE=$version" \
-    "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
-    "-Pjetbrains.publication.version.NAVIGATION_3=$version" \
-    "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
-    "-Pjetbrains.publication.version.LIFECYCLE=$version" \
-    "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
+    "-PcomposeNativeVersion=$version" \
     :mpp:publishCompleteComposeForkToMavenLocal
 
 "$compose_root/scripts/write-linux-native-root-metadata.py" \

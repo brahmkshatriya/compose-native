@@ -22,20 +22,25 @@ import org.gradle.api.services.BuildServiceParameters
 import org.jetbrains.androidx.build.JetBrainsPublication.isLibraryRegistered
 
 private const val ARGUMENT_PREFIX = "jetbrains.publication.version."
+private const val RELEASE_VERSION_PROPERTY = "composeNativeVersion"
 
-private fun Project.parseJetBrainsVersions() = JetBrainsVersions(
-    properties.keys
-        .filter { it.startsWith(ARGUMENT_PREFIX) }
-        .associate { propertyName ->
-            val library = propertyName.replace(ARGUMENT_PREFIX, "")
-            require(isLibraryRegistered(library)) {
-                "$propertyName points to a non registered library in the " +
-                    "JetBrainsPublication class"
+private fun Project.parseJetBrainsVersions(): JetBrainsVersions {
+    val releaseVersion =
+        findProperty(RELEASE_VERSION_PROPERTY)?.toString()?.takeIf(String::isNotBlank)
+    return JetBrainsVersions(
+        properties.keys
+            .filter { it.startsWith(ARGUMENT_PREFIX) }
+            .associate { propertyName ->
+                val library = propertyName.replace(ARGUMENT_PREFIX, "")
+                require(isLibraryRegistered(library)) {
+                    "$propertyName points to a non registered library in the " +
+                        "JetBrainsPublication class"
+                }
+                val version = releaseVersion ?: project.properties[propertyName] as String
+                library to version
             }
-            val version = project.properties[propertyName] as String
-            library to version
-        }
-)
+    )
+}
 
 abstract class JetBrainsVersionsService :
     BuildService<JetBrainsVersionsService.Params> {

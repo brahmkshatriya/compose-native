@@ -109,4 +109,62 @@ if [[ ! "$deployment_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
     exit 1
 fi
 echo "Uploaded Central deployment $deployment_id"
-echo "Central will validate and automatically publish this deployment asynchronously."
+
+status_url="https://central.sonatype.com/api/v1/publisher/status?id=$deployment_id"
+timeout_seconds="${CENTRAL_PUBLISH_TIMEOUT_SECONDS:-3600}"
+poll_seconds="${CENTRAL_PUBLISH_POLL_SECONDS:-15}"
+deadline=$((SECONDS + timeout_seconds))
+last_state=""
+
+while (( SECONDS < deadline )); do
+    status_json="$(
+        curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $authorization" \
+            "$status_url"
+    )"
+    deployment_state="$(
+        python3 -c 'import json,sys; print(json.load(sys.stdin).get("deploymentState", ""))' \
+            <<<"$status_json"
+    )"
+    if [[ -z "$deployment_state" ]]; then
+        echo "Central status response did not contain deploymentState" >&2
+        printf '%s\n' "$status_json" >&2
+        exit 1
+    fi
+    if [[ "$deployment_state" != "$last_state" ]]; then
+        echo "Central deployment $deployment_id: $deployment_state"
+        last_state="$deployment_state"
+    fi
+
+    case "$deployment_state" in
+        PUBLISHED)
+            echo "Central published deployment $deployment_id"
+            exit 0
+            ;;
+        FAILED)
+            echo "Central deployment $deployment_id failed validation or publication" >&2
+            python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+errors = data.get("errors")
+if errors:
+    print(json.dumps(errors, indent=2), file=sys.stderr)
+else:
+    print(json.dumps(data, indent=2), file=sys.stderr)
+' <<<"$status_json"
+            exit 1
+            ;;
+        PENDING|VALIDATING|VALIDATED|PUBLISHING)
+            sleep "$poll_seconds"
+            ;;
+        *)
+            echo "Unexpected Central deployment state: $deployment_state" >&2
+            printf '%s\n' "$status_json" >&2
+            exit 1
+            ;;
+    esac
+done
+
+echo "Timed out waiting ${timeout_seconds}s for Central deployment $deployment_id" >&2
+exit 1

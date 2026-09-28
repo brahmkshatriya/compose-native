@@ -120,11 +120,7 @@ jobs:
             "-Dmaven.repo.local=$repository" \
             "-Pcompose.platforms=$COMPOSE_PLATFORM" \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
-            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            "-PcomposeNativeVersion=$RELEASE_VERSION" \
             :mpp:publishComposeNativeToMavenLocal
 
           if [[ "$COMPOSE_PLATFORM" == 'LinuxX64' ]]; then
@@ -142,11 +138,7 @@ jobs:
               "-Dmaven.repo.local=$repository" \
               -Pcompose.platforms=Android,Desktop,Js,WasmJs,MacosX64,MacosArm64,IosArm64,IosSimulatorArm64,LinuxX64,LinuxArm64,MingwX64 \
               -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
-              "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
-              "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+              "-PcomposeNativeVersion=$RELEASE_VERSION" \
               :mpp:publishComposeForkRootsToMavenLocal \
               -x checkKotlinGradlePluginConfigurationErrors \
               --rerun-tasks
@@ -239,12 +231,7 @@ jobs:
             "-Dmaven.repo.local=$repository" \
             "-Pcompose.platforms=$compose_platforms" \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
-            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            "-PcomposeNativeVersion=$RELEASE_VERSION" \
             :mpp:publishComposeForkPlatformsToMavenLocal
 
           if [[ "$COMPOSE_PLATFORM" == 'Android' ]]; then
@@ -311,12 +298,7 @@ jobs:
             "-Dmaven.repo.local=$repository" \
             -Pcompose.platforms=Desktop \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
-            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            "-PcomposeNativeVersion=$RELEASE_VERSION" \
             :mpp:publishComposeJvmToMavenLocal
 
       - name: Export only fork publications
@@ -397,12 +379,7 @@ jobs:
             "-Dmaven.repo.local=$repository" \
             "-Pcompose.platforms=$COMPOSE_PLATFORM" \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
-            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            "-PcomposeNativeVersion=$RELEASE_VERSION" \
             :mpp:publishComposeIosToMavenLocal
 
       - name: Export only fork publications
@@ -480,12 +457,7 @@ jobs:
             "-Pcompose.platforms=$COMPOSE_PLATFORM" \
             -Pandroidx.enabled.kmp.target.platforms=-js,-wasm,-windows,-linux,-desktop,-android_native \
             -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
-            "-Pjetbrains.publication.version.COMPOSE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_3=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.NAVIGATION_EVENT=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.LIFECYCLE=$RELEASE_VERSION" \
-            "-Pjetbrains.publication.version.SAVEDSTATE=$RELEASE_VERSION" \
+            "-PcomposeNativeVersion=$RELEASE_VERSION" \
             :mpp:publishComposeMacosToMavenLocal
 
       - name: Export only fork publications
@@ -520,7 +492,7 @@ jobs:
       - ios
       - macos
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -638,6 +610,16 @@ jobs:
           group_root='release/merged-repository/dev/brahmkshatriya'
           native_skiko_group="$(sed -n 's/^compose.native.skiko.group=//p' gradle.properties | tail -n1)"
           native_skiko_version="$(sed -n 's/^compose.native.skiko.version=//p' gradle.properties | tail -n1)"
+          snapshot_dir="$(find "$group_root" -type d -name '*SNAPSHOT*' -print -quit)"
+          if [[ -n "$snapshot_dir" ]]; then
+            echo "SNAPSHOT publication directory leaked into release repository: $snapshot_dir" >&2
+            exit 1
+          fi
+          snapshot_metadata="$(find "$group_root" -type f \( -name '*.module' -o -name '*.pom' \) -exec grep -Il 'SNAPSHOT' {} + | head -n 1 || true)"
+          if [[ -n "$snapshot_metadata" ]]; then
+            echo "SNAPSHOT dependency leaked into release metadata: $snapshot_metadata" >&2
+            exit 1
+          fi
           ui_root="$group_root/compose/ui/ui/$RELEASE_VERSION/ui-$RELEASE_VERSION.module"
           test -s "$ui_root"
           test -s "$group_root/compose/ui/ui/$RELEASE_VERSION/ui-$RELEASE_VERSION.jar"

@@ -87,12 +87,7 @@ echo "Resolving native Skiko from Maven Central"
     "-Dmaven.repo.local=$maven_repository" \
     "-Pcompose.platforms=$kotlin_target" \
     "-Pjetbrains.publication.groupPrefix=$group_prefix" \
-    "-Pjetbrains.publication.version.COMPOSE=$version" \
-    "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
-    "-Pjetbrains.publication.version.NAVIGATION_3=$version" \
-    "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
-    "-Pjetbrains.publication.version.LIFECYCLE=$version" \
-    "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
+    "-PcomposeNativeVersion=$version" \
     :mpp:publishComposeNativeToMavenLocal
 
 # A single Native target produces a marker-only KMP metadata root. Add JS only while publishing
@@ -103,12 +98,7 @@ echo "Resolving native Skiko from Maven Central"
     "-Dmaven.repo.local=$maven_repository" \
     -Pcompose.platforms=LinuxX64,Js \
     "-Pjetbrains.publication.groupPrefix=$group_prefix" \
-    "-Pjetbrains.publication.version.COMPOSE=$version" \
-    "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
-    "-Pjetbrains.publication.version.NAVIGATION_3=$version" \
-    "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
-    "-Pjetbrains.publication.version.LIFECYCLE=$version" \
-    "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
+    "-PcomposeNativeVersion=$version" \
     :mpp:publishComposeForkRootsToMavenLocal
 
 metadata_args=(

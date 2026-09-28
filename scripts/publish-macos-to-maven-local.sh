@@ -71,12 +71,7 @@ for compose_platform in MacosX64 MacosArm64; do
         "-Pcompose.platforms=$compose_platform" \
         -Pandroidx.enabled.kmp.target.platforms=-js,-wasm,-windows,-linux,-desktop,-android_native \
         "-Pjetbrains.publication.groupPrefix=$group_prefix" \
-        "-Pjetbrains.publication.version.COMPOSE=$version" \
-        "-Pjetbrains.publication.version.COMPOSE_MATERIAL3=$version" \
-        "-Pjetbrains.publication.version.NAVIGATION_3=$version" \
-        "-Pjetbrains.publication.version.NAVIGATION_EVENT=$version" \
-        "-Pjetbrains.publication.version.LIFECYCLE=$version" \
-        "-Pjetbrains.publication.version.SAVEDSTATE=$version" \
+        "-PcomposeNativeVersion=$version" \
         :mpp:publishComposeMacosToMavenLocal
 done
 
