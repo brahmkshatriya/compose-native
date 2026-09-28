@@ -533,11 +533,36 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
 
       - uses: actions/download-artifact@v4
-        name: Merge platform Maven repositories
+        name: Download platform Maven repositories
         with:
           pattern: compose-native-repo-*-${{ needs.prepare.outputs.version }}
-          path: release/merged-repository
-          merge-multiple: true
+          path: release/platform-repositories
+
+      - name: Merge platform Maven repositories
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          sources='release/platform-repositories'
+          destination='release/merged-repository'
+          js_repository="$sources/compose-native-repo-js-$RELEASE_VERSION"
+          test -d "$js_repository"
+          mkdir -p "$destination"
+
+          # Some platform builds intentionally configure an additional target to preserve the
+          # right KMP source-set topology. In particular, the Android shard also emits JS
+          # publications. Extracting all artifacts concurrently into one directory lets
+          # download-artifact race on those duplicate paths and can produce hybrid/corrupt files.
+          # Merge sequentially instead, then apply the dedicated JS shard last so its publications
+          # deterministically replace the incidental Android copies.
+          for repository in "$sources"/compose-native-repo-*-$RELEASE_VERSION; do
+            if [[ "$repository" == "$js_repository" ]]; then
+              continue
+            fi
+            cp -a "$repository/." "$destination/"
+          done
+          cp -a "$js_repository/." "$destination/"
 
       - name: Restore Gradle properties and signing key
         shell: bash
