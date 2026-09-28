@@ -854,8 +854,25 @@ jobs:
           done < <(find "$group_root" -path "*-desktop/$RELEASE_VERSION/*.module" -print0)
           test "$jvm_skiko_dependencies" -gt 0
           jvm_upstream_compose_dependencies=0
+          material3_desktop="$group_root/compose/material3/material3-desktop/$RELEASE_VERSION/material3-desktop-$RELEASE_VERSION.module"
           while IFS= read -r -d '' module_file; do
-            if jq -e '
+            if [[ "$module_file" == "$material3_desktop" ]]; then
+              if jq -e '
+                .variants[] |
+                (.dependencies[]?, .dependencyConstraints[]?) |
+                select(
+                  (.group // "") | startswith("dev.brahmkshatriya.compose.") or
+                    startswith("dev.brahmkshatriya.androidx.")
+                ) |
+                select(
+                  .group != "dev.brahmkshatriya.compose.foundation" or
+                    .module != "foundation"
+                )
+              ' "$module_file" >/dev/null; then
+                echo "Unexpected fork-internal JVM dependency coordinate leaked into $module_file" >&2
+                exit 1
+              fi
+            elif jq -e '
               .variants[] |
               (.dependencies[]?, .dependencyConstraints[]?) |
               select(
@@ -875,12 +892,22 @@ jobs:
             fi
           done < <(find "$group_root" -path "*-desktop/$RELEASE_VERSION/*.module" -print0)
           test "$jvm_upstream_compose_dependencies" -gt 0
-          material3_desktop="$group_root/compose/material3/material3-desktop/$RELEASE_VERSION/material3-desktop-$RELEASE_VERSION.module"
-          jq -e '
+          if ! jq -e --arg version "$RELEASE_VERSION" '
             .variants[] |
             (.dependencies[]?, .dependencyConstraints[]?) |
-            select(.group == "org.jetbrains.compose.foundation" and .module == "foundation")
-          ' "$material3_desktop" >/dev/null
+            select(
+              .group == "dev.brahmkshatriya.compose.foundation" and
+                .module == "foundation"
+            ) |
+            select(
+              [.version.requires?, .version.strictly?, .version.prefers?] |
+              map(select(. != null)) |
+              any(. == $version)
+            )
+          ' "$material3_desktop" >/dev/null; then
+            echo "Expected Material3 desktop to retain the fork Foundation dependency" >&2
+            exit 1
+          fi
           while IFS= read -r -d '' module_file; do
             if jq -e '
               .variants[] |
