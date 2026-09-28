@@ -7,16 +7,18 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 
 | Role | Version |
 | --- | --- |
-| Fork artifacts | `1.13.0-alpha08` |
+| Fork artifacts | release tag (`VERSION`) |
 | JetBrains Compose upstream | `1.13.0-alpha01` |
 | Maven Central Material 3 upstream | `1.13.0-alpha01` |
 | Official Skiko (JVM/web/iOS) | `0.152.0-alpha02` |
 | Native Skiko fork | `0.153.1` |
 | Kotlin | `2.3.20` |
 
-The machine-readable values live in `gradle.properties`. Material 3 is pinned separately because
-it has an independent release train. Keep the Gradle plugin's native Skiko fallback synchronized
-with `compose.native.skiko.version`.
+The release version comes from the Git tag and is passed into every publication job. Repository
+defaults use `0.0.0-SNAPSHOT` for development builds, so publishing a new release does not require
+a version-bump commit. Upstream compatibility pins live in `gradle.properties`; Material 3 is
+pinned separately because it has an independent release train. Keep the Gradle plugin's native
+Skiko fallback synchronized with `compose.native.skiko.version`.
 
 ## Linux x64 coordinates
 
@@ -45,6 +47,9 @@ consumes the published fragment through KGP's normal metadata and cinterop resol
 consumer-side KLIB rewriting or synthetic dependency coordinate is involved.
 
 ## Local publication
+
+The local scripts default to `0.0.0-SNAPSHOT`. Pass `VERSION` as the first argument when you
+want to reproduce the coordinates of a tagged release locally.
 
 Run:
 
@@ -127,7 +132,7 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.13.0-alpha01"
-    id("dev.brahmkshatriya.compose") version "1.13.0-alpha08"
+    id("dev.brahmkshatriya.compose") version "VERSION"
 }
 ```
 
@@ -139,15 +144,15 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha08"
+                "dev.brahmkshatriya.compose.foundation:foundation:VERSION"
             )
             implementation(
-                "dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha08"
+                "dev.brahmkshatriya.compose.material3:material3:VERSION"
             )
         }
         desktopNativeMain.dependencies {
             implementation(
-                "dev.brahmkshatriya.compose.desktop:desktop-native:1.13.0-alpha08"
+                "dev.brahmkshatriya.compose.desktop:desktop-native:VERSION"
             )
         }
     }
@@ -197,17 +202,18 @@ Configure these GitHub Actions repository secrets:
   with the CI key path.
 - `GPG_SECRET_KEY_RING_BASE64`: the base64-encoded secret key ring file.
 
-Create and push a version tag that exactly matches both
-`jetbrains.publication.version.COMPOSE` and the Gradle plugin version:
+The Git tag is the release-version authority. Create and push a signed version tag; the workflow
+passes that tag version to every fork publication and to the Gradle plugin:
 
 ```bash
-git tag 1.13.0-alpha08
-git push origin 1.13.0-alpha08
+VERSION=<release-version>
+git tag -s "$VERSION" -m "Release $VERSION"
+git push origin "$VERSION"
 ```
 
 The deployment includes both the implementation artifact
-`dev.brahmkshatriya.compose:compose-gradle-plugin:1.13.0-alpha08` and the marker
-`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:1.13.0-alpha08`.
+`dev.brahmkshatriya.compose:compose-gradle-plugin:VERSION` and the marker
+`dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:VERSION`.
 Native Skiko `0.153.1` must be published to Maven Central before the Compose release workflow is
 started. Local macOS publication can instead resolve the same coordinate from
 `MAVEN_LOCAL_REPOSITORY`. Do not reuse a published tag version: Central releases are immutable.

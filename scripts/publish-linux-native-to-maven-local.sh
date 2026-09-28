@@ -131,6 +131,7 @@ echo "Publishing dev.brahmkshatriya.compose Gradle plugin"
     -p "$compose_root/gradle-plugin" \
     --no-configuration-cache \
     "-Dmaven.repo.local=$maven_repository" \
+    "-PcomposeNativeVersion=$version" \
     publishToMavenLocal
 
 echo "Linux-native Compose is available in $maven_repository"

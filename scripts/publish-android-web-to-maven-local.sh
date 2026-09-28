@@ -91,6 +91,7 @@ echo "Publishing forked Compose Android, JS, and Wasm targets as $group_prefix:*
     -p "$compose_root/gradle-plugin" \
     --no-configuration-cache \
     "-Dmaven.repo.local=$maven_repository" \
+    "-PcomposeNativeVersion=$version" \
     publishToMavenLocal
 
 echo "Android and web Compose targets are available in $maven_repository"

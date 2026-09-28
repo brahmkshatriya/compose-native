@@ -35,11 +35,18 @@ plugins {
     alias(libs.plugins.atomicFu)
 }
 
-def usesOfficialComposeDependencies = providers.gradleProperty("compose.platforms").getOrElse("") == "Desktop"
 def upstreamComposeVersion = providers.gradleProperty("compose.native.upstream.version.COMPOSE").get()
 def upstreamMaterial3Version = providers.gradleProperty("compose.native.upstream.version.COMPOSE_MATERIAL3").get()
+def publishesForkRoots = gradle.startParameter.taskNames.any {
+    it.tokenize(":").last() == "publishComposeForkRootsToMavenLocal"
+}
 def composeDependency = { String projectPath ->
-    if (!usesOfficialComposeDependencies) return project(projectPath)
+    // Aggregate root publication compiles common metadata against the in-tree graph. The
+    // metadata writer rewrites these root dependencies to upstream coordinates afterwards.
+    if (publishesForkRoots) return project(projectPath)
+    if (projectPath in [":compose:foundation:foundation", ":compose:material3:material3"]) {
+        return project(projectPath)
+    }
     def parts = projectPath.tokenize(":")
     if (parts.size() < 3 || parts[0] != "compose") {
         throw new GradleException("Unsupported Compose project dependency: $projectPath")
@@ -48,6 +55,22 @@ def composeDependency = { String projectPath ->
     def module = parts[-1]
     def version = family == "material3" ? upstreamMaterial3Version : upstreamComposeVersion
     return "org.jetbrains.compose.$family:$module:$version"
+}
+
+
+configurations.configureEach { configuration ->
+    configuration.resolutionStrategy.dependencySubstitution { substitutions ->
+        [
+            "org.jetbrains.compose.foundation:foundation",
+            "androidx.compose.foundation:foundation",
+            "androidx.compose.foundation:foundation-android",
+        ].each { coordinate ->
+            substitutions
+                .substitute(substitutions.module(coordinate))
+                .using(substitutions.project(":compose:foundation:foundation"))
+                .because("Keep the fork Material3 binary on the fork Foundation root")
+        }
+    }
 }
 
 

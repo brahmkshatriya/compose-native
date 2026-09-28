@@ -79,6 +79,7 @@ echo "Publishing forked Compose iOS targets as $group_prefix:*:$version"
     -p "$compose_root/gradle-plugin" \
     --no-configuration-cache \
     "-Dmaven.repo.local=$maven_repository" \
+    "-PcomposeNativeVersion=$version" \
     publishToMavenLocal
 
 echo "iOS Compose targets are available in $maven_repository"

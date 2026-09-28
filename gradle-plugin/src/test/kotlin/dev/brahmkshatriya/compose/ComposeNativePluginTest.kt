@@ -165,6 +165,62 @@ class ComposeNativePluginTest {
     }
 
     @Test
+    fun classifiesOnlyNonDesktopForkLeafModulesForMetadataRepair() {
+        assertEquals(
+            NonDesktopForkPlatformRouting.Android,
+            nonDesktopForkPlatformRoutingOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation-android",
+            ),
+        )
+        assertEquals(
+            NonDesktopForkPlatformRouting.Jvm,
+            nonDesktopForkPlatformRoutingOrNull(
+                "dev.brahmkshatriya.compose.material3",
+                "material3-desktop",
+            ),
+        )
+        assertEquals(
+            NonDesktopForkPlatformRouting.Web,
+            nonDesktopForkPlatformRoutingOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation-wasm-js",
+            ),
+        )
+        assertEquals(
+            NonDesktopForkPlatformRouting.Native,
+            nonDesktopForkPlatformRoutingOrNull(
+                "dev.brahmkshatriya.compose.material3",
+                "material3-iosarm64",
+            ),
+        )
+        assertNull(
+            nonDesktopForkPlatformRoutingOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation-linuxx64",
+            )
+        )
+        assertNull(
+            nonDesktopForkPlatformRoutingOrNull(
+                "dev.brahmkshatriya.compose.material3",
+                "material3-macosarm64",
+            )
+        )
+        assertNull(
+            nonDesktopForkPlatformRoutingOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation",
+            )
+        )
+        assertNull(
+            nonDesktopForkPlatformRoutingOrNull(
+                "dev.brahmkshatriya.compose.ui",
+                "ui-iosarm64",
+            )
+        )
+    }
+
+    @Test
     fun keepsOnlyCrossPlatformForkRootsOnNonDesktopTargets() {
         assertEquals(
             true,
@@ -220,6 +276,56 @@ class ComposeNativePluginTest {
                 "ui",
                 useNativeRedirects = true,
             ),
+        )
+        assertEquals(
+            "org.jetbrains.compose.ui:ui:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.ui",
+                "ui",
+                useNativeRedirects = false,
+                useJvmRedirects = true,
+            ),
+        )
+        assertEquals(
+            "org.jetbrains.compose.ui:ui-uikit:1.13.0-alpha01",
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.ui",
+                "ui-uikit",
+                useNativeRedirects = false,
+                useMetadataRedirects = true,
+            ),
+        )
+        assertNull(
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation",
+                useNativeRedirects = false,
+                useMetadataRedirects = true,
+            )
+        )
+        assertNull(
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.material3",
+                "material3",
+                useNativeRedirects = false,
+                useMetadataRedirects = true,
+            )
+        )
+        assertNull(
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.foundation",
+                "foundation",
+                useNativeRedirects = false,
+                useJvmRedirects = true,
+            )
+        )
+        assertNull(
+            nonDesktopForkSupportCoordinateOrNull(
+                "dev.brahmkshatriya.compose.material3",
+                "material3",
+                useNativeRedirects = false,
+                useJvmRedirects = true,
+            )
         )
         assertEquals(
             "org.jetbrains.compose.animation:animation:1.13.0-alpha01",
@@ -312,6 +418,7 @@ class ComposeNativePluginTest {
             ),
         )
     }
+
 
     @Test
     fun identifiesKotlinMetadataCompilationTasks() {
@@ -688,6 +795,25 @@ class ComposeNativePluginTest {
             composeForkCoordinateFor(
                 "org.jetbrains.compose.ui",
                 "ui-graphics",
+                "1.12.10-alpha02",
+                useDesktopNativeFork = true,
+                includeAndroidx = false,
+            ),
+        )
+        assertNull(
+            composeForkCoordinateFor(
+                "org.jetbrains.compose.ui",
+                "ui-uikit",
+                "1.12.10-alpha02",
+                useDesktopNativeFork = true,
+                includeAndroidx = false,
+            ),
+        )
+        assertEquals(
+            "dev.brahmkshatriya.compose.ui:ui-skiko:1.12.10-alpha02",
+            composeForkCoordinateFor(
+                "org.jetbrains.compose.ui",
+                "ui-skiko",
                 "1.12.10-alpha02",
                 useDesktopNativeFork = true,
                 includeAndroidx = false,

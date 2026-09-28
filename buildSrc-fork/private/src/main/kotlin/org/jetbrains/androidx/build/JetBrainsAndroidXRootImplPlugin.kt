@@ -36,6 +36,7 @@ constructor(val componentFactory: SoftwareComponentFactory) : Plugin<Project> {
             // androidx.*
             subproject.configureJetBrainsCapabilityResolution()
             subproject.configureComposeNativeSkikoResolution()
+            subproject.configureDesktopNativeComposeSourceBuiltResolution()
             subproject.configureMacosSourceBuiltCompatibilityResolution()
 
             subproject.tasks.configureEach {
@@ -67,6 +68,63 @@ constructor(val componentFactory: SoftwareComponentFactory) : Plugin<Project> {
                 // version, since it has this fix - https://github.com/socketio/socket.io/pull/5344
                 // Then remove the workarounds (delays) in our karma configs. Search in the
                 // config.js files for 3413540
+            }
+        }
+    }
+}
+
+private fun Project.configureDesktopNativeComposeSourceBuiltResolution() {
+    val sourceBuiltComposeModules =
+        mapOf(
+            "org.jetbrains.compose.animation:animation" to ":compose:animation:animation",
+            "org.jetbrains.compose.animation:animation-core" to ":compose:animation:animation-core",
+            "org.jetbrains.compose.animation:animation-graphics" to
+                ":compose:animation:animation-graphics",
+            "org.jetbrains.compose.components:components-resources" to
+                ":compose:components:components-resources",
+            "org.jetbrains.compose.foundation:foundation" to ":compose:foundation:foundation",
+            "org.jetbrains.compose.foundation:foundation-layout" to
+                ":compose:foundation:foundation-layout",
+            "org.jetbrains.compose.material:material" to ":compose:material:material",
+            "org.jetbrains.compose.material:material-ripple" to
+                ":compose:material:material-ripple",
+            "org.jetbrains.compose.material3:material3" to ":compose:material3:material3",
+            "org.jetbrains.compose.material3:material3-ripple" to
+                ":compose:material3:material3-ripple",
+            "org.jetbrains.compose.runtime:runtime" to ":compose:runtime:runtime",
+            "org.jetbrains.compose.runtime:runtime-annotation" to
+                ":compose:runtime:runtime-annotation",
+            "org.jetbrains.compose.runtime:runtime-retain" to ":compose:runtime:runtime-retain",
+            "org.jetbrains.compose.runtime:runtime-saveable" to
+                ":compose:runtime:runtime-saveable",
+            "org.jetbrains.compose.ui:ui" to ":compose:ui:ui",
+            "org.jetbrains.compose.ui:ui-backhandler" to ":compose:ui:ui-backhandler",
+            "org.jetbrains.compose.ui:ui-geometry" to ":compose:ui:ui-geometry",
+            "org.jetbrains.compose.ui:ui-graphics" to ":compose:ui:ui-graphics",
+            "org.jetbrains.compose.ui:ui-skiko" to ":compose:ui:ui-skiko",
+            "org.jetbrains.compose.ui:ui-text" to ":compose:ui:ui-text",
+            "org.jetbrains.compose.ui:ui-unit" to ":compose:ui:ui-unit",
+            "org.jetbrains.compose.ui:ui-util" to ":compose:ui:ui-util",
+        )
+
+    configurations.configureEach { configuration ->
+        val lowerName = configuration.name.lowercase()
+        val desktopNativeTarget =
+            "linuxx64" in lowerName ||
+                "linuxarm64" in lowerName ||
+                "mingwx64" in lowerName ||
+                "macosx64" in lowerName ||
+                (isJetBrainsMacosNativeOnlyPublication() && "macosarm64" in lowerName)
+        if (!desktopNativeTarget) return@configureEach
+
+        configuration.resolutionStrategy.dependencySubstitution { substitutions ->
+            sourceBuiltComposeModules.forEach { (coordinate, projectPath) ->
+                substitutions
+                    .substitute(substitutions.module(coordinate))
+                    .using(substitutions.project(projectPath))
+                    .because(
+                        "Compile desktop Kotlin/Native against the in-tree Compose Native graph"
+                    )
             }
         }
     }

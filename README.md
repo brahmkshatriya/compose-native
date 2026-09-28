@@ -1,5 +1,7 @@
 # Compose Native
 
+[![Maven Central Version](https://img.shields.io/maven-central/v/dev.brahmkshatriya.compose/compose-gradle-plugin?label=Maven%20Central)](https://central.sonatype.com/artifact/dev.brahmkshatriya.compose/compose-gradle-plugin)
+
 Compose Multiplatform for Linux and Windows Kotlin/Native. It produces native executables with no
 JVM requirement and can be added to an existing multiplatform project without replacing official
 Compose on unsupported targets.
@@ -27,11 +29,11 @@ plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
     id("org.jetbrains.compose") version "1.13.0-alpha01"
-    id("dev.brahmkshatriya.compose") version "1.13.0-alpha08"
+    id("dev.brahmkshatriya.compose") version "VERSION"
 }
 ```
 
-Then choose how broadly you want to use the fork.
+Replace `VERSION` with the version shown by the Maven Central badge above, then choose how broadly you want to use the fork.
 
 ### Native only
 
@@ -39,7 +41,7 @@ Use official Compose in `commonMain` and the fork only in `desktopNativeMain`. A
 JS, and Wasm continue using official Compose.
 
 ```kotlin
-val composeNativeVersion = "1.13.0-alpha08"
+val composeNativeVersion = "VERSION"
 
 kotlin {
     desktopNative {
@@ -77,7 +79,7 @@ Android, JVM desktop, JS, Wasm JS, and iOS. On macOS, Linux, and Windows Kotlin/
 fork version selects the larger native closure required by the native desktop backend.
 
 ```kotlin
-val composeNativeVersion = "1.13.0-alpha08"
+val composeNativeVersion = "VERSION"
 
 kotlin {
     desktopNative {
@@ -248,7 +250,7 @@ notarization.
 
 | Component | Version |
 | --- | --- |
-| Compose Native plugin / fork | `1.13.0-alpha08` |
+| Compose Native Gradle plugin / fork artifacts | Maven Central badge above |
 | JetBrains Compose plugin | `1.13.0-alpha01` |
 | Kotlin / Compose compiler | `2.3.20` |
 | Native Skiko | `0.153.1` |

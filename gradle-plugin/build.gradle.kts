@@ -8,7 +8,11 @@ plugins {
 }
 
 group = "dev.brahmkshatriya.compose"
-version = "1.13.0-alpha08"
+version =
+    providers.gradleProperty("composeNativeVersion")
+        .orElse(providers.environmentVariable("COMPOSE_NATIVE_VERSION"))
+        .orElse("0.0.0-SNAPSHOT")
+        .get()
 
 kotlin {
     jvmToolchain(21)

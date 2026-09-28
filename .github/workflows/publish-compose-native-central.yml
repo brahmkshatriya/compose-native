@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Match tag to the publication contract
+      - name: Read release version from tag
         id: version
         shell: bash
         run: |
@@ -30,16 +30,6 @@ jobs:
           version="${GITHUB_REF_NAME#v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
             echo "Tag must be a Maven version such as 1.12.10-alpha05 or v1.12.10-alpha05" >&2
-            exit 1
-          fi
-          contract_version="$(sed -n 's/^jetbrains.publication.version.COMPOSE=//p' gradle.properties | tail -n1)"
-          plugin_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' gradle-plugin/build.gradle.kts | head -n1)"
-          if [[ "$version" != "$contract_version" ]]; then
-            echo "Tag $version does not match Compose $contract_version and plugin $plugin_version" >&2
-            exit 1
-          fi
-          if [[ "$version" != "$plugin_version" ]]; then
-            echo "Tag $version does not match Compose $contract_version and plugin $plugin_version" >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -611,6 +601,7 @@ jobs:
             --stacktrace \
             --no-configuration-cache \
             "-Dmaven.repo.local=$GITHUB_WORKSPACE/release/merged-repository" \
+            "-PcomposeNativeVersion=$RELEASE_VERSION" \
             publishToMavenLocal
 
       - name: Verify merged platform set

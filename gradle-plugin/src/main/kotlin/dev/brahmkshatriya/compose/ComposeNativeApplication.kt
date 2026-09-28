@@ -304,6 +304,35 @@ abstract class PrepareWindowsSdlRuntimeTask : DefaultTask() {
     }
 }
 
+@DisableCachingByDefault(
+    because = "Copies runtime DLLs from the Kotlin/Native MinGW toolchain after it is downloaded"
+)
+abstract class PrepareWindowsCxxRuntimeTask : DefaultTask() {
+    @get:Input abstract val konanDataDirectory: Property<String>
+    @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun prepare() {
+        val output = outputDirectory.get().asFile
+        output.deleteRecursively()
+        output.mkdirs()
+
+        val runtimeFiles = windowsCxxRuntimeFiles(File(konanDataDirectory.get()))
+        val available = runtimeFiles.map(File::getName).toSet()
+        val missing = WINDOWS_CXX_RUNTIME_NAMES.filterNot(available::contains)
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Could not locate Kotlin/Native MinGW runtime DLLs: " +
+                    missing.joinToString() +
+                    ". Expected them under ${konanDataDirectory.get()}."
+            )
+        }
+        runtimeFiles.forEach { source ->
+            source.copyTo(output.resolve(source.name), overwrite = true)
+        }
+    }
+}
+
 @DisableCachingByDefault(because = "Assembles a platform-specific Windows distribution")
 abstract class PrepareWindowsDistributionTask : DefaultTask() {
     @get:Input abstract val executableName: Property<String>
@@ -658,7 +687,6 @@ internal fun Project.createComposeNativeApplicationExtension() {
             windowsSdlSha256.convention(DEFAULT_WINDOWS_SDL_SHA256)
             windowsWixExecutable.convention(providers.environmentVariable("COMPOSE_WINDOWS_WIX"))
             windowsNsisExecutable.convention(providers.environmentVariable("COMPOSE_WINDOWS_NSIS"))
-            windowsX64RuntimeFiles.from(defaultWindowsCxxRuntimeFiles())
         }
 }
 
@@ -929,11 +957,25 @@ private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTa
                 layout.buildDirectory.dir("composeNativeApplication/windowsX64/sdl")
             )
         }
+    val cxxRuntime =
+        tasks.register(
+            "prepareWindowsX64CxxRuntime",
+            PrepareWindowsCxxRuntimeTask::class.java,
+        ) { task ->
+            task.konanDataDirectory.set(
+                providers.environmentVariable("KONAN_DATA_DIR")
+                    .orElse(providers.systemProperty("user.home").map { "$it/.konan" })
+            )
+            task.outputDirectory.set(
+                layout.buildDirectory.dir("composeNativeApplication/windowsX64/cxxRuntime")
+            )
+        }
     configureWindowsSdlLinker(target, sdl)
     val icu = configureWindowsIcuData()
-    configureWindowsExecutableRuntimeCopyTasks(target, extension, sdl, icu)
+    configureWindowsExecutableRuntimeCopyTasks(target, extension, sdl, cxxRuntime, icu)
     val linkTaskName = "linkReleaseExecutable$binaryTaskSuffix"
     val copyTaskName = "copyRelease${binaryTaskSuffix}ExecutableResources"
+    cxxRuntime.configure { task -> task.mustRunAfter(linkTaskName) }
     val prepare =
         tasks.register(
             "prepareWindowsX64ReleaseDistribution",
@@ -942,6 +984,7 @@ private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTa
             task.group = "distribution"
             task.description = "Assembles the Windows x64 release distribution."
             task.dependsOn(linkTaskName)
+            task.dependsOn(cxxRuntime)
             if (extension.bundleSdl.get()) task.dependsOn(sdl)
             if (tasks.findByName(copyTaskName) != null) task.dependsOn(copyTaskName)
             task.executableName.set(extension.executableName)
@@ -950,6 +993,7 @@ private fun Project.configureWindowsPackaging(target: DesktopNativeApplicationTa
                 task.resourceDirectory.set(resourceDirectory)
             task.iconFile.set(extension.iconFile)
             task.runtimeFiles.from(extension.windowsX64RuntimeFiles)
+            task.runtimeFiles.from(cxxRuntime.flatMap { it.outputDirectory })
             if (extension.bundleSdl.get()) {
                 task.runtimeFiles.from(sdl.map { it.outputDirectory.file("SDL3.dll") })
                 task.runtimeFiles.from(sdl.map { it.outputDirectory.file("SDL3-LICENSE.txt") })
@@ -1021,6 +1065,7 @@ private fun Project.configureWindowsExecutableRuntimeCopyTasks(
     target: DesktopNativeApplicationTarget,
     extension: ComposeNativeApplicationExtension,
     sdl: org.gradle.api.tasks.TaskProvider<PrepareWindowsSdlRuntimeTask>,
+    cxxRuntime: org.gradle.api.tasks.TaskProvider<PrepareWindowsCxxRuntimeTask>,
     icu: FileCollection,
 ) {
     val binarySourceSetPrefix = target.sourceSetPrefix
@@ -1029,6 +1074,7 @@ private fun Project.configureWindowsExecutableRuntimeCopyTasks(
         val capitalizedBuildType = buildType.replaceFirstChar(Char::uppercaseChar)
         val linkTaskName = "link${capitalizedBuildType}Executable$binaryTaskSuffix"
         val linkTask = tasks.findByName(linkTaskName) ?: return@forEach
+        cxxRuntime.configure { runtimeTask -> runtimeTask.mustRunAfter(linkTask) }
         val copyTaskName = "copy${capitalizedBuildType}${binaryTaskSuffix}ExecutableRuntime"
         val copyTask =
             tasks.register(copyTaskName, Copy::class.java) { task ->
@@ -1036,7 +1082,9 @@ private fun Project.configureWindowsExecutableRuntimeCopyTasks(
                 task.description =
                     "Stages the ${target.displayName} $buildType executable runtime files."
                 task.dependsOn(linkTask)
+                task.dependsOn(cxxRuntime)
                 task.from(extension.windowsX64RuntimeFiles)
+                task.from(cxxRuntime.flatMap { it.outputDirectory })
                 if (extension.bundleSdl.get()) {
                     task.from(sdl.map { it.outputDirectory.file("SDL3.dll") })
                 }
@@ -1461,16 +1509,13 @@ private fun Project.configureSingleMacosPackagingAliases(
     }
 }
 
-private fun Project.defaultWindowsCxxRuntimeFiles() =
-    providers.provider {
-        val konanRoot =
-            providers.environmentVariable("KONAN_DATA_DIR").orNull?.takeIf(String::isNotBlank)
-                ?: "${System.getProperty("user.home")}/.konan"
-        val bin = File(konanRoot, "dependencies/msys2-mingw-w64-x86_64-2/bin")
-        listOf("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll")
-            .map(bin::resolve)
-            .filter(File::isFile)
-    }
+internal fun windowsCxxRuntimeFiles(konanRoot: File): List<File> {
+    val bin = File(konanRoot, "dependencies/msys2-mingw-w64-x86_64-2/bin")
+    return WINDOWS_CXX_RUNTIME_NAMES.map(bin::resolve).filter(File::isFile)
+}
+
+private val WINDOWS_CXX_RUNTIME_NAMES =
+    listOf("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll")
 
 private fun copyRuntimeFiles(files: Set<File>, destination: File) {
     files.forEach { source ->

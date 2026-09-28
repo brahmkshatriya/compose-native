@@ -76,6 +76,7 @@ echo "Publishing forked Compose JVM targets as $group_prefix:*:$version"
     -p "$compose_root/gradle-plugin" \
     --no-configuration-cache \
     "-Dmaven.repo.local=$maven_repository" \
+    "-PcomposeNativeVersion=$version" \
     publishToMavenLocal
 
 echo "JVM Compose targets are available in $maven_repository"

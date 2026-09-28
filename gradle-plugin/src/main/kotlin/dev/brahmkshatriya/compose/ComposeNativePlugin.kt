@@ -26,6 +26,7 @@ class ComposeNativePlugin : Plugin<Project> {
         project.configureMetadataCompilation()
         project.configureIdeDependencyResolution()
         project.configureSkikoCapabilityResolution()
+        project.configureNonDesktopForkPlatformMetadata()
         project.configureNonDesktopForkSupportRouting()
         project.configureAndroidApplicationForkSupportRouting()
         project.configureDependencySubstitutions()
@@ -33,18 +34,85 @@ class ComposeNativePlugin : Plugin<Project> {
     }
 }
 
+private fun Project.configureNonDesktopForkPlatformMetadata() {
+    val extraProperties = extensions.extraProperties
+    if (extraProperties.has(NON_DESKTOP_FORK_PLATFORM_METADATA_ROUTING_MARKER)) return
+    extraProperties.set(NON_DESKTOP_FORK_PLATFORM_METADATA_ROUTING_MARKER, true)
+
+    dependencies.components.all { details ->
+        val routing =
+            nonDesktopForkPlatformRoutingOrNull(
+                group = details.id.group,
+                module = details.id.name,
+            ) ?: return@all
+
+        details.allVariants { variant ->
+            variant.withDependencies { dependencies ->
+                val replacements =
+                    dependencies.mapNotNull { dependency ->
+                        val coordinate =
+                            nonDesktopForkSupportCoordinateOrNull(
+                                group = dependency.group,
+                                module = dependency.name,
+                                useNativeRedirects = routing == NonDesktopForkPlatformRouting.Native,
+                                useWebRedirects = routing == NonDesktopForkPlatformRouting.Web,
+                                useJvmRedirects = routing == NonDesktopForkPlatformRouting.Jvm,
+                            )
+                        coordinate?.let { dependency to it }
+                    }
+                replacements.forEach { (dependency, coordinate) ->
+                    dependencies.remove(dependency)
+                    dependencies.add(coordinate)
+                }
+            }
+        }
+    }
+}
+
+internal enum class NonDesktopForkPlatformRouting {
+    Android,
+    Native,
+    Web,
+    Jvm,
+}
+
+internal fun nonDesktopForkPlatformRoutingOrNull(
+    group: String,
+    module: String,
+): NonDesktopForkPlatformRouting? {
+    val family =
+        when (group) {
+            "${FORK_COMPOSE_GROUP_PREFIX}foundation" -> "foundation"
+            "${FORK_COMPOSE_GROUP_PREFIX}material3" -> "material3"
+            else -> return null
+        }
+    if (!module.startsWith("$family-")) return null
+    val suffix = module.removePrefix("$family-").lowercase()
+    return when {
+        suffix == "android" -> NonDesktopForkPlatformRouting.Android
+        suffix == "desktop" || suffix == "jvm" -> NonDesktopForkPlatformRouting.Jvm
+        suffix == "js" || suffix == "wasm-js" -> NonDesktopForkPlatformRouting.Web
+        suffix.startsWith("ios") ||
+            suffix.startsWith("watchos") ||
+            suffix.startsWith("tvos") -> NonDesktopForkPlatformRouting.Native
+        else -> null
+    }
+}
+
 private fun Project.configureNonDesktopForkSupportRouting() {
     configurations.configureEach { configuration ->
-        val usesNativeOverlay = configuration.name.usesNativeOverlay()
-        val isNonDesktopNative =
-            !usesNativeOverlay && configuration.name.usesRedirectedNativeTarget()
+        if (configuration.name.usesNativeOverlay()) return@configureEach
+
+        val isNonDesktopNative = configuration.name.usesRedirectedNativeTarget()
         val isWeb = configuration.name.usesRedirectedWebTarget()
         val isAndroid = configuration.name.isAndroidConfiguration()
-        if (!isNonDesktopNative && !isWeb && !isAndroid) return@configureEach
+        val isJvm = configuration.name.usesRedirectedJvmTarget()
 
         configuration.configureOfficialForkSupportRouting(
             useNativeRedirects = isNonDesktopNative,
             useWebRedirects = isWeb,
+            useJvmRedirects = isJvm,
+            useMetadataRedirects = !isNonDesktopNative && !isWeb && !isAndroid && !isJvm,
         )
     }
 }
@@ -68,6 +136,8 @@ private fun Project.configureAndroidApplicationForkSupportRouting() {
 private fun org.gradle.api.artifacts.Configuration.configureOfficialForkSupportRouting(
     useNativeRedirects: Boolean,
     useWebRedirects: Boolean = false,
+    useJvmRedirects: Boolean = false,
+    useMetadataRedirects: Boolean = false,
 ) {
     resolutionStrategy.eachDependency { details ->
         val coordinate =
@@ -76,6 +146,8 @@ private fun org.gradle.api.artifacts.Configuration.configureOfficialForkSupportR
                 module = details.requested.name,
                 useNativeRedirects = useNativeRedirects,
                 useWebRedirects = useWebRedirects,
+                useJvmRedirects = useJvmRedirects,
+                useMetadataRedirects = useMetadataRedirects,
             )
         if (coordinate != null) {
             details.useTarget(coordinate)
@@ -91,6 +163,8 @@ private fun org.gradle.api.artifacts.Configuration.configureOfficialForkSupportR
                     module = selector.module,
                     useNativeRedirects = useNativeRedirects,
                     useWebRedirects = useWebRedirects,
+                    useJvmRedirects = useJvmRedirects,
+                    useMetadataRedirects = useMetadataRedirects,
                 )
             if (coordinate != null) details.useTarget(coordinate)
         }
@@ -102,6 +176,8 @@ internal fun nonDesktopForkSupportCoordinateOrNull(
     module: String,
     useNativeRedirects: Boolean,
     useWebRedirects: Boolean = false,
+    useJvmRedirects: Boolean = false,
+    useMetadataRedirects: Boolean = false,
 ): String? {
     if (isCrossPlatformForkModule(group, module)) return null
     if (useNativeRedirects) {
@@ -110,6 +186,10 @@ internal fun nonDesktopForkSupportCoordinateOrNull(
     }
     if (useWebRedirects) {
         webRedirectImplementationCoordinateOrNull(group, module)?.let { return it }
+        return officialMetadataCoordinateOrNull(group, module)
+    }
+    if (useJvmRedirects || useMetadataRedirects) {
+        nativeRedirectImplementationCoordinateOrNull(group, module)?.let { return it }
         return officialMetadataCoordinateOrNull(group, module)
     }
     return androidOfficialCoordinateOrNull(group, module)
@@ -421,13 +501,14 @@ private fun Project.configureProjectConsumers(
         if (consumer == this) return@allprojects
         val configureConsumer = {
             if (consumer.directlyDependsOn(this)) {
+                consumer.configureNonDesktopForkPlatformMetadata()
+
                 val isAndroidApplication =
                     consumer.pluginManager.hasPlugin(ANDROID_APPLICATION_PLUGIN_ID)
                 val isNonDesktopNativeConsumer = consumer.isNonDesktopNativeConsumer()
                 val substitutions =
                     when {
                         isAndroidApplication -> androidApplicationConsumerSubstitutions
-                        isNonDesktopNativeConsumer -> emptyMap()
                         else -> fullForkSubstitutions
                     }
                 if (isNonDesktopNativeConsumer) {
@@ -438,11 +519,18 @@ private fun Project.configureProjectConsumers(
                     }
                 }
                 consumer.configurations.configureEach { configuration ->
-                    if (!configuration.name.usesRedirectedWebTarget()) return@configureEach
-                    configuration.configureOfficialForkSupportRouting(
-                        useNativeRedirects = false,
-                        useWebRedirects = true,
-                    )
+                    when {
+                        configuration.name.usesRedirectedWebTarget() ->
+                            configuration.configureOfficialForkSupportRouting(
+                                useNativeRedirects = false,
+                                useWebRedirects = true,
+                            )
+                        configuration.name.usesRedirectedJvmTarget() ->
+                            configuration.configureOfficialForkSupportRouting(
+                                useNativeRedirects = false,
+                                useJvmRedirects = true,
+                            )
+                    }
                 }
                 consumer.configureConsumerSubstitutions(substitutions)
             }
@@ -510,7 +598,9 @@ internal fun composeForkCoordinateFor(
     if (group.startsWith(OFFICIAL_COMPOSE_GROUP_PREFIX)) {
         val family = group.removePrefix(OFFICIAL_COMPOSE_GROUP_PREFIX)
         if (
-            (useDesktopNativeFork && family in COMPOSE_FAMILIES) ||
+            (useDesktopNativeFork &&
+                family in COMPOSE_FAMILIES &&
+                !(family == "ui" && module == UI_UKIT_MODULE)) ||
                 "$family:$module" in CROSS_PLATFORM_COMPOSE_MODULES
         ) {
             return "$FORK_COMPOSE_GROUP_PREFIX$family:$module:$version"
@@ -655,6 +745,9 @@ internal fun String.usesRedirectedWebTarget(): Boolean {
     val normalized = lowercase()
     return normalized.startsWith("wasmjs") || normalized.startsWith("js")
 }
+
+internal fun String.usesRedirectedJvmTarget(): Boolean =
+    startsWith("jvm", ignoreCase = true)
 
 internal fun ModuleComponentSelector.isNativeRedirectImplementation(): Boolean =
     isNativeRedirectImplementation(group, module)
@@ -983,6 +1076,8 @@ private const val KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multipl
 private const val ANDROID_APPLICATION_PLUGIN_ID = "com.android.application"
 private const val ANDROID_SUPPORT_ROUTING_MARKER =
     "dev.brahmkshatriya.compose.androidSupportRouting"
+private const val NON_DESKTOP_FORK_PLATFORM_METADATA_ROUTING_MARKER =
+    "dev.brahmkshatriya.compose.nonDesktopForkPlatformMetadataRouting"
 private const val KMP_MATCH_REQUESTED_COORDINATES_PROPERTY =
     "kotlin.internal.kmp.allowMatchingByRequestedCoordinatesInMetadataTransformations"
 private const val KOTLIN_NATIVE_BINARY_CONTAINER_CLASS =
@@ -1003,6 +1098,7 @@ private const val OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 private const val FORK_SKIKO_GROUP = "dev.brahmkshatriya.skiko"
 private const val SKIKO_MODULE = "skiko"
 private const val DEFAULT_NATIVE_SKIKO_VERSION = "0.153.1"
+private const val UI_UKIT_MODULE = "ui-uikit"
 private val ANDROIDX_COMPOSE_FAMILIES =
     setOf("animation", "foundation", "material", "material3", "runtime", "ui")
 private val ANDROIDX_COMPOSE_FORK_MODULES =

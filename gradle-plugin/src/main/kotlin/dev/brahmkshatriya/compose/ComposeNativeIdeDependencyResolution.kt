@@ -200,9 +200,43 @@ internal fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String
         configurations.getByName("${COMMON_MAIN_SOURCE_SET}ResolvableDependenciesMetadata")
     copyAttributes(from = commonMetadata, to = configuration)
     configuration.resolutionStrategy.eachDependency { details ->
-        if (details.requested.group.startsWith(COMPOSE_FORK_GROUP_PREFIX)) {
+        val requestedGroup = details.requested.group
+        val requestedModule = details.requested.name
+        val requestedForkModule =
+            requestedGroup
+                .takeIf { it.startsWith(COMPOSE_FORK_GROUP_PREFIX) }
+                ?.removePrefix(COMPOSE_FORK_GROUP_PREFIX)
+                ?.let { family -> family to requestedModule }
+
+        if (
+            requestedForkModule != null &&
+                requestedForkModule !in FORK_DESKTOP_IDE_MODULES
+        ) {
+            officialMetadataCoordinateOrNull(requestedGroup, requestedModule)?.let { coordinate ->
+                details.useTarget(coordinate)
+                details.because(
+                    "Keep incidental Compose Native IDE support dependencies on official coordinates"
+                )
+                return@eachDependency
+            }
+        }
+
+        if (requestedGroup.startsWith(COMPOSE_FORK_GROUP_PREFIX)) {
             details.useVersion(version)
             details.because("Keep Compose Native IDE metadata modules on one release")
+        }
+
+        if (
+            requestedGroup == OFFICIAL_COMPOSE_RUNTIME_GROUP &&
+                requestedModule in REDIRECTED_IDE_RUNTIME_MODULES
+        ) {
+            nativeRedirectImplementationCoordinateOrNull(requestedGroup, requestedModule)
+                ?.let { coordinate ->
+                    details.useTarget(coordinate)
+                    details.because(
+                        "Use upstream Runtime implementation coordinates in the IDE model"
+                    )
+                }
         }
     }
     val nativeMetadataSubstitutions = nativeMetadataSubstitutionsFor(version)
@@ -272,10 +306,13 @@ private const val DESKTOP_NATIVE_MAIN_SOURCE_SET = "desktopNativeMain"
 private const val COMMON_MAIN_DEPENDENCY_CONFIGURATION_PREFIX = "commonMain"
 private const val COMPOSE_FORK_GROUP_PREFIX = "dev.brahmkshatriya.compose."
 private const val OFFICIAL_COMPOSE_UI_GROUP = "org.jetbrains.compose.ui"
+private const val OFFICIAL_COMPOSE_RUNTIME_GROUP = "org.jetbrains.compose.runtime"
 private const val OFFICIAL_COMPOSE_COMPONENTS_GROUP = "org.jetbrains.compose.components"
 private const val ANDROIDX_GROUP_PREFIX = "androidx."
 private const val COMPONENTS_RESOURCES_MODULE = "components-resources"
 private val PLATFORM_ONLY_COMPOSE_UI_MODULES = setOf("ui-uikit", "ui-skiko")
+private val REDIRECTED_IDE_RUNTIME_MODULES =
+    setOf("runtime", "runtime-annotation", "runtime-retain", "runtime-saveable")
 private val FORK_DESKTOP_IDE_MODULES =
     setOf(
         "animation" to "animation",

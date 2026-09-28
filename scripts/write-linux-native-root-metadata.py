@@ -331,6 +331,15 @@ def create_desktop_native_metadata(
     return metadata_variant, sources_root_variant
 
 
+def fork_group_for_official_compose_dependency(
+    group: str, group_prefix: str
+) -> str | None:
+    compose_prefix = "org.jetbrains.compose."
+    if not group.startswith(compose_prefix):
+        return None
+    return f"{group_prefix}.compose.{group.removeprefix(compose_prefix)}"
+
+
 def upstream_group_for_fork_dependency(group: str, group_prefix: str) -> str | None:
     compose_prefix = f"{group_prefix}.compose."
     navigation3_prefix = f"{group_prefix}.androidx.navigation3"
@@ -397,6 +406,20 @@ def rewrite_module_dependency_groups(
                             for key in ("requires", "strictly", "prefers"):
                                 if key in version and version[key] != native_skiko_version:
                                     version[key] = native_skiko_version
+                                    rewritten += 1
+                        continue
+                if is_desktop_native:
+                    fork_group = fork_group_for_official_compose_dependency(
+                        group, group_prefix
+                    )
+                    if fork_group is not None:
+                        dependency["group"] = fork_group
+                        rewritten += 1
+                        version = dependency.get("version")
+                        if isinstance(version, dict):
+                            for key in ("requires", "strictly", "prefers"):
+                                if key in version and version[key] != publication_version:
+                                    version[key] = publication_version
                                     rewritten += 1
                         continue
                 legacy_navigation3_group = group == "org.jetbrains.androidx.navigation3"
@@ -495,6 +518,21 @@ def rewrite_pom_dependency_groups(
             )
             rewritten += version_rewrites
             return dependency
+        if is_desktop_native:
+            fork_group = fork_group_for_official_compose_dependency(group, group_prefix)
+            if fork_group is not None:
+                dependency = dependency.replace(
+                    f"<groupId>{group}</groupId>",
+                    f"<groupId>{fork_group}</groupId>",
+                    1,
+                )
+                rewritten += 1
+                version_pattern = re.compile(r"(<version>)([^<]+)(</version>)")
+                dependency, version_rewrites = version_pattern.subn(
+                    rf"\g<1>{publication_version}\g<3>", dependency, count=1
+                )
+                rewritten += version_rewrites
+                return dependency
         if legacy_navigation3_group:
             dependency = dependency.replace(
                 f"<groupId>{group}</groupId>",
