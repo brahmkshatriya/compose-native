@@ -36,13 +36,17 @@ plugins {
 
 def upstreamComposeVersion = providers.gradleProperty("compose.native.upstream.version.COMPOSE").get()
 def upstreamMaterial3Version = providers.gradleProperty("compose.native.upstream.version.COMPOSE_MATERIAL3").get()
+def composePlatforms = providers.gradleProperty("compose.platforms").getOrElse("")
 def publishesForkRoots = gradle.startParameter.taskNames.any {
     it.tokenize(":").last() == "publishComposeForkRootsToMavenLocal"
 }
+def compilesIos = composePlatforms.split(",").any { it.startsWith("Ios") }
 def composeDependency = { String projectPath ->
-    // Aggregate root publication compiles common metadata against the in-tree graph. The
-    // metadata writer rewrites these root dependencies to upstream coordinates afterwards.
-    if (publishesForkRoots) return project(projectPath)
+    // Aggregate root publication and iOS compile against the in-tree graph. The iOS Foundation
+    // sources use Compose UI APIs newer than the pinned upstream iOS UI artifacts. Root metadata
+    // is normalized to upstream coordinates afterwards; iOS platform metadata keeps the fork
+    // closure it was compiled against.
+    if (publishesForkRoots || compilesIos) return project(projectPath)
     if (projectPath in [":compose:foundation:foundation", ":compose:material3:material3"]) {
         return project(projectPath)
     }
