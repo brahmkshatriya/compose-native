@@ -177,7 +177,11 @@ private class PlatformLayersComposeSceneImpl(
     )
 
     override fun hitTestInteropView(position: Offset): InteropView? {
-        return mainOwner.hitTestInteropView(position)
+        return hitTestInteropTarget(position) as? InteropView
+    }
+
+    override fun hitTestInteropTarget(position: Offset): Any? {
+        return mainOwner.hitTestInteropTarget(position)
     }
 
     override fun processPointerInputEvent(event: PointerInputEvent) =

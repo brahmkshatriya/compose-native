@@ -244,14 +244,18 @@ private class CanvasLayersComposeSceneImpl(
     )
 
     override fun hitTestInteropView(position: Offset): InteropView? {
+        return hitTestInteropTarget(position) as? InteropView
+    }
+
+    override fun hitTestInteropTarget(position: Offset): Any? {
         forEachLayerReversed { layer ->
             if (layer.contains(position)) {
-                return layer.owner.hitTestInteropView(position)
+                return layer.owner.hitTestInteropTarget(position)
             } else if (layer.consumePointerInputOutside) {
                 return null
             }
         }
-        return mainOwner.hitTestInteropView(position)
+        return mainOwner.hitTestInteropTarget(position)
     }
 
     override fun processPointerInputEvent(event: PointerInputEvent): PointerEventResult {

@@ -297,6 +297,12 @@ sealed interface ComposeScene : AutoCloseable {
     fun hitTestInteropView(position: Offset): InteropView?
 
     /**
+     * Performs the same pointer hit test as [hitTestInteropView], but also supports platform-native
+     * interop targets that are not represented by [InteropView].
+     */
+    fun hitTestInteropTarget(position: Offset): Any?
+
+    /**
      * Set the visual debug option that shows bounds for all nodes in the hierarchy.
      */
     var showLayoutBounds: Boolean

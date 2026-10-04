@@ -88,8 +88,14 @@ import androidx.compose.ui.window.rememberTitleBar
 import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.window.sendNotification
+import androidx.compose.ui.viewinterop.AppKitInteropPlacement
+import androidx.compose.ui.viewinterop.AppKitInteropProperties
+import androidx.compose.ui.viewinterop.AppKitView
 import kotlinx.cinterop.toKString
 import kotlinx.coroutines.launch
+import platform.AppKit.NSColor
+import platform.AppKit.NSTextField
+import platform.AppKit.NSView
 import platform.posix.fclose
 import platform.posix.fopen
 import platform.posix.fputs
@@ -242,6 +248,7 @@ fun main() = application {
                     },
                     nativeViewsPage = {
                         val openGlInteropAvailable = isOpenGlInteropAvailable()
+                        var composeInteropHits by remember { mutableStateOf(0) }
                         DemoSection("SDL + Skiko") {
                             Text(
                                 "SDL owns the NSWindow and graphics view. Compose renders through " +
@@ -260,6 +267,75 @@ fun main() = application {
                                     )
                                 },
                             )
+                        }
+                        DemoSection("AppKit interop") {
+                            Text(
+                                "These are real NSView instances hosted around the SDL/Skiko " +
+                                    "surface. The blue view is below Compose, the text field is " +
+                                    "interactive AppKit, and the red view is an AppKit overlay."
+                            )
+                            Box(
+                                Modifier.fillMaxWidth()
+                                    .height(110.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                            ) {
+                                AppKitView(
+                                    factory = {
+                                        NSView().apply {
+                                            wantsLayer = true
+                                            layer?.backgroundColor = NSColor.systemBlueColor.CGColor
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize().padding(14.dp),
+                                )
+                                Text(
+                                    "Compose drawn above a background NSView",
+                                    modifier =
+                                        Modifier.align(Alignment.Center)
+                                            .background(MaterialTheme.colorScheme.surface)
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                            Box(Modifier.fillMaxWidth().height(40.dp)) {
+                                AppKitView(
+                                    factory = {
+                                        NSTextField().apply {
+                                            stringValue = "Edit me: native NSTextField"
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                                Button(
+                                    onClick = { composeInteropHits += 1 },
+                                    modifier = Modifier.align(Alignment.CenterEnd).height(40.dp),
+                                ) {
+                                    Text("Compose wins: $composeInteropHits")
+                                }
+                            }
+                            Box(
+                                Modifier.fillMaxWidth()
+                                    .height(80.dp)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                            ) {
+                                Text(
+                                    "This Compose label should be covered in the center",
+                                    modifier = Modifier.align(Alignment.Center),
+                                )
+                                AppKitView(
+                                    factory = {
+                                        NSView().apply {
+                                            wantsLayer = true
+                                            layer?.backgroundColor = NSColor.systemRedColor.CGColor
+                                        }
+                                    },
+                                    modifier = Modifier.align(Alignment.Center).size(180.dp, 48.dp),
+                                    properties =
+                                        AppKitInteropProperties(
+                                            isInteractive = false,
+                                            placement = AppKitInteropPlacement.Overlay,
+                                        ),
+                                )
+                            }
                         }
                     },
                     windowsPage = {

@@ -16,6 +16,7 @@
 
 package androidx.compose.ui.viewinterop
 
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -50,6 +51,38 @@ internal fun Modifier.pointerInteropFilter(
     } else {
         this
     }
+
+/**
+ * Associates an arbitrary native-platform interop target with this Compose node for hit testing.
+ *
+ * Unlike [pointerInteropFilter], this modifier does not forward Compose pointer events. It is used
+ * by hosts where the operating system dispatches input directly to a real native child view after
+ * Compose decides that the native view is the topmost interactive target at a position.
+ */
+@InternalComposeUiApi
+public fun Modifier.platformInteropHitTestTarget(
+    target: Any,
+    isInteractive: Boolean = true,
+): Modifier =
+    if (isInteractive) {
+        this then PlatformInteropHitTestModifier(target)
+    } else {
+        this
+    }
+
+internal class PlatformInteropHitTestModifier(
+    val target: Any,
+) : PointerInputFilter(), PointerInputModifier {
+    override val pointerInputFilter: PointerInputFilter = this
+
+    override fun onPointerEvent(
+        pointerEvent: PointerEvent,
+        pass: PointerEventPass,
+        bounds: IntSize,
+    ) = Unit
+
+    override fun onCancel() = Unit
+}
 
 internal class InteropPointerInputModifier(
     private val interopViewHolder: InteropViewHolder

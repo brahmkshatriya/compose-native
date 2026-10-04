@@ -18,13 +18,19 @@ package androidx.compose.ui.scene
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.SkikoComposeTestBase
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.FrameRecomposer
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.viewinterop.platformInteropHitTestTarget
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.coroutines.CoroutineContext
@@ -37,6 +43,36 @@ import kotlinx.coroutines.test.runTest
 import org.jetbrains.skia.Surface
 
 class CanvasLayersComposeSceneTest : SkikoComposeTestBase() {
+
+    @OptIn(InternalComposeUiApi::class)
+    @Test
+    fun composePointerTargetWinsOverPlatformInteropTarget() = runTest(StandardTestDispatcher()) {
+        val frameRecomposer = FrameRecomposer(coroutineContext)
+        val interopTarget = Any()
+        CanvasLayersComposeScene(
+            frameRecomposer = frameRecomposer,
+            size = IntSize(100, 100),
+        ).use { scene ->
+            scene.setContent {
+                Box(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier.size(100.dp)
+                            .platformInteropHitTestTarget(interopTarget)
+                    )
+                    Box(
+                        Modifier.size(50.dp)
+                            .pointerInput(Unit) {}
+                    )
+                }
+            }
+
+            scene.measureAndLayout()
+
+            assertEquals(null, scene.hitTestInteropTarget(Offset(25f, 25f)))
+            assertEquals(interopTarget, scene.hitTestInteropTarget(Offset(75f, 75f)))
+        }
+        frameRecomposer.close()
+    }
 
     @Test
     fun sceneSizeChangeTriggersInvalidation() = runTest(StandardTestDispatcher()) {

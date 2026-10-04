@@ -31,11 +31,36 @@ struct MacDrag {
 @property(nonatomic, assign) MacDrag *owner;
 @end
 
+@interface ComposeNativeInteropPassthroughView : NSView
+@property(nonatomic, assign) BOOL interactionEnabled;
+@end
+
+@interface ComposeNativeInteropRootView : NSView
+@property(nonatomic, strong) NSView *originalContentView;
+@property(nonatomic, strong) ComposeNativeInteropPassthroughView *backgroundContainer;
+@property(nonatomic, strong) ComposeNativeInteropPassthroughView *overlayContainer;
+@property(nonatomic, assign) KldMacosInteropBackgroundHitTestCallback backgroundHitTest;
+@property(nonatomic, assign) void *backgroundHitTestUserData;
+@end
+
+@interface ComposeNativeInteropWrapperView : NSView
+@property(nonatomic, assign) BOOL interactionEnabled;
+@end
+
 namespace {
 
 struct ThemeObserver {
     uint32_t color_scheme_event_type = 0;
     uint32_t accent_color_event_type = 0;
+};
+
+struct MacInteropHost {
+    __strong NSWindow *window = nil;
+    __strong NSView *original_content_view = nil;
+    __strong NSResponder *original_next_responder = nil;
+    __strong ComposeNativeInteropRootView *root_view = nil;
+    __strong ComposeNativeInteropPassthroughView *background_container = nil;
+    __strong ComposeNativeInteropPassthroughView *overlay_container = nil;
 };
 
 struct NotificationActionSpec {
@@ -102,6 +127,12 @@ NSWindow *cocoa_window(SDL_Window *window) {
         nullptr
     );
     return (__bridge NSWindow *)pointer;
+}
+
+void fill_superview(NSView *view) {
+    if (!view || !view.superview) return;
+    view.frame = view.superview.bounds;
+    view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
 }
 
 int current_theme() {
@@ -294,7 +325,360 @@ NSDraggingItem *dragging_item(id<NSPasteboardWriting> writer, NSImage *image, NS
 
 @end
 
+@implementation ComposeNativeInteropPassthroughView
+
+- (BOOL)isFlipped {
+    return YES;
+}
+
+- (NSView *)hitTest:(NSPoint)point {
+    if (!self.interactionEnabled) return nil;
+    NSView *hit = [super hitTest:point];
+    return hit == self ? nil : hit;
+}
+
+@end
+
+@implementation ComposeNativeInteropRootView
+
+- (NSResponder *)sdlEventResponder {
+    NSResponder *responder = self.originalContentView.nextResponder;
+    return responder == self ? self.window.nextResponder : responder;
+}
+
+- (void)clearNativeFirstResponder {
+    // Clicking Compose should relinquish focus from an AppKit control. Compose/SDL will establish
+    // its own text-input focus from the forwarded mouse event when needed.
+    [self.window makeFirstResponder:nil];
+}
+
+- (NSView *)hitTest:(NSPoint)point {
+    // Native overlays are visually above Compose and therefore receive input first.
+    if (self.overlayContainer) {
+        NSPoint overlayPoint = [self.overlayContainer convertPoint:point fromView:self];
+        NSView *hit = [self.overlayContainer hitTest:overlayPoint];
+        if (hit) return hit;
+    }
+
+    // Background native views are visually exposed through Compose clear regions, but Compose can
+    // still draw interactive content over them. Ask the Compose scene which interop target wins
+    // before allowing AppKit to dispatch into the background hierarchy.
+    if (self.backgroundContainer && self.backgroundHitTest) {
+        NSPoint backgroundPoint = [self.backgroundContainer convertPoint:point fromView:self];
+        void *nativeTarget = self.backgroundHitTest(
+            self.backgroundHitTestUserData,
+            backgroundPoint.x,
+            backgroundPoint.y
+        );
+        if (nativeTarget) {
+            NSView *target = (__bridge NSView *)nativeTarget;
+            // backgroundContainer and the interop wrappers are both flipped and wrappers are
+            // direct children of the container. Avoid crossing the unflipped root in AppKit's
+            // coordinate conversion; calculate the wrapper-local point in their shared space.
+            NSPoint targetPoint = NSMakePoint(
+                backgroundPoint.x - target.frame.origin.x,
+                backgroundPoint.y - target.frame.origin.y
+            );
+            NSView *content = target.subviews.firstObject;
+            if (content) {
+                NSPoint contentPoint = [content convertPoint:targetPoint fromView:target];
+                NSView *hit = [content hitTest:contentPoint];
+                return hit ?: content;
+            }
+            return target;
+        }
+    }
+
+    // Use the root as the event target for Compose. SDL3View normally forwards mouse events to
+    // SDL3Cocoa_WindowListener through its responder chain, but embedding it below native AppKit
+    // controls makes that delivery unreliable once a native control becomes first responder.
+    // Targeting the root lets us forward the original NSEvent directly to SDL's listener.
+    return self;
+}
+
+- (BOOL)mouseDownCanMoveWindow {
+    return YES;
+}
+
+- (BOOL)acceptsFirstMouse:(NSEvent *)event {
+    return [self.originalContentView acceptsFirstMouse:event];
+}
+
+- (void)mouseDown:(NSEvent *)event {
+    [self clearNativeFirstResponder];
+    [[self sdlEventResponder] mouseDown:event];
+}
+
+- (void)rightMouseDown:(NSEvent *)event {
+    [self clearNativeFirstResponder];
+    [[self sdlEventResponder] rightMouseDown:event];
+}
+
+- (void)otherMouseDown:(NSEvent *)event {
+    [self clearNativeFirstResponder];
+    [[self sdlEventResponder] otherMouseDown:event];
+}
+
+- (void)mouseUp:(NSEvent *)event {
+    [[self sdlEventResponder] mouseUp:event];
+}
+
+- (void)rightMouseUp:(NSEvent *)event {
+    [[self sdlEventResponder] rightMouseUp:event];
+}
+
+- (void)otherMouseUp:(NSEvent *)event {
+    [[self sdlEventResponder] otherMouseUp:event];
+}
+
+- (void)mouseMoved:(NSEvent *)event {
+    [[self sdlEventResponder] mouseMoved:event];
+}
+
+- (void)mouseDragged:(NSEvent *)event {
+    [[self sdlEventResponder] mouseDragged:event];
+}
+
+- (void)rightMouseDragged:(NSEvent *)event {
+    [[self sdlEventResponder] rightMouseDragged:event];
+}
+
+- (void)otherMouseDragged:(NSEvent *)event {
+    [[self sdlEventResponder] otherMouseDragged:event];
+}
+
+- (void)scrollWheel:(NSEvent *)event {
+    [[self sdlEventResponder] scrollWheel:event];
+}
+
+- (void)touchesBeganWithEvent:(NSEvent *)event {
+    [[self sdlEventResponder] touchesBeganWithEvent:event];
+}
+
+- (void)touchesMovedWithEvent:(NSEvent *)event {
+    [[self sdlEventResponder] touchesMovedWithEvent:event];
+}
+
+- (void)touchesEndedWithEvent:(NSEvent *)event {
+    [[self sdlEventResponder] touchesEndedWithEvent:event];
+}
+
+- (void)touchesCancelledWithEvent:(NSEvent *)event {
+    [[self sdlEventResponder] touchesCancelledWithEvent:event];
+}
+
+- (void)magnifyWithEvent:(NSEvent *)event {
+    [[self sdlEventResponder] magnifyWithEvent:event];
+}
+
+- (void)tabletPoint:(NSEvent *)event {
+    [[self sdlEventResponder] tabletPoint:event];
+}
+
+- (void)tabletProximity:(NSEvent *)event {
+    [[self sdlEventResponder] tabletProximity:event];
+}
+
+@end
+
+@implementation ComposeNativeInteropWrapperView
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        _interactionEnabled = YES;
+        self.wantsLayer = YES;
+        self.layer.masksToBounds = YES;
+    }
+    return self;
+}
+
+- (BOOL)isFlipped {
+    return YES;
+}
+
+- (NSView *)hitTest:(NSPoint)point {
+    if (!self.interactionEnabled) return nil;
+    return [super hitTest:point];
+}
+
+@end
+
 extern "C" {
+
+void *kld_macos_interop_host_create(void *raw_window) {
+    auto *sdl_window = static_cast<SDL_Window *>(raw_window);
+    NSWindow *window = cocoa_window(sdl_window);
+    if (!window) return nullptr;
+
+    NSView *original = window.contentView;
+    if (!original) return nullptr;
+    NSResponder *originalNextResponder = original.nextResponder;
+
+    auto *root = [[ComposeNativeInteropRootView alloc] initWithFrame:original.frame];
+    auto *background =
+        [[ComposeNativeInteropPassthroughView alloc] initWithFrame:root.bounds];
+    auto *overlay =
+        [[ComposeNativeInteropPassthroughView alloc] initWithFrame:root.bounds];
+    background.interactionEnabled = YES;
+    overlay.interactionEnabled = YES;
+    background.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    overlay.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    root.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    root.acceptsTouchEvents = YES;
+    root.originalContentView = original;
+    root.backgroundContainer = background;
+    root.overlayContainer = overlay;
+
+    // Replacing contentView removes the SDL view from the window but does not invalidate it.
+    // Reattach it as the middle rendering/event layer between native background and overlay views.
+    window.contentView = root;
+    [root addSubview:background];
+    [root addSubview:original];
+    [root addSubview:overlay];
+    // SDL installs SDL3Cocoa_WindowListener as SDL3View.nextResponder and handles mouse buttons
+    // there. Reparenting SDL3View can replace that responder link with the new superview, so keep
+    // SDL's responder chain intact while the native-view host is installed.
+    if (originalNextResponder) original.nextResponder = originalNextResponder;
+    fill_superview(original);
+    fill_superview(background);
+    fill_superview(overlay);
+
+    auto *host = new MacInteropHost();
+    host->window = window;
+    host->original_content_view = original;
+    host->original_next_responder = originalNextResponder;
+    host->root_view = root;
+    host->background_container = background;
+    host->overlay_container = overlay;
+    return host;
+}
+
+void *kld_macos_interop_host_background_view(void *raw_host) {
+    auto *host = static_cast<MacInteropHost *>(raw_host);
+    return host ? (__bridge void *)host->background_container : nullptr;
+}
+
+void *kld_macos_interop_host_overlay_view(void *raw_host) {
+    auto *host = static_cast<MacInteropHost *>(raw_host);
+    return host ? (__bridge void *)host->overlay_container : nullptr;
+}
+
+void kld_macos_interop_host_set_background_hit_test(
+    void *raw_host,
+    KldMacosInteropBackgroundHitTestCallback callback,
+    void *user_data
+) {
+    auto *host = static_cast<MacInteropHost *>(raw_host);
+    if (!host || !host->root_view) return;
+    host->root_view.backgroundHitTest = callback;
+    host->root_view.backgroundHitTestUserData = user_data;
+}
+
+void kld_macos_interop_host_prepare_render_surface(void *raw_host) {
+    auto *host = static_cast<MacInteropHost *>(raw_host);
+    if (!host || !host->original_content_view) return;
+
+    // SDL3View paints its backing layer black from updateLayer() unless the SDL window itself was
+    // created with SDL_WINDOW_TRANSPARENT. Native background interop only needs transparent pixels
+    // in the renderer surface, not a transparent top-level window, so clear the backing layer after
+    // SDL has attached its OpenGL/Metal renderer instead of changing the SDL window flags.
+    NSView *view = host->original_content_view;
+    view.wantsLayer = YES;
+    view.layer.opaque = NO;
+    view.layer.backgroundColor = CGColorGetConstantColor(kCGColorClear);
+}
+
+void kld_macos_interop_host_sync_z_order(void *raw_host) {
+    auto *host = static_cast<MacInteropHost *>(raw_host);
+    if (!host || !host->root_view) return;
+
+    kld_macos_interop_host_prepare_render_surface(raw_host);
+
+    ComposeNativeInteropRootView *root = host->root_view;
+    NSView *background = host->background_container;
+    NSView *original = host->original_content_view;
+    NSView *overlay = host->overlay_container;
+    if (background.superview == root && original.superview == root) {
+        [root addSubview:background positioned:NSWindowBelow relativeTo:original];
+    }
+    if (overlay.superview == root) {
+        // SDL_Metal_CreateView adds its render view after the host is installed. Moving the
+        // overlay container to the top keeps native overlays above both Metal and OpenGL output.
+        [root addSubview:overlay positioned:NSWindowAbove relativeTo:nil];
+    }
+}
+
+void kld_macos_interop_host_destroy(void *raw_host) {
+    auto *host = static_cast<MacInteropHost *>(raw_host);
+    if (!host) return;
+
+    NSWindow *window = host->window;
+    NSView *original = host->original_content_view;
+    ComposeNativeInteropRootView *root = host->root_view;
+    if (window && original && window.contentView == root) {
+        [host->background_container removeFromSuperview];
+        [host->overlay_container removeFromSuperview];
+        [original removeFromSuperview];
+        window.contentView = original;
+        if (host->original_next_responder) {
+            original.nextResponder = host->original_next_responder;
+        }
+    }
+    delete host;
+}
+
+void *kld_macos_interop_wrapper_create(void) {
+    auto *wrapper = [[ComposeNativeInteropWrapperView alloc] initWithFrame:NSZeroRect];
+    return (void *)CFBridgingRetain(wrapper);
+}
+
+void kld_macos_interop_wrapper_set_interactive(void *raw_wrapper, int interactive) {
+    if (!raw_wrapper) return;
+    auto *wrapper = (__bridge ComposeNativeInteropWrapperView *)raw_wrapper;
+    wrapper.interactionEnabled = interactive != 0;
+}
+
+void kld_macos_interop_wrapper_fitting_size(void *raw_wrapper, double *width, double *height) {
+    if (width) *width = 0.0;
+    if (height) *height = 0.0;
+    if (!raw_wrapper) return;
+
+    auto *wrapper = (__bridge ComposeNativeInteropWrapperView *)raw_wrapper;
+    NSView *view = wrapper.subviews.firstObject;
+    NSSize size = view ? view.fittingSize : wrapper.fittingSize;
+    if (width) *width = std::isfinite(size.width) && size.width > 0.0 ? size.width : 0.0;
+    if (height) *height = std::isfinite(size.height) && size.height > 0.0 ? size.height : 0.0;
+}
+
+void kld_macos_interop_wrapper_destroy(void *raw_wrapper) {
+    if (!raw_wrapper) return;
+    CFBridgingRelease(raw_wrapper);
+}
+
+void kld_macos_interop_container_place_view(
+    void *raw_container,
+    void *raw_view,
+    void *raw_previous_view
+) {
+    if (!raw_container || !raw_view) return;
+    auto *container = (__bridge NSView *)raw_container;
+    auto *view = (__bridge NSView *)raw_view;
+    auto *previous = raw_previous_view ? (__bridge NSView *)raw_previous_view : nil;
+    if (previous) {
+        [container addSubview:view positioned:NSWindowAbove relativeTo:previous];
+    } else {
+        [container addSubview:view positioned:NSWindowBelow relativeTo:nil];
+    }
+}
+
+void kld_macos_current_gl_set_surface_opaque(int opaque) {
+    NSOpenGLContext *context = NSOpenGLContext.currentContext;
+    if (!context) return;
+    GLint value = opaque ? 1 : 0;
+    [context setValues:&value forParameter:NSOpenGLCPSurfaceOpacity];
+    [context update];
+}
 
 void *kld_system_theme_observer_create(
     uint32_t color_scheme_event_type,

@@ -16,13 +16,26 @@
 
 package androidx.compose.mpp.demo
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.viewinterop.AppKitView
+import platform.AppKit.NSColor
+import platform.AppKit.NSView
 
 @Composable
 internal actual fun TestInteropView(modifier: Modifier, color: Color) {
-    Box(modifier.background(color)) // TODO
+    AppKitView(
+        factory = { NSView().apply { wantsLayer = true } },
+        modifier = modifier,
+        update = { view ->
+            view.layer?.backgroundColor =
+                when (color) {
+                    Color.Red -> NSColor.redColor.CGColor
+                    Color.Green -> NSColor.greenColor.CGColor
+                    Color.Blue -> NSColor.blueColor.CGColor
+                    else -> NSColor.clearColor.CGColor
+                }
+        },
+    )
 }

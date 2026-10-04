@@ -18,10 +18,18 @@ package androidx.compose.ui.node
 
 import androidx.compose.runtime.collection.MutableVector
 import androidx.compose.runtime.collection.mutableVectorOf
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.areObjectsOfSameType
 
-internal fun <T> T.traverseDescendantsInDrawOrder(block: (T) -> Boolean) where T : TraversableNode {
+/**
+ * Traverses matching [TraversableNode] descendants in the same order they are drawn by Compose.
+ *
+ * Platform interop hosts use this to keep native child-view z-order synchronized with Compose,
+ * including `zIndex` changes. It is internal Compose infrastructure rather than application API.
+ */
+@InternalComposeUiApi
+public fun <T> T.traverseDescendantsInDrawOrder(block: (T) -> Boolean) where T : TraversableNode {
     visitSubtreeIf(Nodes.Traversable, zOrder = true) {
         if (this.traverseKey == it.traverseKey && areObjectsOfSameType(this, it)) {
             @Suppress("UNCHECKED_CAST")

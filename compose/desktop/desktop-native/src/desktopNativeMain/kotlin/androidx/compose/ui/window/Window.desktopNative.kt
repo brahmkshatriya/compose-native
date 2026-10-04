@@ -93,7 +93,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.viewinterop.GpuInteropRegistry
 import androidx.compose.ui.viewinterop.LocalGpuInteropRegistry
+import androidx.compose.ui.viewinterop.LocalNativePlatformViewHost
 import androidx.compose.ui.viewinterop.LocalNativeViewInvalidationDispatcher
+import androidx.compose.ui.viewinterop.NativePlatformViewHost
+import androidx.compose.ui.viewinterop.createNativePlatformViewHost
 import cnames.structs.SDL_Cursor
 import cnames.structs.SDL_Window
 import kotlin.coroutines.CoroutineContext
@@ -1933,6 +1936,7 @@ internal class NativeWindowHost(
     private var sdlWindow: CPointer<SDL_Window>? = null
     private var skiaLayer: SkiaLayer? = null
     private var gpuInteropRegistry: GpuInteropRegistry? = null
+    private var nativePlatformViewHost: NativePlatformViewHost? = null
     private var scene: androidx.compose.ui.scene.ComposeScene? = null
     private var metrics: RenderMetrics? = null
     private var windowWidth = 1
@@ -2276,6 +2280,13 @@ internal class NativeWindowHost(
             }
         }
         platformContext.nativeDragAndDropManager.attach(window)
+        nativePlatformViewHost =
+            createNativePlatformViewHost(window) { action ->
+                application.dispatchToHost {
+                    action()
+                    requestRender()
+                }
+            }
         applyWindowIcon(window, icon)
         if (modalityType != DialogModalityType.Modeless) {
             owner?.sdlWindow?.let { parent ->
@@ -2307,6 +2318,7 @@ internal class NativeWindowHost(
             },
             onRenderRequested = application::requestFrame,
         )
+        nativePlatformViewHost?.onRenderLayerAttached()
         skiaLayer = nativeLayer
         gpuInteropRegistry =
             if (nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
@@ -2363,6 +2375,15 @@ internal class NativeWindowHost(
         accessibility.open(title)
         updateAccessibility(initialMetrics)
         scene = nativeScene
+        nativePlatformViewHost?.setInteropHitTest { surfacePosition ->
+            val currentMetrics = metrics ?: return@setInteropHitTest null
+            nativeScene.hitTestInteropTarget(
+                currentMetrics.contentPoint(
+                    surfacePosition.x.roundToInt(),
+                    surfacePosition.y.roundToInt(),
+                )
+            )
+        }
         nativeLayer.renderDelegate = SkikoRenderDelegate { canvas, _, _, _ ->
             canvas.clear(if (hasTransparentWindowBuffer) 0x00000000 else 0xFF000000.toInt())
             val currentMetrics = metrics
@@ -2384,6 +2405,7 @@ internal class NativeWindowHost(
                     LocalPlatformAccentColor provides application.systemAccentColorState.value,
                     LocalNativeWindowHost provides this@NativeWindowHost,
                     LocalGpuInteropRegistry provides gpuInteropRegistry,
+                    LocalNativePlatformViewHost provides nativePlatformViewHost,
                     LocalNativeViewInvalidationDispatcher provides
                         { block ->
                             application.dispatchToHost {
@@ -2409,7 +2431,7 @@ internal class NativeWindowHost(
                         } else {
                             Modifier.fillMaxSize()
                         }
-                    Box(frameModifier) {
+                    Box(frameModifier.then(nativePlatformViewHost?.rootModifier ?: Modifier)) {
                         Column(Modifier.fillMaxSize()) {
                             NativeWindowMenuBar(menuBarModel)
                             Box(Modifier.fillMaxWidth().weight(1f)) {
@@ -3579,6 +3601,9 @@ internal class NativeWindowHost(
         gpuInteropRegistry = null
         skiaLayer?.detach()
         skiaLayer = null
+        nativePlatformViewHost?.setInteropHitTest(null)
+        nativePlatformViewHost?.close()
+        nativePlatformViewHost = null
         sdlWindow?.let { SDL_DestroyWindow(it) }
         sdlWindow = null
         platformContext.window = null

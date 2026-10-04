@@ -19,6 +19,7 @@ import kotlinx.cinterop.rawValue
 import kotlinx.cinterop.toKString
 import kotlinx.cinterop.value
 import nativedesktop.kgl_renderer
+import nativedesktop.kld_macos_current_gl_set_surface_opaque
 import org.jetbrains.skia.PixelGeometry
 import org.jetbrains.skia.impl.NativePointer
 import org.jetbrains.skiko.MacosSkiaLayerComponent
@@ -72,6 +73,10 @@ internal class SdlSkiaLayerComponent(
         check(SDL_GL_MakeCurrent(window, pointer)) {
             "Could not make the SDL OpenGL context current: ${SDL_GetError()?.toKString()}"
         }
+        // Keep the window surface alpha-composited. Normal Compose content remains opaque because
+        // the scene paints it so; AppKit background interop can selectively clear pixels to reveal
+        // sibling NSViews underneath the OpenGL surface.
+        kld_macos_current_gl_set_surface_opaque(0)
     }
 
     override fun setOpenGlSwapInterval(interval: Int): Boolean = SDL_GL_SetSwapInterval(interval)
@@ -99,7 +104,11 @@ internal class SdlSkiaLayerComponent(
             error("SDL Metal view has no CAMetalLayer: ${SDL_GetError()?.toKString()}")
         }
         return try {
-            interpretObjCPointer<CAMetalLayer>(layerPointer.rawValue)
+            interpretObjCPointer<CAMetalLayer>(layerPointer.rawValue).also { layer ->
+                // Background AppKit views are composited below this Metal view. Transparent pixels
+                // cleared by Compose must reveal those sibling views rather than an opaque layer.
+                layer.opaque = false
+            }
         } catch (failure: Throwable) {
             SDL_Metal_DestroyView(view)
             metalView = null

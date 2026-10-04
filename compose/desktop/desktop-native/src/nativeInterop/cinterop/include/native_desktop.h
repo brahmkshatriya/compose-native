@@ -69,6 +69,35 @@ int kld_poll_event(uint32_t *id, uint32_t *reason, char **value);
 void kld_free_string(char *value);
 void kld_shutdown(void);
 
+/* macOS native-view interop. These are implemented only by the macOS native support archive and
+ * are referenced only from macOS source sets. */
+typedef void *(*KldMacosInteropBackgroundHitTestCallback)(
+    void *user_data,
+    double x,
+    double y
+);
+void *kld_macos_interop_host_create(void *sdl_window);
+void *kld_macos_interop_host_background_view(void *host);
+void *kld_macos_interop_host_overlay_view(void *host);
+void kld_macos_interop_host_set_background_hit_test(
+    void *host,
+    KldMacosInteropBackgroundHitTestCallback callback,
+    void *user_data
+);
+void kld_macos_interop_host_prepare_render_surface(void *host);
+void kld_macos_interop_host_sync_z_order(void *host);
+void kld_macos_interop_host_destroy(void *host);
+
+/* A retained, clipped AppKit wrapper view for one embedded native view. */
+void *kld_macos_interop_wrapper_create(void);
+void kld_macos_interop_wrapper_set_interactive(void *wrapper, int interactive);
+void kld_macos_interop_wrapper_fitting_size(void *wrapper, double *width, double *height);
+void kld_macos_interop_wrapper_destroy(void *wrapper);
+void kld_macos_interop_container_place_view(void *container, void *view, void *previous_view);
+
+/* Configure alpha compositing of the current NSOpenGL surface. */
+void kld_macos_current_gl_set_surface_opaque(int opaque);
+
 #ifdef __cplusplus
 }
 #endif

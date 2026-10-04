@@ -99,6 +99,7 @@ import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.trace
 import androidx.compose.ui.viewinterop.InteropPointerInputModifier
 import androidx.compose.ui.viewinterop.InteropView
+import androidx.compose.ui.viewinterop.PlatformInteropHitTestModifier
 import kotlin.concurrent.Volatile
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.max
@@ -384,12 +385,23 @@ internal class RootNodeOwner(
      * otherwise null.
      */
     fun hitTestInteropView(position: Offset): InteropView? {
+        return hitTestInteropTarget(position) as? InteropView
+    }
+
+    /**
+     * Performs the normal Compose pointer hit test and returns the interop target associated with
+     * the winning pointer node, if any.
+     */
+    fun hitTestInteropTarget(position: Offset): Any? {
         val result = HitTestResult()
         owner.root.hitTest(position, result, isInLayer = true)
 
         val last = result.lastOrNull() as? BackwardsCompatNode
-        val node = last?.element as? InteropPointerInputModifier
-        return node?.interopView
+        return when (val element = last?.element) {
+            is InteropPointerInputModifier -> element.interopView
+            is PlatformInteropHitTestModifier -> element.target
+            else -> null
+        }
     }
 
     private fun isInBounds(localPosition: Offset): Boolean =
