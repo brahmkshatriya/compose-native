@@ -133,7 +133,6 @@ import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.awaitCancellation
@@ -1342,8 +1341,13 @@ internal class NativeApplication : ApplicationScope {
     internal val systemDarkThemeState = mutableStateOf(systemThemeObserver.current)
     internal val systemAccentColorState = mutableStateOf(systemThemeObserver.accent)
 
+    // FrameRecomposer and SnapshotStateObserver must run on the SDL host thread.
+    // Unconfined can resume state collectors directly on an audio/background
+    // worker, then run layout and graphics-layer observation on that worker.
+    // The next SDL frame on the host thread would then crash with the
+    // SnapshotStateObserver multi-threaded access exception.
     val frameRecomposer =
-        FrameRecomposer(coroutineContext = Dispatchers.Unconfined, invalidate = ::requestFrame)
+        FrameRecomposer(coroutineContext = NativeApplicationDispatcher(this), invalidate = ::requestFrame)
 
     init {
         NativeDesktopIntegration.updateSystemTheme(systemDarkThemeState.value)
