@@ -41,6 +41,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.filters.SdkSuppress
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -222,6 +223,27 @@ class ProgressIndicatorTest {
         rule
             .setMaterialContentForSizeAssertions { CircularProgressIndicator(progress = { 0f }) }
             .assertIsSquareWithSize(CircularIndicatorDiameter)
+    }
+
+    @Test
+    fun indeterminateCircularProgressIndicator_forwardAdvanceArc() {
+        var previousStart = Float.NEGATIVE_INFINITY
+        var previousEnd = Float.NEGATIVE_INFINITY
+        for (millis in 0..CircularAdvanceDurationMillis) {
+            val arc = circularAdvanceArc(millis.toFloat())
+            assertTrue("Arc tail reversed at ${millis}ms", arc.startAngle >= previousStart)
+            assertTrue("Arc head reversed at ${millis}ms", arc.endAngle >= previousEnd)
+            assertTrue(
+                "Unexpected arc sweep at ${millis}ms",
+                arc.endAngle - arc.startAngle in 19.9f..271f,
+            )
+            previousStart = arc.startAngle
+            previousEnd = arc.endAngle
+        }
+        val first = circularAdvanceArc(0f)
+        val last = circularAdvanceArc(CircularAdvanceDurationMillis.toFloat())
+        assertEquals(first.startAngle + 2520f, last.startAngle, 0.01f)
+        assertEquals(first.endAngle + 2520f, last.endAngle, 0.01f)
     }
 
     @Test

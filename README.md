@@ -150,6 +150,30 @@ The fork adjusts `BottomSheetScaffold` without adding public API:
 - mouse dragging does not move/open the sheet, while touch dragging continues to work normally;
 - sheet anchor updates and placement no longer apply duplicate visual movement.
 
+### Material 3: Views-aligned loading and circular progress animations
+
+The fork changes the **indeterminate** Material 3 indicators without changing their public APIs:
+
+- `LoadingIndicator` and `ContainedLoadingIndicator` keep the original seven-shape sequence,
+  morph spring (`dampingRatio = 0.6f`, `stiffness = 200f`, `visibilityThreshold = 0.1f`), and
+  **650 ms** morph interval. Their per-shape 90° rotation runs independently of the morph spring
+  over **194 ms**, using `CubicBezierEasing(0.24f, 0f, 0.68f, 0.91f)` so spring settling cannot
+  briefly reverse the rotation. The existing **4,666 ms** continuous rotation is retained.
+- An independent **500 ms** scale animation gives each morph a controlled bounce, using
+  `FastOutSlowInEasing` between these keyframes: `1.0×` at 0 ms, `0.985×` at 75 ms,
+  `1.10×` at 175 ms, `0.975×` at 400 ms, and `1.0×` at 500 ms. This replaces an initial
+  high-velocity spring impulse with a softer start and measured recoil.
+- The indeterminate `CircularProgressIndicator` uses a single **5,400 ms** clock and four
+  Views-style advance segments. The head and tail each advance through eased 667 ms phases,
+  keeping the circular arc moving forward rather than pulling an edge backwards during a
+  transition. Track and indicator arcs share the same playhead.
+
+These changes apply when consuming the fork's `material3` artifact on supported platforms;
+official AndroidX and JetBrains Compose artifacts retain their own animation behavior. The
+implementation was also compared side-by-side with Material Components **Views 1.14.0** on an
+Android device. It follows the same seven shapes and 650 ms morph cadence but is intentionally
+not frame-identical because of the fork's rotation and scale timing.
+
 </details>
 
 `desktopNative` creates `linuxX64`, `linuxArm64`, and `mingwX64` plus a shared

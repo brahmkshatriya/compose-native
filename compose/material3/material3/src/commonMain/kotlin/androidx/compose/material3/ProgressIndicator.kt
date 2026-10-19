@@ -16,6 +16,7 @@
 
 package androidx.compose.material3
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
@@ -41,7 +42,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -628,33 +628,19 @@ public fun CircularProgressIndicator(
     val stroke = with(LocalDensity.current) { Stroke(width = strokeWidth.toPx(), cap = strokeCap) }
 
     val infiniteTransition = rememberInfiniteTransition()
-    // A global rotation that does a 360 degrees rotation in 6 seconds.
-    val globalRotation =
+    // Match the classic Android Views "advance" animator: 4 expanding and
+    // contracting segments in 5400ms, each driven from the same playhead.
+    val playhead =
         infiniteTransition.animateFloat(
             initialValue = 0f,
-            targetValue = CircularGlobalRotationDegreesTarget,
-            animationSpec = circularIndeterminateGlobalRotationAnimationSpec,
-        )
-
-    // An additional rotation that moves by 90 degrees in 500ms and then rest for 1 second.
-    val additionalRotation =
-        infiniteTransition.animateFloat(
-            initialValue = 0f,
-            targetValue = CircularAdditionalRotationDegreesTarget,
-            animationSpec = circularIndeterminateRotationAnimationSpec,
-        )
-
-    // Indicator progress animation that will be changing the progress up and down as the indicator
-    // rotates.
-    val progressAnimation =
-        infiniteTransition.animateFloat(
-            initialValue = CircularIndeterminateMinProgress,
-            targetValue = CircularIndeterminateMaxProgress,
-            animationSpec = circularIndeterminateProgressAnimationSpec,
+            targetValue = CircularAdvanceDurationMillis.toFloat(),
+            animationSpec =
+                infiniteRepeatable(tween(CircularAdvanceDurationMillis, easing = LinearEasing)),
         )
 
     Canvas(modifier.progressSemantics().size(CircularIndicatorDiameter)) {
-        val sweep = progressAnimation.value * 360f
+        val arc = circularAdvanceArc(playhead.value)
+        val sweep = arc.endAngle - arc.startAngle
         val adjustedGapSize =
             if (strokeCap == StrokeCap.Butt || size.height > size.width) {
                 gapSize
@@ -663,16 +649,34 @@ public fun CircularProgressIndicator(
             }
         val gapSizeSweep = (adjustedGapSize.value / (PI * size.width.toDp().value).toFloat()) * 360f
 
-        rotate(globalRotation.value + additionalRotation.value) {
-            drawCircularIndicator(
-                sweep + min(sweep, gapSizeSweep),
-                360f - sweep - min(sweep, gapSizeSweep) * 2,
-                trackColor,
-                stroke,
-            )
-            drawDeterminateCircularIndicator(startAngle = 0f, sweep, color, stroke)
-        }
+        drawCircularIndicator(
+            arc.endAngle + min(sweep, gapSizeSweep),
+            360f - sweep - min(sweep, gapSizeSweep) * 2,
+            trackColor,
+            stroke,
+        )
+        drawDeterminateCircularIndicator(arc.startAngle, sweep, color, stroke)
     }
+}
+
+/** Android Views' classic 5400ms advance segment; the tail never pulls the head backwards. */
+internal data class CircularAdvanceArc(val startAngle: Float, val endAngle: Float)
+
+internal const val CircularAdvanceDurationMillis = 5400
+
+internal fun circularAdvanceArc(elapsedMillis: Float): CircularAdvanceArc {
+    val time = elapsedMillis.fastCoerceIn(0f, CircularAdvanceDurationMillis.toFloat())
+    var start = 1520f * time / CircularAdvanceDurationMillis - 20f
+    var end = 1520f * time / CircularAdvanceDurationMillis
+    repeat(4) { cycle ->
+        val offset = 1350f * cycle
+        end += 250f * FastOutSlowInEasing.transform(((time - offset) / 667f).fastCoerceIn(0f, 1f))
+        start +=
+            250f *
+                FastOutSlowInEasing.transform(((time - offset - 667f) / 667f).fastCoerceIn(0f, 1f))
+    }
+    // Android Views rotates the circular drawable so its origin is at 12 o'clock.
+    return CircularAdvanceArc(start - 90f, end - 90f)
 }
 
 @Suppress("DEPRECATION")

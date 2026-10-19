@@ -18,9 +18,12 @@ package androidx.compose.material3
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationEndReason
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -52,6 +55,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.InfiniteAnimationPolicy
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -389,6 +393,9 @@ private fun LoadingIndicatorImpl(
             calculateScaleFactor(indicatorPolygons) * LoadingIndicatorDefaults.ActiveIndicatorScale
         }
     val morphProgress = remember { Animatable(0f) }
+    // Only the shape uses the spring. Its overshoot/settling must not reverse rotation.
+    val rotationProgress = remember { Animatable(0f) }
+    val scaleProgress = remember { Animatable(1f) }
     var morphRotationTargetAngle by remember { mutableFloatStateOf(QuarterRotation) }
     val globalRotation = remember { Animatable(0f) }
     var currentMorphIndex by remember(indicatorPolygons) { mutableIntStateOf(0) }
@@ -400,18 +407,35 @@ private fun LoadingIndicatorImpl(
                 val morphAnimationSpec =
                     spring(dampingRatio = 0.6f, stiffness = 200f, visibilityThreshold = 0.1f)
                 while (true) {
-                    // Async launch of a spring that will finish in less than 650ms
-                    // (MorphIntervalMillis). We then delay the entire while loop by 650ms till the
-                    // next morph starts.
+                    // Start each morph at the original 650ms interval.
                     val deferred = async {
+                        val rotationJob = launch {
+                            rotationProgress.animateTo(
+                                1f,
+                                tween(
+                                    LoadingIndicatorRotationDurationMillis,
+                                    easing = LoadingIndicatorRotationEasing,
+                                ),
+                            )
+                        }
+                        val scaleJob = launch {
+                            scaleProgress.snapTo(1f)
+                            scaleProgress.animateTo(
+                                targetValue = 1f,
+                                animationSpec = LoadingIndicatorScaleAnimationSpec,
+                            )
+                        }
                         val animationResult =
                             morphProgress.animateTo(
                                 targetValue = 1f,
                                 animationSpec = morphAnimationSpec,
                             )
+                        rotationJob.join()
+                        scaleJob.join()
                         if (animationResult.endReason == AnimationEndReason.Finished) {
                             currentMorphIndex = (currentMorphIndex + 1) % morphSequence.size
                             morphProgress.snapTo(0f)
+                            rotationProgress.snapTo(0f)
                             morphRotationTargetAngle =
                                 (morphRotationTargetAngle + QuarterRotation) % FullRotation
                         }
@@ -469,27 +493,31 @@ private fun LoadingIndicatorImpl(
             modifier =
                 Modifier.aspectRatio(1f, matchHeightConstraintsFirst = true).drawWithContent {
                     val progress = morphProgress.value
+                    val bounceScale = scaleProgress.value
                     // Rotate clockwise.
-                    rotate(progress * 90 + morphRotationTargetAngle + globalRotation.value) {
-                        drawPath(
-                            path =
-                                processPath(
-                                    path =
-                                        morphSequence[currentMorphIndex].toPath(
-                                            // Use the coerced progress value to eliminate any
-                                            // bounciness from the morph. We scale the drawing
-                                            // to simulate some bounciness instead.
-                                            progress = progress,
-                                            path = path,
-                                            startAngle = 0,
-                                        ),
-                                    size = size,
-                                    scaleFactor = shapesScaleFactor,
-                                    scaleMatrix = scaleMatrix,
-                                ),
-                            color = indicatorColor,
-                            style = Fill,
-                        )
+                    rotate(
+                        rotationProgress.value * 90 +
+                            morphRotationTargetAngle +
+                            globalRotation.value
+                    ) {
+                        scale(bounceScale) {
+                            drawPath(
+                                path =
+                                    processPath(
+                                        path =
+                                            morphSequence[currentMorphIndex].toPath(
+                                                progress = progress,
+                                                path = path,
+                                                startAngle = 0,
+                                            ),
+                                        size = size,
+                                        scaleFactor = shapesScaleFactor,
+                                        scaleMatrix = scaleMatrix,
+                                    ),
+                                color = indicatorColor,
+                                style = Fill,
+                            )
+                        }
                     }
                 }
         )
@@ -683,6 +711,20 @@ private fun processPath(
 
 private const val GlobalRotationDurationMillis = 4666
 private const val MorphIntervalMillis = 650L
+private const val LoadingIndicatorRotationDurationMillis = 194
+
+// Close to the morph spring's first rise, but never rotates backward during settling.
+internal val LoadingIndicatorRotationEasing = CubicBezierEasing(0.24f, 0f, 0.68f, 0.91f)
+
+// Ease into the bounce instead of starting with the spring's full outward velocity.
+internal val LoadingIndicatorScaleAnimationSpec =
+    keyframes<Float> {
+        durationMillis = 500
+        1f at 0 using FastOutSlowInEasing
+        0.985f at 75 using FastOutSlowInEasing
+        1.1f at 175 using FastOutSlowInEasing
+        0.975f at 400 using FastOutSlowInEasing
+    }
 
 private const val FullRotation = 360f
 private const val QuarterRotation = FullRotation / 4f

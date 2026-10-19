@@ -16,6 +16,8 @@
 
 package androidx.compose.material3
 
+import androidx.compose.animation.core.TargetBasedAnimation
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -29,6 +31,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -187,6 +191,38 @@ class LoadingIndicatorTest {
             LoadingIndicator(modifier = Modifier.testTag(TestTag))
         }
         rule.onNodeWithTag(TestTag).assertRangeInfoEquals(ProgressBarRangeInfo.Indeterminate)
+    }
+
+    @Test
+    fun indeterminateLoadingIndicator_forwardRotation() {
+        assertEquals(0f, LoadingIndicatorRotationEasing.transform(0f), 0.001f)
+        assertEquals(1f, LoadingIndicatorRotationEasing.transform(1f), 0.001f)
+        var previous = 0f
+        for (millis in 0..194) {
+            val progress = LoadingIndicatorRotationEasing.transform(millis / 194f)
+            assertTrue("Rotation reversed at ${millis}ms", progress >= previous)
+            previous = progress
+        }
+    }
+
+    @Test
+    fun indeterminateLoadingIndicator_scaleBounce() {
+        val animation =
+            TargetBasedAnimation(
+                LoadingIndicatorScaleAnimationSpec,
+                Float.VectorConverter,
+                initialValue = 1f,
+                targetValue = 1f,
+            )
+        val scaleAt: (Long) -> Float = { millis ->
+            animation.getValueFromNanos(millis * 1_000_000L)
+        }
+        assertEquals(500_000_000L, animation.durationNanos)
+        assertEquals(1f, scaleAt(0), 0.001f)
+        assertEquals(0.985f, scaleAt(75), 0.001f)
+        assertEquals(1.1f, scaleAt(175), 0.001f)
+        assertEquals(0.975f, scaleAt(400), 0.001f)
+        assertEquals(1f, scaleAt(500), 0.001f)
     }
 
     @Test
