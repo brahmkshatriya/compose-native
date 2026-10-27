@@ -86,8 +86,7 @@ private fun Project.configureDesktopNativeComposeSourceBuiltResolution() {
             "org.jetbrains.compose.foundation:foundation-layout" to
                 ":compose:foundation:foundation-layout",
             "org.jetbrains.compose.material:material" to ":compose:material:material",
-            "org.jetbrains.compose.material:material-ripple" to
-                ":compose:material:material-ripple",
+            "org.jetbrains.compose.material:material-ripple" to ":compose:material:material-ripple",
             "org.jetbrains.compose.material3:material3" to ":compose:material3:material3",
             "org.jetbrains.compose.material3:material3-ripple" to
                 ":compose:material3:material3-ripple",
@@ -95,8 +94,7 @@ private fun Project.configureDesktopNativeComposeSourceBuiltResolution() {
             "org.jetbrains.compose.runtime:runtime-annotation" to
                 ":compose:runtime:runtime-annotation",
             "org.jetbrains.compose.runtime:runtime-retain" to ":compose:runtime:runtime-retain",
-            "org.jetbrains.compose.runtime:runtime-saveable" to
-                ":compose:runtime:runtime-saveable",
+            "org.jetbrains.compose.runtime:runtime-saveable" to ":compose:runtime:runtime-saveable",
             "org.jetbrains.compose.ui:ui" to ":compose:ui:ui",
             "org.jetbrains.compose.ui:ui-backhandler" to ":compose:ui:ui-backhandler",
             "org.jetbrains.compose.ui:ui-geometry" to ":compose:ui:ui-geometry",
@@ -202,7 +200,7 @@ private fun Project.configureComposeNativeSkikoResolution() {
     val nativeSkikoGroup =
         providers.gradleProperty("compose.native.skiko.group").orElse("dev.brahmkshatriya.skiko")
     val nativeSkikoVersion =
-        providers.gradleProperty("compose.native.skiko.version").orElse("0.153.0")
+        providers.gradleProperty("compose.native.skiko.version").orElse("0.156.1")
 
     val desktopNativeRequested =
         ComposeProperties(this).targetPlatforms.any { platform ->

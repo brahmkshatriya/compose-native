@@ -277,7 +277,8 @@ notarization.
 | Compose Native Gradle plugin / fork artifacts | Maven Central badge above |
 | JetBrains Compose plugin | `1.13.0-alpha01` |
 | Kotlin / Compose compiler | `2.3.20` |
-| Native Skiko | `0.153.1` |
+| Native Skiko | `0.156.1` |
+| Official Skiko (JVM, iOS, JS, Wasm) | `0.156.1` |
 
 ## Limitations
 

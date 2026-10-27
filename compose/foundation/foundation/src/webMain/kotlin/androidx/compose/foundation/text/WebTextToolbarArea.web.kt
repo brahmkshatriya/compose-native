@@ -17,50 +17,67 @@
 package androidx.compose.foundation.text
 
 import androidx.compose.foundation.contextmenu.ContextMenuPopupPositionProvider
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalTextToolbar
 import androidx.compose.ui.platform.WebTextToolbar
+import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.round
 
-@OptIn(InternalComposeUiApi::class)
+// Keep toolbar rendering compatible with the published Web UI dependency.
 @Composable
-internal fun InstallWebTextToolbarRenderer() {
-    val textToolbar = LocalTextToolbar.current as? WebTextToolbar
-    if (textToolbar != null) {
-        SideEffect {
-            if (textToolbar.renderer == null) {
-                textToolbar.renderer = DefaultWebTextToolbarRenderer
-            }
-        }
+internal fun WebTextToolbarArea(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    Box(modifier, propagateMinConstraints = true) {
+        content()
+        WebTextToolbarPopup()
     }
 }
 
 @OptIn(InternalComposeUiApi::class)
-private val DefaultWebTextToolbarRenderer: @Composable (WebTextToolbar.TextToolbarMenu?) -> Unit =
-    { menu ->
-        if (menu != null) {
-            WebTextToolbarPopup(menu)
-        }
-    }
-
-@OptIn(InternalComposeUiApi::class)
 @Composable
-private fun WebTextToolbarPopup(menu: WebTextToolbar.TextToolbarMenu) {
+private fun WebTextToolbarPopup() {
+    val textToolbar = LocalTextToolbar.current as? WebTextToolbar ?: return
+
+    // we must remove a parent offset because
+    // TextToolbar's show callback position is already in the window
+    var layoutParentBoundsInWindow: IntRect by remember { mutableStateOf(IntRect.Zero) }
+    Layout(
+        content = {},
+        modifier =
+            Modifier.onGloballyPositioned { childCoordinates ->
+                childCoordinates.parentCoordinates?.let {
+                    val layoutPosition = it.positionInWindow().round()
+                    val layoutSize = it.size
+                    layoutParentBoundsInWindow = IntRect(layoutPosition, layoutSize)
+                }
+            },
+        measurePolicy = { _, constraints -> layout(constraints.minWidth, constraints.minHeight) {} },
+    )
+
+    val menu = textToolbar.menu ?: return
     val toolbarOffset =
         with(LocalDensity.current) {
             (WebContextMenuToolbarSpec.ContainerHeight + 16.dp).roundToPx()
         }
 
     val popupPositionProvider =
-        remember(menu.rect, toolbarOffset) {
+        remember(menu) {
             ContextMenuPopupPositionProvider(
-                anchorPosition = Offset(menu.rect.left, menu.rect.top - toolbarOffset).round()
+                anchorPosition =
+                    Offset(menu.rect.left, menu.rect.top - toolbarOffset).round() -
+                        layoutParentBoundsInWindow.topLeft
             )
         }
 

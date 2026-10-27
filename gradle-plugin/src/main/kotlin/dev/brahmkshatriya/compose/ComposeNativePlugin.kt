@@ -11,7 +11,6 @@ import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.ProjectDependency
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ModuleComponentSelector
-import org.gradle.api.attributes.Attribute
 import org.gradle.api.plugins.ExtensionAware
 import org.gradle.api.publish.tasks.GenerateModuleMetadata
 import org.gradle.api.tasks.Exec
@@ -41,10 +40,8 @@ private fun Project.configureNonDesktopForkPlatformMetadata() {
 
     dependencies.components.all { details ->
         val routing =
-            nonDesktopForkPlatformRoutingOrNull(
-                group = details.id.group,
-                module = details.id.name,
-            ) ?: return@all
+            nonDesktopForkPlatformRoutingOrNull(group = details.id.group, module = details.id.name)
+                ?: return@all
 
         details.allVariants { variant ->
             variant.withDependencies { dependencies ->
@@ -54,7 +51,8 @@ private fun Project.configureNonDesktopForkPlatformMetadata() {
                             nonDesktopForkSupportCoordinateOrNull(
                                 group = dependency.group,
                                 module = dependency.name,
-                                useNativeRedirects = routing == NonDesktopForkPlatformRouting.Native,
+                                useNativeRedirects =
+                                    routing == NonDesktopForkPlatformRouting.Native,
                                 useWebRedirects = routing == NonDesktopForkPlatformRouting.Web,
                                 useJvmRedirects = routing == NonDesktopForkPlatformRouting.Jvm,
                             )
@@ -92,9 +90,8 @@ internal fun nonDesktopForkPlatformRoutingOrNull(
         suffix == "android" -> NonDesktopForkPlatformRouting.Android
         suffix == "desktop" || suffix == "jvm" -> NonDesktopForkPlatformRouting.Jvm
         suffix == "js" || suffix == "wasm-js" -> NonDesktopForkPlatformRouting.Web
-        suffix.startsWith("ios") ||
-            suffix.startsWith("watchos") ||
-            suffix.startsWith("tvos") -> NonDesktopForkPlatformRouting.Native
+        suffix.startsWith("ios") || suffix.startsWith("watchos") || suffix.startsWith("tvos") ->
+            NonDesktopForkPlatformRouting.Native
         else -> null
     }
 }
@@ -124,9 +121,7 @@ private fun Project.configureAndroidApplicationForkSupportRouting() {
             if (!extraProperties.has(ANDROID_SUPPORT_ROUTING_MARKER)) {
                 extraProperties.set(ANDROID_SUPPORT_ROUTING_MARKER, true)
                 consumer.configurations.configureEach { configuration ->
-                    configuration.configureOfficialForkSupportRouting(
-                        useNativeRedirects = false,
-                    )
+                    configuration.configureOfficialForkSupportRouting(useNativeRedirects = false)
                 }
             }
         }
@@ -181,15 +176,21 @@ internal fun nonDesktopForkSupportCoordinateOrNull(
 ): String? {
     if (isCrossPlatformForkModule(group, module)) return null
     if (useNativeRedirects) {
-        nativeRedirectImplementationCoordinateOrNull(group, module)?.let { return it }
+        nativeRedirectImplementationCoordinateOrNull(group, module)?.let {
+            return it
+        }
         return officialMetadataCoordinateOrNull(group, module)
     }
     if (useWebRedirects) {
-        webRedirectImplementationCoordinateOrNull(group, module)?.let { return it }
+        webRedirectImplementationCoordinateOrNull(group, module)?.let {
+            return it
+        }
         return officialMetadataCoordinateOrNull(group, module)
     }
     if (useJvmRedirects || useMetadataRedirects) {
-        nativeRedirectImplementationCoordinateOrNull(group, module)?.let { return it }
+        nativeRedirectImplementationCoordinateOrNull(group, module)?.let {
+            return it
+        }
         return officialMetadataCoordinateOrNull(group, module)
     }
     return androidOfficialCoordinateOrNull(group, module)
@@ -344,10 +345,7 @@ private fun Project.configureLocalDependencySubstitutions(
             } else {
                 fullForkComposeVersion
             }
-        if (
-            substitutions.isEmpty() &&
-                composeForkVersion == null
-        ) {
+        if (substitutions.isEmpty() && composeForkVersion == null) {
             return@configureEach
         }
 
@@ -513,9 +511,7 @@ private fun Project.configureProjectConsumers(
                     }
                 if (isNonDesktopNativeConsumer) {
                     consumer.configurations.configureEach { configuration ->
-                        configuration.configureOfficialForkSupportRouting(
-                            useNativeRedirects = true,
-                        )
+                        configuration.configureOfficialForkSupportRouting(useNativeRedirects = true)
                     }
                 }
                 consumer.configurations.configureEach { configuration ->
@@ -746,8 +742,7 @@ internal fun String.usesRedirectedWebTarget(): Boolean {
     return normalized.startsWith("wasmjs") || normalized.startsWith("js")
 }
 
-internal fun String.usesRedirectedJvmTarget(): Boolean =
-    startsWith("jvm", ignoreCase = true)
+internal fun String.usesRedirectedJvmTarget(): Boolean = startsWith("jvm", ignoreCase = true)
 
 internal fun ModuleComponentSelector.isNativeRedirectImplementation(): Boolean =
     isNativeRedirectImplementation(group, module)
@@ -774,7 +769,8 @@ internal fun webRedirectImplementationCoordinateOrNull(group: String, module: St
 
 private fun redirectImplementationCoordinate(family: String, module: String): String? {
     val version = ComposeNativeUpstreamVersions.androidx(family) ?: return null
-    val upstreamGroup = if (family == "compose") ANDROIDX_COMPOSE_RUNTIME_GROUP else "androidx.$family"
+    val upstreamGroup =
+        if (family == "compose") ANDROIDX_COMPOSE_RUNTIME_GROUP else "androidx.$family"
     return "$upstreamGroup:$module:$version"
 }
 
@@ -792,7 +788,8 @@ private fun redirectImplementationFamilyOrNull(group: String): String? =
         group == "${FORK_ANDROIDX_GROUP_PREFIX}lifecycle" -> "lifecycle"
         group in setOf("androidx.navigation", "org.jetbrains.androidx.navigation") -> "navigation"
         group == "${FORK_ANDROIDX_GROUP_PREFIX}navigation" -> "navigation"
-        group in setOf("androidx.navigation3", "org.jetbrains.androidx.navigation3") -> "navigation3"
+        group in setOf("androidx.navigation3", "org.jetbrains.androidx.navigation3") ->
+            "navigation3"
         group == "${FORK_ANDROIDX_GROUP_PREFIX}navigation3" -> "navigation3"
         group in setOf("androidx.navigationevent", "org.jetbrains.androidx.navigationevent") ->
             "navigationevent"
@@ -807,8 +804,7 @@ internal fun isNativeRedirectImplementation(group: String, module: String): Bool
     return when (group) {
         ANDROIDX_COMPOSE_RUNTIME_GROUP,
         "${OFFICIAL_COMPOSE_GROUP_PREFIX}runtime",
-        "${FORK_COMPOSE_GROUP_PREFIX}runtime" ->
-            rootModule in REDIRECTED_NATIVE_RUNTIME_MODULES
+        "${FORK_COMPOSE_GROUP_PREFIX}runtime" -> rootModule in REDIRECTED_NATIVE_RUNTIME_MODULES
         "androidx.collection",
         "org.jetbrains.androidx.collection",
         "${FORK_ANDROIDX_GROUP_PREFIX}collection" -> rootModule == "collection"
@@ -821,8 +817,7 @@ internal fun isNativeRedirectImplementation(group: String, module: String): Bool
             rootModule in REDIRECTED_NATIVE_NAVIGATION_MODULES
         "androidx.navigation3",
         "org.jetbrains.androidx.navigation3",
-        "${FORK_ANDROIDX_GROUP_PREFIX}navigation3" ->
-            rootModule == "navigation3-runtime"
+        "${FORK_ANDROIDX_GROUP_PREFIX}navigation3" -> rootModule == "navigation3-runtime"
         "androidx.navigationevent",
         "org.jetbrains.androidx.navigationevent",
         "${FORK_ANDROIDX_GROUP_PREFIX}navigationevent" ->
@@ -857,7 +852,8 @@ internal fun isWebRedirectImplementation(group: String, module: String): Boolean
             rootModule in REDIRECTED_NATIVE_NAVIGATION_EVENT_MODULES
         "androidx.savedstate",
         "org.jetbrains.androidx.savedstate",
-        "${FORK_ANDROIDX_GROUP_PREFIX}savedstate" -> rootModule in REDIRECTED_NATIVE_SAVEDSTATE_MODULES
+        "${FORK_ANDROIDX_GROUP_PREFIX}savedstate" ->
+            rootModule in REDIRECTED_NATIVE_SAVEDSTATE_MODULES
         else -> false
     }
 }
@@ -1047,7 +1043,8 @@ private fun Project.addDesktopNativeSourceSets() {
                     .findByName("${sourceSetPrefix}Test")
                     ?.dependsOnSourceSet(desktopNativeTest)
             }
-            // Compile shared Skia implementations in each concrete target, as with explicit srcDir calls.
+            // Compile shared Skia implementations in each concrete target, as with explicit srcDir
+            // calls.
             val skiaSources = layout.projectDirectory.dir("src/skiaTargetMain/kotlin").asFile
             SKIA_TARGET_MAIN_SOURCE_SET_NAMES.forEach { sourceSetName ->
                 sourceSets.findByName(sourceSetName)?.addKotlinSourceDirectory(skiaSources)
@@ -1058,9 +1055,7 @@ private fun Project.addDesktopNativeSourceSets() {
 
 private fun Any.addKotlinSourceDirectory(directory: java.io.File) {
     val kotlinSources =
-        javaClass.methods
-            .single { it.name == "getKotlin" && it.parameterCount == 0 }
-            .invoke(this)
+        javaClass.methods.single { it.name == "getKotlin" && it.parameterCount == 0 }.invoke(this)
     kotlinSources.javaClass.methods
         .first { it.name == "srcDir" && it.parameterCount == 1 }
         .invoke(kotlinSources, directory)
@@ -1097,7 +1092,7 @@ internal const val FORK_ANDROIDX_GROUP_PREFIX = "dev.brahmkshatriya.androidx."
 private const val OFFICIAL_SKIKO_GROUP = "org.jetbrains.skiko"
 private const val FORK_SKIKO_GROUP = "dev.brahmkshatriya.skiko"
 private const val SKIKO_MODULE = "skiko"
-private const val DEFAULT_NATIVE_SKIKO_VERSION = "0.153.1"
+private const val DEFAULT_NATIVE_SKIKO_VERSION = "0.156.1"
 private const val UI_UKIT_MODULE = "ui-uikit"
 private val ANDROIDX_COMPOSE_FAMILIES =
     setOf("animation", "foundation", "material", "material3", "runtime", "ui")
@@ -1135,14 +1130,7 @@ private val OFFICIAL_SKIKO_DEPENDENCY_REGEX =
     )
 private val DEFAULT_LINUX_LINKER_OPTIONS = listOf("-L/usr/lib")
 private val DESKTOP_NATIVE_CONFIGURATION_MARKERS =
-    listOf(
-        "desktopnative",
-        "linuxx64",
-        "linuxarm64",
-        "mingwx64",
-        "macosx64",
-        "macosarm64",
-    )
+    listOf("desktopnative", "linuxx64", "linuxarm64", "mingwx64", "macosx64", "macosarm64")
 private val REDIRECTED_NATIVE_CONFIGURATION_MARKERS =
     listOf(
         "linuxx64",
@@ -1202,11 +1190,5 @@ private val DESKTOP_NATIVE_SOURCE_SET_NAMES = DESKTOP_NATIVE_TARGET_SOURCE_SETS.
 private val LINUX_WINDOWS_SOURCE_SET_NAMES = listOf("linuxX64", "linuxArm64", "mingwX64")
 private val MACOS_SOURCE_SET_NAMES = listOf("macosX64", "macosArm64")
 private val SKIA_TARGET_MAIN_SOURCE_SET_NAMES =
-    listOf(
-        "desktopNativeMain",
-        "iosArm64Main",
-        "iosSimulatorArm64Main",
-        "iosX64Main",
-        "wasmJsMain",
-    )
+    listOf("desktopNativeMain", "iosArm64Main", "iosSimulatorArm64Main", "iosX64Main", "wasmJsMain")
 private val DESKTOP_NATIVE_PUBLICATION_TARGET_NAMES = DESKTOP_NATIVE_SOURCE_SET_NAMES

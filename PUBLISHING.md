@@ -8,11 +8,11 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 | Role | Version |
 | --- | --- |
 | Fork artifacts | release tag (`VERSION`) |
-| JetBrains Compose upstream | `1.13.0-alpha01` |
-| Maven Central Material 3 upstream | `1.13.0-alpha01` |
-| Official Skiko (JVM/web/iOS) | `0.152.0-alpha02` |
-| Native Skiko fork | `0.153.1` |
-| Kotlin | `2.3.20` |
+| JetBrains Compose upstream | `1.13.0-beta01` |
+| Maven Central Material 3 upstream | `1.13.0-beta01` |
+| Official Skiko (JVM/web/iOS) | `0.156.1` |
+| Native Skiko fork | `0.156.1` |
+| Kotlin | `2.4.20` |
 
 The release version comes from the Git tag and is passed into every publication job. Repository
 defaults use `0.0.0-SNAPSHOT` for development builds, so publishing a new release does not require
@@ -20,9 +20,22 @@ a version-bump commit. Upstream compatibility pins live in `gradle.properties`; 
 pinned separately because it has an independent release train. Keep the Gradle plugin's native
 Skiko fallback synchronized with `compose.native.skiko.version`.
 
+The updated native Skiko `0.156.1` is an unreleased local dependency until its own release is
+published. Official Skiko `0.156.1` currently resolves from JetBrains' development repository,
+which this source build already includes. Consumers of locally published Compose artifacts
+should include the same repository for official Skiko:
+
+```kotlin
+repositories {
+    maven("https://packages.jetbrains.team/maven/p/cmp/dev") {
+        content { includeGroup("org.jetbrains.skiko") }
+    }
+}
+```
+
 ## Linux x64 coordinates
 
-Native Skiko is published as `dev.brahmkshatriya.skiko:skiko:0.153.1`. JVM desktop, iOS, JS, and
+Native Skiko is built as `dev.brahmkshatriya.skiko:skiko:0.156.1`. JVM desktop, iOS, JS, and
 Wasm continue to use the official JetBrains Skiko artifacts; Linux, Windows, and macOS native use the
 fork. Native platform module metadata is
 rewritten during publication so it records that fork coordinate instead of the shared source set's
@@ -57,7 +70,7 @@ Run:
 ./scripts/publish-linux-native-to-maven-local.sh
 ```
 
-The script resolves native Skiko `0.153.1`, publishes the complete Compose target closure through
+The script resolves native Skiko `0.156.1`, publishes the complete Compose target closure through
 `:mpp:publishComposeNativeToMavenLocal`, publishes the directly compilable KMP
 roots, and then creates native-only aggregate metadata (including the `desktopNativeMain`
 fragment) in Maven Local. It also publishes the `dev.brahmkshatriya.compose` Gradle plugin and its
@@ -73,7 +86,7 @@ This publishes only the two fork-specific cross-platform modules, `foundation` a
 through `:mpp:publishComposeForkPlatformsToMavenLocal`, regenerates their aggregate KMP roots, and
 republishes the plugin. Their remaining Compose and AndroidX dependencies stay on official
 JetBrains/AndroidX coordinates. Android has no Skiko dependency; JS and Wasm deliberately resolve
-the official Skiko `0.152.0-alpha02` artifacts. Support modules such as `desktop-native` and
+the official Skiko `0.156.1` artifacts. Support modules such as `desktop-native` and
 `components-resources` are not published for these Android/web targets.
 
 To publish the Compose Desktop/JVM variants, run:
@@ -85,7 +98,7 @@ To publish the Compose Desktop/JVM variants, run:
 This publishes only the fork-specific `foundation` and `material3` `desktop` variants,
 regenerates their KMP roots, and republishes the consumer plugin. Every other Compose and AndroidX
 dependency stays on official JetBrains/AndroidX coordinates. JVM desktop uses official
-`org.jetbrains.skiko:skiko:0.152.0-alpha02`; the larger fork closure and `desktop-native` remain
+`org.jetbrains.skiko:skiko:0.156.1`; the larger fork closure and `desktop-native` remain
 specific to desktop Kotlin/Native targets.
 
 To publish the iOS device and Apple Silicon simulator variants on macOS, run:
@@ -98,7 +111,7 @@ This publishes `iosArm64` and `iosSimulatorArm64` only for the two fork-specific
 `foundation` and `material3`, publishes their corresponding KMP roots, and republishes the consumer
 plugin. All other Compose and AndroidX dependencies, including `ui-uikit`, resolve from official
 JetBrains/AndroidX coordinates. iOS uses the official
-`org.jetbrains.skiko:skiko:0.152.0-alpha02`; the desktop-native Skiko fork is not substituted into
+`org.jetbrains.skiko:skiko:0.156.1`; the desktop-native Skiko fork is not substituted into
 iOS configurations.
 
 To publish the macOS x64 and arm64 variants on macOS, run:
@@ -110,7 +123,7 @@ To publish the macOS x64 and arm64 variants on macOS, run:
 This publishes the complete native fork closure for both `macosX64` and `macosArm64`, synthesizes
 coherent KMP roots containing both architectures, and republishes the consumer plugin. macOS follows
 the same native-backend policy as Linux and Windows: support Compose/AndroidX modules are resolved to
-the fork where required, and Skiko resolves to `dev.brahmkshatriya.skiko:skiko:0.153.1`.
+the fork where required, and Skiko resolves to `dev.brahmkshatriya.skiko:skiko:0.156.1`.
 
 ## Consumer plugin
 
@@ -214,6 +227,6 @@ git push origin "$VERSION"
 The deployment includes both the implementation artifact
 `dev.brahmkshatriya.compose:compose-gradle-plugin:VERSION` and the marker
 `dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:VERSION`.
-Native Skiko `0.153.1` must be published to Maven Central before the Compose release workflow is
+Native Skiko `0.156.1` must be published to Maven Central before the Compose release workflow is
 started. Local macOS publication can instead resolve the same coordinate from
 `MAVEN_LOCAL_REPOSITORY`. Do not reuse a published tag version: Central releases are immutable.

@@ -44,8 +44,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.toSize
 import org.jetbrains.skia.Paint as SkPaint
 import org.jetbrains.skia.Path as SkPath
-import org.jetbrains.skia.Point
-import org.jetbrains.skia.Rect as SkRect
 import org.jetbrains.skiko.node.RenderNode
 
 @OptIn(InternalComposeUiApi::class)
@@ -364,16 +362,4 @@ internal class SkikoGraphicsLayer(renderNode: RenderNode) : PlatformGraphicsLaye
             hasRenderEffect ||
             offscreenBufferRequested
     }
-}
-
-// Native and Wasm use older Skiko versions. Newer runtimes resolve these calls to the
-// allocation-free RenderNode members; older runtimes retain their property-based path.
-@Suppress("EXTENSION_SHADOWED_BY_MEMBER")
-private fun RenderNode.setNodeBounds(left: Float, top: Float, right: Float, bottom: Float) {
-    bounds = SkRect.makeLTRB(left, top, right, bottom)
-}
-
-@Suppress("EXTENSION_SHADOWED_BY_MEMBER")
-private fun RenderNode.setNodePivot(x: Float, y: Float) {
-    pivot = Point(x, y)
 }

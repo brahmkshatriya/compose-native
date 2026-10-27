@@ -571,7 +571,7 @@ class ComposeNativePluginTest {
         val project = ProjectBuilder.builder().build()
         val desktopNative = project.configurations.create("desktopNativeMainImplementation")
 
-        assertEquals("0.153.1", project.nativeSkikoPublicationVersion())
+        assertEquals("0.156.1", project.nativeSkikoPublicationVersion())
 
         desktopNative.dependencies.add(
             project.dependencies.create("dev.brahmkshatriya.skiko:skiko:0.151.6")
