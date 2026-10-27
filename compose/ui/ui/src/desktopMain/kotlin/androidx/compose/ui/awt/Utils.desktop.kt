@@ -24,16 +24,12 @@ import androidx.compose.ui.unit.size
 import androidx.compose.ui.util.fastRoundToInt
 import java.awt.Component
 import java.awt.EventQueue
-import java.awt.Graphics
 import java.awt.Rectangle
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JComponent
-import javax.swing.JLayeredPane
 import javax.swing.RootPaneContainer
 import kotlin.math.ceil
 import kotlin.math.floor
-import org.jetbrains.skiko.OS
-import org.jetbrains.skiko.hostOs
 
 internal fun Component.isParentOf(component: Component?): Boolean {
     var parent = component?.parent
@@ -51,7 +47,7 @@ internal fun toAwtRectangle(
     top: Float,
     right: Float,
     bottom: Float,
-    density: Float
+    density: Float,
 ): Rectangle {
     val rleft = floor(left / density).toInt()
     val rtop = floor(top / density).toInt()
@@ -62,13 +58,14 @@ internal fun toAwtRectangle(
     return Rectangle(rleft, rtop, rwidth, rheight)
 }
 
-internal fun IntRect.toAwtRectangle(density: Density) = toAwtRectangle(
-    left = left.toFloat(),
-    top = top.toFloat(),
-    right = right.toFloat(),
-    bottom = bottom.toFloat(),
-    density = density.density
-)
+internal fun IntRect.toAwtRectangle(density: Density) =
+    toAwtRectangle(
+        left = left.toFloat(),
+        top = top.toFloat(),
+        right = right.toFloat(),
+        bottom = bottom.toFloat(),
+        density = density.density,
+    )
 
 internal fun DpRect.toAwtRectangleRounded(): Rectangle {
     val left = this.left.value.fastRoundToInt()
@@ -106,49 +103,14 @@ internal fun Rect.toAwtRectangleRounded(density: Density): Rectangle {
     return Rectangle(left, top, right - left, bottom - top)
 }
 
-/**
- * Determines whether the window has a shadow on macOS.
- */
+/** Determines whether the window has a shadow on macOS. */
 // See https://developer.apple.com/library/archive/technotes/tn2007/tn2196.html#WINDOW_SHADOW
 internal var RootPaneContainer.hasMacOsShadow: Boolean
     // Delegated properties don't work for extensions https://youtrack.jetbrains.com/issue/KT-6643
     get() = rootPane.getClientProperty("Window.shadow") as? Boolean? ?: false
-    set(value) { rootPane.putClientProperty("Window.shadow", value) }
-
-/**
- * Windows makes clicks on transparent pixels fall through, but it doesn't work
- * with GPU accelerated rendering since this check requires having access to pixels from CPU.
- *
- * JVM doesn't allow override this behaviour with low-level windows methods, so hack this by filling
- * the background with an almost transparent color.
- * Based on tests, it doesn't affect resulting pixel color.
- */
-internal open class JLayeredPaneWithTransparencyHack: JLayeredPane() {
-    override fun paint(g: Graphics) {
-        if (!isOpaque && UseTransparencyHack) {
-            // Fill the background with an almost transparent color
-            g.color = AlmostTransparent
-            val r = g.clipBounds
-            if (r != null) {
-                g.fillRect(r.x, r.y, r.width, r.height)
-            } else {
-                g.fillRect(0, 0, width, height)
-            }
-        }
-
-        super.paint(g)
+    set(value) {
+        rootPane.putClientProperty("Window.shadow", value)
     }
-
-    private companion object {
-
-        @JvmStatic
-        val AlmostTransparent = java.awt.Color(0, 0, 0, 1)
-
-        @JvmStatic
-        private val UseTransparencyHack = hostOs == OS.Windows
-
-    }
-}
 
 /**
  * A utility for running code on the event dispatching thread, making sure it is not queued more
@@ -156,9 +118,7 @@ internal open class JLayeredPaneWithTransparencyHack: JLayeredPane() {
  */
 internal class DebouncingEdtExecutor {
 
-    /**
-     * Whether any code has been scheduled.
-     */
+    /** Whether any code has been scheduled. */
     private val isScheduled = AtomicBoolean(false)
 
     /**
@@ -186,9 +146,7 @@ internal class DebouncingEdtExecutor {
     }
 }
 
-/**
- * Disables double-buffering for the given window.
- */
+/** Disables double-buffering for the given window. */
 internal fun RootPaneContainer.disableDoubleBuffering() {
     rootPane.isDoubleBuffered = false
     (contentPane as? JComponent)?.isDoubleBuffered = false

@@ -22,23 +22,21 @@ import androidx.compose.foundation.contextmenu.ContextMenuColors
 import androidx.compose.foundation.contextmenu.ContextMenuScope
 import androidx.compose.foundation.contextmenu.ContextMenuState
 import androidx.compose.foundation.contextmenu.DefaultContextMenuColors
-import androidx.compose.foundation.contextmenu.close
 import androidx.compose.foundation.contextmenu.computeContextMenuColors
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSizeIn
 import androidx.compose.foundation.layout.sizeIn
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -47,7 +45,7 @@ import androidx.compose.ui.text.font.FontWeight.Companion.Medium
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.OverlayPopup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 
@@ -92,10 +90,11 @@ internal fun WebContextMenuToolbarPopup(
         onDismiss = onDismiss,
         modifier = modifier,
         colors = computeContextMenuColors(),
-        contextMenuBuilderBlock = contextMenuBuilderBlock
+        contextMenuBuilderBlock = contextMenuBuilderBlock,
     )
 }
 
+@OptIn(InternalComposeUiApi::class)
 @Composable
 internal fun WebContextMenuToolbarPopup(
     popupPositionProvider: PopupPositionProvider,
@@ -104,7 +103,7 @@ internal fun WebContextMenuToolbarPopup(
     colors: ContextMenuColors,
     contextMenuBuilderBlock: ContextMenuScope.() -> Unit,
 ) {
-    Popup(
+    OverlayPopup(
         popupPositionProvider = popupPositionProvider,
         onDismissRequest = onDismiss,
         properties = DefaultPopupToolbarProperties,
@@ -145,7 +144,7 @@ internal fun WebContextMenuRow(
                 .padding(horizontal = WebContextMenuToolbarSpec.ContainerPadding)
                 .shadow(
                     WebContextMenuToolbarSpec.MenuContainerElevation,
-                    WebContextMenuToolbarSpec.CornerShape
+                    WebContextMenuToolbarSpec.CornerShape,
                 )
                 .background(colors.backgroundColor)
                 .horizontalScroll(rememberScrollState())
@@ -179,10 +178,7 @@ internal fun WebContextMenuToolbarItem(
         horizontalArrangement = Arrangement.spacedBy(WebContextMenuToolbarSpec.ItemsPadding),
         modifier =
             modifier
-                .clickable(
-                    enabled = enabled,
-                    onClickLabel = label,
-                ) {
+                .clickable(enabled = enabled, onClickLabel = label) {
                     // Semantics can call this even if it is disabled (at least in tests),
                     // so check enabled status again before invoking any callbacks.
                     if (enabled) onClick()
@@ -191,7 +187,7 @@ internal fun WebContextMenuToolbarItem(
                     minHeight = WebContextMenuToolbarSpec.ContainerHeight,
                     maxHeight = WebContextMenuToolbarSpec.ContainerHeight,
                 )
-                .padding(horizontal = WebContextMenuToolbarSpec.ItemsPadding)
+                .padding(horizontal = WebContextMenuToolbarSpec.ItemsPadding),
     ) {
         leadingIcon?.let { icon ->
             Box(
@@ -209,9 +205,9 @@ internal fun WebContextMenuToolbarItem(
             text = label,
             style =
                 WebContextMenuToolbarSpec.textStyle(
-                    color = if (enabled) colors.textColor else colors.disabledTextColor,
+                    color = if (enabled) colors.textColor else colors.disabledTextColor
                 ),
-            maxLines = 1
+            maxLines = 1,
         )
     }
 }

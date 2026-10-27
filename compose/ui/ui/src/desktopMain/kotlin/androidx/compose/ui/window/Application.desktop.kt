@@ -36,6 +36,7 @@ import androidx.compose.ui.awt.ComposePanel
 import androidx.compose.ui.configureSwingGlobalsForCompose
 import androidx.compose.ui.platform.GlobalSnapshotManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalGraphicsResourceCache
 import androidx.compose.ui.platform.LocalLayoutDirection
 import kotlin.system.exitProcess
 import kotlinx.coroutines.CoroutineScope
@@ -56,17 +57,16 @@ import org.jetbrains.skiko.MainUIDispatcher
  * }
  * ```
  *
- * After all windows are closed and all operations are completed, the application will end.
- * Set [exitProcessOnExit] to `false`, if you need to execute some code after [application] block,
+ * After all windows are closed and all operations are completed, the application will end. Set
+ * [exitProcessOnExit] to `false`, if you need to execute some code after [application] block,
  * otherwise the code after it won't be executed, as [application] will exit the process.
  *
  * This entry point is a blocking operation (it blocks the current thread until application
  * finishes) and can't be called inside UI thread. To launch new application from UI thread (for
  * example, from some event listener), use `GlobalScope.launchApplication` instead.
  *
- * Application can launch background tasks using [LaunchedEffect]
- * or create [Window], [DialogWindow], or [Tray] in a declarative Compose way:
- *
+ * Application can launch background tasks using [LaunchedEffect] or create [Window],
+ * [DialogWindow], or [Tray] in a declarative Compose way:
  * ```
  * fun main() = application {
  *     var isSplashScreenShowing by remember { mutableStateOf(true) }
@@ -84,37 +84,32 @@ import org.jetbrains.skiko.MainUIDispatcher
  * }
  * ```
  *
- * When there is no any active compositions, this function will end.
- * Active composition is a composition that have active coroutine (for example, launched in
- * [LaunchedEffect]) or that have child composition created inside [Window], [DialogWindow], or [Tray].
+ * When there is no any active compositions, this function will end. Active composition is a
+ * composition that have active coroutine (for example, launched in [LaunchedEffect]) or that have
+ * child composition created inside [Window], [DialogWindow], or [Tray].
  *
- * Don't use any animation in this function
- * (for example, [withFrameNanos] or [androidx.compose.animation.core.animateFloatAsState]),
- * because underlying [MonotonicFrameClock] hasn't synchronized with any display, and produces
- * frames as fast as possible.
+ * Don't use any animation in this function (for example, [withFrameNanos] or
+ * [androidx.compose.animation.core.animateFloatAsState]), because underlying [MonotonicFrameClock]
+ * hasn't synchronized with any display, and produces frames as fast as possible.
  *
- * All animations should be created inside Composable content of the
- * [Window] / [DialogWindow] / [ComposePanel].
+ * All animations should be created inside Composable content of the [Window] / [DialogWindow] /
+ * [ComposePanel].
  *
  * @param exitProcessOnExit should `exitProcess(0)` be called after the application is closed.
- * exitProcess speedup process exit (instant instead of 1-4sec).
- * If `false`, the execution of the function will be unblocked after application is exited
- * (when the last window is closed, and all [LaunchedEffect] are complete).
+ *   exitProcess speedup process exit (instant instead of 1-4sec). If `false`, the execution of the
+ *   function will be unblocked after application is exited (when the last window is closed, and all
+ *   [LaunchedEffect] are complete).
  * @see [awaitApplication]
  */
 fun application(
     exitProcessOnExit: Boolean = true,
-    content: @Composable ApplicationScope.() -> Unit
+    content: @Composable ApplicationScope.() -> Unit,
 ) {
     if (System.getProperty("compose.application.configure.swing.globals") == "true") {
         configureSwingGlobalsForCompose()
     }
 
-    runBlocking {
-        awaitApplication {
-            content()
-        }
-    }
+    runBlocking { awaitApplication { content() } }
 
     if (exitProcessOnExit) {
         exitProcess(0)
@@ -134,30 +129,24 @@ fun application(
  * ```
  *
  * Don't use `GlobalScope.launchApplication {}` to launch application inside `main()` function
- * without waiting it to end.
- * As it will not block the main thread, and application process will stop
- * (because global coroutines are daemon threads, daemon threads don't keep process alive:
+ * without waiting it to end. As it will not block the main thread, and application process will
+ * stop (because global coroutines are daemon threads, daemon threads don't keep process alive:
  * https://kotlinlang.org/docs/coroutines-basics.html#global-coroutines-are-like-daemon-threads)
  *
  * @see [awaitApplication]
  */
-fun CoroutineScope.launchApplication(
-    content: @Composable ApplicationScope.() -> Unit
-): Job {
+fun CoroutineScope.launchApplication(content: @Composable ApplicationScope.() -> Unit): Job {
     if (System.getProperty("compose.application.configure.swing.globals") == "true") {
         configureSwingGlobalsForCompose()
     }
-    return launch {
-        awaitApplication(content = content)
-    }
+    return launch { awaitApplication(content = content) }
 }
 
 /**
  * An entry point for the Compose application.
  *
- * Application can launch background tasks using [LaunchedEffect]
- * or create [Window], [DialogWindow], or [Tray] in a declarative Compose way:
- *
+ * Application can launch background tasks using [LaunchedEffect] or create [Window],
+ * [DialogWindow], or [Tray] in a declarative Compose way:
  * ```
  * fun main() = runBlocking {
  *     awaitApplication {
@@ -177,21 +166,18 @@ fun CoroutineScope.launchApplication(
  * }
  * ```
  *
- * When there is no any active compositions, this function will end.
- * Active composition is a composition that have active coroutine (for example, launched in
- * [LaunchedEffect]) or that have child composition created inside [Window], [DialogWindow], or [Tray].
+ * When there is no any active compositions, this function will end. Active composition is a
+ * composition that have active coroutine (for example, launched in [LaunchedEffect]) or that have
+ * child composition created inside [Window], [DialogWindow], or [Tray].
  *
- * Don't use any animation in this function
- * (for example, [withFrameNanos] or [androidx.compose.animation.core.animateFloatAsState]),
- * because underlying [MonotonicFrameClock] hasn't synchronized with any display, and produces
- * frames as fast as possible.
+ * Don't use any animation in this function (for example, [withFrameNanos] or
+ * [androidx.compose.animation.core.animateFloatAsState]), because underlying [MonotonicFrameClock]
+ * hasn't synchronized with any display, and produces frames as fast as possible.
  *
- * All animation's should be created inside Composable content of the
- * [Window] / [DialogWindow] / [ComposePanel].
+ * All animation's should be created inside Composable content of the [Window] / [DialogWindow] /
+ * [ComposePanel].
  */
-suspend fun awaitApplication(
-    content: @Composable ApplicationScope.() -> Unit
-) {
+suspend fun awaitApplication(content: @Composable ApplicationScope.() -> Unit) {
     if (System.getProperty("compose.application.configure.swing.globals") == "true") {
         configureSwingGlobalsForCompose()
     }
@@ -201,15 +187,14 @@ suspend fun awaitApplication(
             val recomposer = Recomposer(coroutineContext)
             var isOpen by mutableStateOf(true)
 
-            val applicationScope = object : ApplicationScope {
-                override fun exitApplication() {
-                    isOpen = false
+            val applicationScope =
+                object : ApplicationScope {
+                    override fun exitApplication() {
+                        isOpen = false
+                    }
                 }
-            }
 
-            launch {
-                recomposer.runRecomposeAndApplyChanges()
-            }
+            launch { recomposer.runRecomposeAndApplyChanges() }
 
             launch {
                 val applier = ApplicationApplier()
@@ -222,6 +207,7 @@ suspend fun awaitApplication(
                                 // density to calculate intrinsicSize
                                 LocalDensity provides GlobalDensity,
                                 LocalLayoutDirection provides GlobalLayoutDirection,
+                                LocalGraphicsResourceCache providesDefault null, // CMP-10903
                             ) {
                                 applicationScope.content()
                             }
@@ -238,22 +224,18 @@ suspend fun awaitApplication(
     }
 }
 
-/**
- * Scope used by [application], [awaitApplication], [launchApplication]
- */
+/** Scope used by [application], [awaitApplication], [launchApplication] */
 @Stable
 interface ApplicationScope {
     /**
-     * Close all windows created inside the application and cancel all launched effects
-     * (they launch via [LaunchedEffect] and [rememberCoroutineScope]).
+     * Close all windows created inside the application and cancel all launched effects (they launch
+     * via [LaunchedEffect] and [rememberCoroutineScope]).
      */
     fun exitApplication()
 }
 
 private object YieldFrameClock : MonotonicFrameClock {
-    override suspend fun <R> withFrameNanos(
-        onFrame: (frameTimeNanos: Long) -> R
-    ): R {
+    override suspend fun <R> withFrameNanos(onFrame: (frameTimeNanos: Long) -> R): R {
         // We call `yield` to avoid blocking UI thread. If we don't call this then application
         // can be frozen for the user in some cases as it will not receive any input events.
         //
@@ -265,8 +247,11 @@ private object YieldFrameClock : MonotonicFrameClock {
 
 private class ApplicationApplier : Applier<Any> {
     override val current: Any = Unit
+
     override fun down(node: Any) = Unit
+
     override fun up() = Unit
+
     override fun insertTopDown(index: Int, instance: Any) {
         if (instance !is Unit) {
             throw IllegalStateException(
@@ -275,6 +260,7 @@ private class ApplicationApplier : Applier<Any> {
             )
         }
     }
+
     override fun insertBottomUp(index: Int, instance: Any) {
         if (instance !is Unit) {
             throw IllegalStateException(
@@ -283,8 +269,12 @@ private class ApplicationApplier : Applier<Any> {
             )
         }
     }
+
     override fun remove(index: Int, count: Int) = Unit
+
     override fun move(from: Int, to: Int, count: Int) = Unit
+
     override fun clear() = Unit
+
     override fun onEndChanges() = Unit
 }

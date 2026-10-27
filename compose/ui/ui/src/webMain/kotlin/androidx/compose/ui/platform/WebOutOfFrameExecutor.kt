@@ -20,54 +20,33 @@ import androidx.compose.ui.node.OutOfFrameExecutor
 import kotlin.js.ExperimentalWasmJsInterop
 import kotlin.js.js
 
-internal class WebOutOfFrameExecutor : PlatformOutOfFrameExecutor  {
-    private val queue = ArrayDeque<() -> Unit>()
-    private var isDisposed = false
-    private val drainCallback = {
-        if (!isDisposed) {
-            while (queue.isNotEmpty()) {
-                queue.removeLast().invoke()
-            }
-        }
-    }
+internal class WebOutOfFrameExecutor :
+    AbstractPlatformOutOfFrameExecutor(tracePrefix = "WebOutOfFrameExecutor") {
 
-    override fun schedule(block: () -> Unit) {
-        if (isDisposed) {
-            return
-        }
+    override fun addToQueueAndSchedule(
+        queue: ArrayDeque<() -> Unit>,
+        block: () -> Unit,
+        drainLambda: () -> Unit,
+    ) {
         val shouldSchedule = queue.isEmpty()
         queue.addLast(block)
 
         if (shouldSchedule) {
-            schedulerPostTask(drainCallback)
+            schedulerPostTask(drainLambda)
         }
     }
 
-    override fun drainScheduledWorkForTest() {
-        drainCallback()
-    }
-
-    override val hasWorkScheduled: Boolean
-        get() = queue.isNotEmpty()
-
-    fun dispose() {
-        isDisposed = true
-        queue.clear()
-    }
+    override fun isExecutingOnUiThread() = true
 }
 
-internal val isPostingTasksSupported: Boolean by lazy {
-    isSchedulerApiSupported()
-}
+internal val isPostingTasksSupported: Boolean by lazy { isSchedulerApiSupported() }
 
 @OptIn(ExperimentalWasmJsInterop::class)
 private fun isSchedulerApiSupported(): Boolean = js("Boolean('scheduler' in window)")
 
-
-/**
- * Better reflects [OutOfFrameExecutor] contract
- */
+/** Better reflects [OutOfFrameExecutor] contract */
+@Suppress("unused")
 @OptIn(ExperimentalWasmJsInterop::class)
-//language=javascript
+// language=javascript
 private fun schedulerPostTask(block: () -> Unit): Unit =
     js("scheduler.postTask(block, { priority: 'user-blocking',})")

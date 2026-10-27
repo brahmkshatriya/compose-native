@@ -68,17 +68,20 @@ import org.jetbrains.skiko.SkiaLayerAnalytics
  * @param coroutineContext The coroutine context for Compose content rendering and effects.
  */
 @OptIn(ComposeToolingApi::class)
-class ComposePanel @ExperimentalComposeUiApi constructor(
+class ComposePanel
+@ExperimentalComposeUiApi
+constructor(
     private val skiaLayerAnalytics: SkiaLayerAnalytics = SkiaLayerAnalytics.Empty,
     private var savedState: SavedState? = null,
     private val renderSettings: RenderSettings = DefaultRenderSettings,
-    private val coroutineContext: CoroutineContext = EmptyCoroutineContext
+    private val coroutineContext: CoroutineContext = EmptyCoroutineContext,
 ) : JLayeredPane(), ComposeDesktopEntryPoint {
-    constructor() : this(
-        savedState = null,
-        skiaLayerAnalytics = SkiaLayerAnalytics.Empty,
-        renderSettings = DefaultRenderSettings
-    )
+    constructor() :
+        this(
+            savedState = null,
+            skiaLayerAnalytics = SkiaLayerAnalytics.Empty,
+            renderSettings = DefaultRenderSettings,
+        )
 
     companion object {
         private val SwingGraphics = SwingGraphics()
@@ -92,11 +95,12 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
          */
         @ExperimentalComposeUiApi
         val DefaultRenderSettings: RenderSettings
-            get() = if (ComposeFeatureFlags.useSwingGraphicsInComposePanel.value) {
-                SwingGraphics
-            } else {
-                SkiaSurface
-            }
+            get() =
+                if (ComposeFeatureFlags.useSwingGraphicsInComposePanel.value) {
+                    SwingGraphics
+                } else {
+                    SkiaSurface
+                }
     }
 
     init {
@@ -106,29 +110,32 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
                 "Creating from another thread isn't supported."
         }
         layout = null
-        focusTraversalPolicy = object : FocusTraversalPolicy() {
-            override fun getComponentAfter(
-                aContainer: Container?,
-                aComponent: Component?
-            ): Component? {
-                val ancestor = focusCycleRootAncestor
-                val policy = ancestor.focusTraversalPolicy
-                return policy.getComponentAfter(ancestor, this@ComposePanel)
-            }
+        focusTraversalPolicy =
+            object : FocusTraversalPolicy() {
+                override fun getComponentAfter(
+                    aContainer: Container?,
+                    aComponent: Component?,
+                ): Component? {
+                    val ancestor = focusCycleRootAncestor
+                    val policy = ancestor.focusTraversalPolicy
+                    return policy.getComponentAfter(ancestor, this@ComposePanel)
+                }
 
-            override fun getComponentBefore(
-                aContainer: Container?,
-                aComponent: Component?
-            ): Component? {
-                val ancestor = focusCycleRootAncestor
-                val policy = ancestor.focusTraversalPolicy
-                return policy.getComponentBefore(ancestor, this@ComposePanel)
-            }
+                override fun getComponentBefore(
+                    aContainer: Container?,
+                    aComponent: Component?,
+                ): Component? {
+                    val ancestor = focusCycleRootAncestor
+                    val policy = ancestor.focusTraversalPolicy
+                    return policy.getComponentBefore(ancestor, this@ComposePanel)
+                }
 
-            override fun getFirstComponent(aContainer: Container?) = null
-            override fun getLastComponent(aContainer: Container?) = null
-            override fun getDefaultComponent(aContainer: Container?) = null
-        }
+                override fun getFirstComponent(aContainer: Container?) = null
+
+                override fun getLastComponent(aContainer: Container?) = null
+
+                override fun getDefaultComponent(aContainer: Container?) = null
+            }
         isFocusCycleRoot = true
         isFocusable = true
     }
@@ -140,9 +147,7 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
     private var _composeContainer: ComposeContainer? = null
     private var _composeContent: (@Composable () -> Unit)? = null
 
-    /**
-     * Controls whether mouse-down on an unfocusable element clears focus.
-     */
+    /** Controls whether mouse-down on an unfocusable element clears focus. */
     @ExperimentalComposeUiApi
     var isClearFocusOnMouseDownEnabled: Boolean = ComposeUiFlags.isClearFocusOnMouseDownEnabled
         set(value) {
@@ -151,21 +156,20 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
         }
 
     /**
-     * Determines whether the Compose state in [ComposePanel] should be disposed
-     * when the panel is detached from the Swing hierarchy (when [removeNotify] is called).
+     * Determines whether the Compose state in [ComposePanel] should be disposed when the panel is
+     * detached from the Swing hierarchy (when [removeNotify] is called).
      *
-     * If it is set to false, it is developer's responsibility to call [dispose] function
-     * when Compose state and all related to [ComposePanel] resources are no longer needed.
-     * It can be useful for cases when [ComposePanel] can be attached/detached to Swing hierarchy
-     * multiple times, so with [isDisposeOnRemove] = `false` state will be preserved.
+     * If it is set to false, it is developer's responsibility to call [dispose] function when
+     * Compose state and all related to [ComposePanel] resources are no longer needed. It can be
+     * useful for cases when [ComposePanel] can be attached/detached to Swing hierarchy multiple
+     * times, so with [isDisposeOnRemove] = `false` state will be preserved.
      *
-     * On the other hand, [isDisposeOnRemove] = `true` can be useful for stateless components,
-     * that can be recreated for each attaching to Swing hierarchy.
+     * On the other hand, [isDisposeOnRemove] = `true` can be useful for stateless components, that
+     * can be recreated for each attaching to Swing hierarchy.
      *
      * @see dispose
      */
-    @ExperimentalComposeUiApi
-    var isDisposeOnRemove: Boolean = true
+    @ExperimentalComposeUiApi var isDisposeOnRemove: Boolean = true
 
     /**
      * Determines whether unconsumed mouse wheel events will be propagated to the parent component.
@@ -191,8 +195,8 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
         }
 
     /**
-     * Saves the current UI state into a [SavedState] object. The returned state can be used
-     * to restore the UI state later by passing it to the constructor's [savedState] parameter.
+     * Saves the current UI state into a [SavedState] object. The returned state can be used to
+     * restore the UI state later by passing it to the constructor's [savedState] parameter.
      *
      * @return A [SavedState] object containing the current UI state.
      */
@@ -204,8 +208,8 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
     /**
      * Disposes Compose state and rendering resources.
      *
-     * Should be called only when [ComposePanel] is detached from Swing hierarchy.
-     * Otherwise, nothing will happen.
+     * Should be called only when [ComposePanel] is detached from Swing hierarchy. Otherwise,
+     * nothing will happen.
      *
      * @see isDisposeOnRemove
      */
@@ -230,16 +234,16 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
      * Sets the minimum size of the composable content.
      *
      * The width and height of [size] can either be a regular, specific, value or
-     * [UNSPECIFIED_DIMENSION_VALUE], which means the content will
-     * determine the minimum size on the corresponding axis. The content will be measured
-     * unconstrained on that axis, and the resulting size will be used.
+     * [UNSPECIFIED_DIMENSION_VALUE], which means the content will determine the minimum size on the
+     * corresponding axis. The content will be measured unconstrained on that axis, and the
+     * resulting size will be used.
      */
     override fun setMinimumSize(size: Dimension?) {
         super.setMinimumSize(size)
     }
 
     @OptIn(ExperimentalUnitApi::class)
-    @Suppress("RedundantNullableReturnType")  // https://youtrack.jetbrains.com/issue/KT-31094
+    @Suppress("RedundantNullableReturnType") // https://youtrack.jetbrains.com/issue/KT-31094
     override fun getMinimumSize(): Dimension? {
         return super.getMinimumSize().actualize()
     }
@@ -248,16 +252,16 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
      * Sets the preferred size of the [ComposePanel].
      *
      * The width and height of [size] can either be a regular, specific, value or
-     * [UNSPECIFIED_DIMENSION_VALUE], which means the content will
-     * determine the preferred size on the corresponding axis. The content will be measured
-     * unconstrained on that axis, and the resulting size will be used.
+     * [UNSPECIFIED_DIMENSION_VALUE], which means the content will determine the preferred size on
+     * the corresponding axis. The content will be measured unconstrained on that axis, and the
+     * resulting size will be used.
      */
     override fun setPreferredSize(size: Dimension?) {
         super.setPreferredSize(size)
     }
 
     @OptIn(ExperimentalUnitApi::class)
-    @Suppress("RedundantNullableReturnType")  // https://youtrack.jetbrains.com/issue/KT-31094
+    @Suppress("RedundantNullableReturnType") // https://youtrack.jetbrains.com/issue/KT-31094
     override fun getPreferredSize(): Dimension? {
         val size = if (isPreferredSizeSet) super.getPreferredSize() else UnspecifiedDimension()
         return size.actualize()
@@ -267,16 +271,16 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
      * Sets the maximum size of the composable content.
      *
      * The width and height of [size] can either be a regular, specific, value or
-     * [UNSPECIFIED_DIMENSION_VALUE], which means the content will
-     * determine the maximum size on the corresponding axis. The content will be measured
-     * unconstrained on that axis, and the resulting size will be used.
+     * [UNSPECIFIED_DIMENSION_VALUE], which means the content will determine the maximum size on the
+     * corresponding axis. The content will be measured unconstrained on that axis, and the
+     * resulting size will be used.
      */
     override fun setMaximumSize(size: Dimension?) {
         super.setMaximumSize(size)
     }
 
     @OptIn(ExperimentalUnitApi::class)
-    @Suppress("RedundantNullableReturnType")  // https://youtrack.jetbrains.com/issue/KT-31094
+    @Suppress("RedundantNullableReturnType") // https://youtrack.jetbrains.com/issue/KT-31094
     override fun getMaximumSize(): Dimension? {
         return super.getMaximumSize().actualize()
     }
@@ -302,17 +306,12 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
     }
 
     private fun wrapContent(content: @Composable () -> Unit): @Composable () -> Unit {
-        return {
-            CompositionLocalProvider(LocalAwtWindow provides windowParent) {
-                content()
-            }
-        }
+        return { CompositionLocalProvider(LocalAwtWindow provides windowParent) { content() } }
     }
 
     /**
-     * Handler to catch uncaught exceptions during rendering frames, handling events,
-     * or processing background Compose operations. If null, then exceptions throw
-     * further up the call stack.
+     * Handler to catch uncaught exceptions during rendering frames, handling events, or processing
+     * background Compose operations. If null, then exceptions throw further up the call stack.
      */
     @ExperimentalComposeUiApi
     var exceptionHandler: WindowExceptionHandler? = null
@@ -322,8 +321,8 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
         }
 
     /**
-     * A container used for additional layers and as the reference for window coordinate space.
-     * It might be customized only with [LayerType.OnComponent].
+     * A container used for additional layers and as the reference for window coordinate space. It
+     * might be customized only with [LayerType.OnComponent].
      *
      * See [ComposeFeatureFlags.layerType]
      */
@@ -345,59 +344,69 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
     override fun addNotify() {
         super.addNotify()
 
+        windowParent = SwingUtilities.getWindowAncestor(this)
+
         // After [super.addNotify] is called, we can safely initialize the bridge and composable
         // content.
-        val composeContainer = _composeContainer ?: createComposeContainer().also {
-            _composeContainer = it
-            windowParent = SwingUtilities.getWindowAncestor(this)
-            it.redispatchUnconsumedMouseWheelEvents = redispatchUnconsumedMouseWheelEvents
-            it.showLayoutBounds = showLayoutBounds
-            val composeContent = _composeContent
-            if (composeContent != null) {
-                it.setContent(composeContent)
-            }
-            savedState = null
-        }
+        val composeContainer =
+            _composeContainer
+                ?: createComposeContainer().also {
+                    _composeContainer = it
+                    it.redispatchUnconsumedMouseWheelEvents = redispatchUnconsumedMouseWheelEvents
+                    it.showLayoutBounds = showLayoutBounds
+                    val composeContent = _composeContent
+                    if (composeContent != null) {
+                        it.setContent(composeContent)
+                    }
+                    savedState = null
+                }
         composeContainer.addNotify()
     }
 
     private fun createComposeContainer(): ComposeContainer {
         return ComposeContainer(
-            container = this,
-            isWindowLevel = false,
-            skiaLayerAnalytics = skiaLayerAnalytics,
-            savedState = savedState,
-            windowContainer = windowContainer,
-            renderSettings = renderSettings,
-            coroutineContext = coroutineContext,
-        ).apply {
-            setBounds(0, 0, width, height)
-            contentComponent.isFocusable = isFocusable
-            contentComponent.isRequestFocusEnabled = isRequestFocusEnabled
-            contentComponent.background = background
-            exceptionHandler = this@ComposePanel.exceptionHandler
+                container = this,
+                isWindowLevel = false,
+                skiaLayerAnalytics = skiaLayerAnalytics,
+                savedState = savedState,
+                windowContainer = windowContainer,
+                renderSettings = renderSettings,
+                coroutineContext = coroutineContext,
+            )
+            .apply {
+                setBounds(0, 0, width, height)
+                contentComponent.isFocusable = isFocusable
+                contentComponent.isRequestFocusEnabled = isRequestFocusEnabled
+                contentComponent.background = background
+                exceptionHandler = this@ComposePanel.exceptionHandler
 
-            _focusListeners.forEach(contentComponent::addFocusListener)
-            contentComponent.addFocusListener(object : FocusListener {
-                override fun focusGained(e: FocusEvent) {
-                    if (!e.isTemporary && !e.isFocusGainedHandledBySwingPanel(this@ComposePanel)) {
-                        when (e.cause) {
-                            FocusEvent.Cause.UNKNOWN, FocusEvent.Cause.ACTIVATION -> {
-                                if (!focusManager.hasFocus) {
-                                    focusManager.takeFocus(FocusDirection.Next)
+                _focusListeners.forEach(contentComponent::addFocusListener)
+                contentComponent.addFocusListener(
+                    object : FocusListener {
+                        override fun focusGained(e: FocusEvent) {
+                            if (
+                                !e.isTemporary &&
+                                    !e.isFocusGainedHandledBySwingPanel(this@ComposePanel)
+                            ) {
+                                when (e.cause) {
+                                    FocusEvent.Cause.UNKNOWN,
+                                    FocusEvent.Cause.ACTIVATION -> {
+                                        if (!focusManager.hasFocus) {
+                                            focusManager.takeFocus(FocusDirection.Next)
+                                        }
+                                    }
+
+                                    else -> Unit
                                 }
                             }
-
-                            else -> Unit
                         }
+
+                        override fun focusLost(e: FocusEvent) = Unit
                     }
-                }
+                )
 
-                override fun focusLost(e: FocusEvent) = Unit
-            })
-
-            isClearFocusOnMouseDownEnabled = this@ComposePanel.isClearFocusOnMouseDownEnabled
-        }
+                isClearFocusOnMouseDownEnabled = this@ComposePanel.isClearFocusOnMouseDownEnabled
+            }
     }
 
     override fun removeNotify() {
@@ -498,9 +507,7 @@ class ComposePanel @ExperimentalComposeUiApi constructor(
         _composeContainer?.renderImmediately()
     }
 
-    /**
-     * Set the visual debug option that shows bounds for all nodes in the hierarchy.
-     */
+    /** Set the visual debug option that shows bounds for all nodes in the hierarchy. */
     @InternalComposeUiApi
     var showLayoutBounds: Boolean = _composeContainer?.showLayoutBounds ?: false
         set(value) {

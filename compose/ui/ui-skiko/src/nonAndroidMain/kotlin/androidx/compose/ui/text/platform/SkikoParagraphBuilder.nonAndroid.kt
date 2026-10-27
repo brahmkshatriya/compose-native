@@ -18,6 +18,7 @@
 
 package androidx.compose.ui.text.platform
 
+import androidx.compose.runtime.State
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
@@ -28,6 +29,7 @@ import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.Bullet
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.FontHinting
 import androidx.compose.ui.text.FontRasterizationSettings
@@ -57,9 +59,9 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.isUnspecified
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.fastAny
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachReversed
-import kotlin.jvm.JvmName
 import org.jetbrains.skia.Font as SkFont
 import org.jetbrains.skia.FontEdging as SkFontEdging
 import org.jetbrains.skia.FontFeature
@@ -83,18 +85,20 @@ import org.jetbrains.skia.paragraph.TextBox
 import org.jetbrains.skia.paragraph.TextIndent as SkTextIndent
 import org.jetbrains.skia.paragraph.TextStyle as SkTextStyle
 
-private fun FontSmoothing.toSkFontEdging(): SkFontEdging = when (this) {
-    FontSmoothing.None -> SkFontEdging.ALIAS
-    FontSmoothing.AntiAlias -> SkFontEdging.ANTI_ALIAS
-    FontSmoothing.SubpixelAntiAlias -> SkFontEdging.SUBPIXEL_ANTI_ALIAS
-}
+private fun FontSmoothing.toSkFontEdging(): SkFontEdging =
+    when (this) {
+        FontSmoothing.None -> SkFontEdging.ALIAS
+        FontSmoothing.AntiAlias -> SkFontEdging.ANTI_ALIAS
+        FontSmoothing.SubpixelAntiAlias -> SkFontEdging.SUBPIXEL_ANTI_ALIAS
+    }
 
-private fun FontHinting.toSkFontHinting(): SkFontHinting = when (this) {
-    FontHinting.None -> SkFontHinting.NONE
-    FontHinting.Slight -> SkFontHinting.SLIGHT
-    FontHinting.Normal -> SkFontHinting.NORMAL
-    FontHinting.Full -> SkFontHinting.FULL
-}
+private fun FontHinting.toSkFontHinting(): SkFontHinting =
+    when (this) {
+        FontHinting.None -> SkFontHinting.NONE
+        FontHinting.Slight -> SkFontHinting.SLIGHT
+        FontHinting.Normal -> SkFontHinting.NORMAL
+        FontHinting.Full -> SkFontHinting.FULL
+    }
 
 private val DefaultFontSize = 16.sp
 
@@ -126,7 +130,8 @@ private sealed interface ComputedStyle {
 
     // Compile-time guarantee to be used as a key in the cache
     data class Immutable(
-        override val textForegroundStyle: ParagraphTextForegroundStyle = ParagraphTextForegroundStyle.Unspecified,
+        override val textForegroundStyle: ParagraphTextForegroundStyle =
+            ParagraphTextForegroundStyle.Unspecified,
         override val brushSize: Size = Size.Unspecified,
         override val fontSize: Float = Float.NaN,
         override val fontWeight: FontWeight? = null,
@@ -134,7 +139,8 @@ private sealed interface ComputedStyle {
         override val fontSynthesis: FontSynthesis? = null,
         override val fontFamily: FontFamily? = null,
         override val fontFeatureSettings: String? = null,
-        override val fontRasterizationSettings: FontRasterizationSettings = FontRasterizationSettings.PlatformDefault,
+        override val fontRasterizationSettings: FontRasterizationSettings =
+            FontRasterizationSettings.PlatformDefault,
         override val letterSpacing: Float? = null,
         override val baselineShift: BaselineShift? = null,
         override val textGeometricTransform: TextGeometricTransform? = null,
@@ -149,13 +155,18 @@ private sealed interface ComputedStyle {
         override val topRatio: Float = -1f,
     ) : ComputedStyle {
         private val _foregroundPaint = ParagraphTextPaint()
+
         fun getForegroundPaint(): SkPaint {
             // `skiaPaint` doesn't create a copy,
             // so all the changes will be applied to skia paint.
             val paint = _foregroundPaint.skiaPaint
             paint.reset()
             _foregroundPaint.color = textForegroundStyle.color
-            _foregroundPaint.setBrush(textForegroundStyle.brush, brushSize, textForegroundStyle.alpha)
+            _foregroundPaint.setBrush(
+                textForegroundStyle.brush,
+                brushSize,
+                textForegroundStyle.alpha,
+            )
             _foregroundPaint.setDrawStyle(drawStyle)
             _foregroundPaint.blendMode = blendMode
             return paint
@@ -167,35 +178,32 @@ private sealed interface ComputedStyle {
                 res.color = textForegroundStyle.color.toArgb()
             }
             val foreground = getForegroundPaint()
-            if (foreground.shader != null ||
-                foreground.mode != PaintMode.FILL ||
-                !foreground.isSrcOver) {
+            if (
+                foreground.shader != null ||
+                    foreground.mode != PaintMode.FILL ||
+                    !foreground.isSrcOver
+            ) {
                 res.foreground = foreground
             }
-            fontStyle?.let {
-                res.fontStyle = it.toSkFontStyle()
-            }
-            textDecoration.takeUnless { it == TextDecoration.None }?.let {
-                res.decorationStyle =
-                    it.toSkDecorationStyle(textForegroundStyle.color, textDecorationLineStyle)
-            }
-            if (background != Color.Unspecified) {
-                res.background = SkPaint().also {
-                    it.color = background.toArgb()
+            fontStyle?.let { res.fontStyle = it.toSkFontStyle() }
+            textDecoration
+                .takeUnless { it == TextDecoration.None }
+                ?.let {
+                    res.decorationStyle =
+                        it.toSkDecorationStyle(textForegroundStyle.color, textDecorationLineStyle)
                 }
+            if (background != Color.Unspecified) {
+                res.background = SkPaint().also { it.color = background.toArgb() }
             }
             // Intercepted like the typeface below: Skia matches fallback faces on this style,
             // so a raw weight would ignore the iOS "Bold Text" setting.
-            res.fontStyle = res.fontStyle.withWeight(
-                platformInterceptedFontWeight(fontWeight ?: FontWeight.Normal).weight
-            )
-            shadow.takeUnless { it == Shadow.None }?.let {
-                res.addShadow(it.toSkShadow())
-            }
+            res.fontStyle =
+                res.fontStyle.withWeight(
+                    platformInterceptedFontWeight(fontWeight ?: FontWeight.Normal).weight
+                )
+            shadow.takeUnless { it == Shadow.None }?.let { res.addShadow(it.toSkShadow()) }
 
-            letterSpacing?.let {
-                res.letterSpacing = it
-            }
+            letterSpacing?.let { res.letterSpacing = it }
 
             res.addFontFeatures(FontFeature.parseW3(fontFeatureSettings.orEmpty()))
             res.fontEdging = fontRasterizationSettings.smoothing.toSkFontEdging()
@@ -204,12 +212,15 @@ private sealed interface ComputedStyle {
 
             res.fontSize = fontSize
             fontFamily?.let {
-                val resolved = fontFamilyResolver.resolve(
-                    it,
-                    fontWeight ?: FontWeight.Normal,
-                    fontStyle ?: FontStyle.Normal,
-                    fontSynthesis ?: FontSynthesis.None
-                ).value as FontLoadResult
+                val resolved =
+                    fontFamilyResolver
+                        .resolve(
+                            it,
+                            fontWeight ?: FontWeight.Normal,
+                            fontStyle ?: FontStyle.Normal,
+                            fontSynthesis ?: FontSynthesis.All,
+                        )
+                        .value as FontLoadResult
                 res.fontFamilies = resolved.aliases.toTypedArray()
                 res.typeface = resolved.typeface
             }
@@ -218,37 +229,36 @@ private sealed interface ComputedStyle {
                 val fontMetrics = res.fontMetrics
                 res.baselineShift = it.multiplier * fontMetrics.ascent
             }
-            lineHeight?.let {
-                res.height = it / fontSize
-            }
+            lineHeight?.let { res.height = it / fontSize }
             res.topRatio = topRatio
 
             return res
         }
 
-        fun toMutable() = Mutable(
-            textForegroundStyle = textForegroundStyle,
-            brushSize = brushSize,
-            fontSize = fontSize,
-            fontWeight = fontWeight,
-            fontStyle = fontStyle,
-            fontSynthesis = fontSynthesis,
-            fontFamily = fontFamily,
-            fontFeatureSettings = fontFeatureSettings,
-            fontRasterizationSettings = fontRasterizationSettings,
-            letterSpacing = letterSpacing,
-            baselineShift = baselineShift,
-            textGeometricTransform = textGeometricTransform,
-            localeList = localeList,
-            background = background,
-            textDecoration = textDecoration,
-            textDecorationLineStyle = textDecorationLineStyle,
-            shadow = shadow,
-            drawStyle = drawStyle,
-            blendMode = blendMode,
-            lineHeight = lineHeight,
-            topRatio = topRatio,
-        )
+        fun toMutable() =
+            Mutable(
+                textForegroundStyle = textForegroundStyle,
+                brushSize = brushSize,
+                fontSize = fontSize,
+                fontWeight = fontWeight,
+                fontStyle = fontStyle,
+                fontSynthesis = fontSynthesis,
+                fontFamily = fontFamily,
+                fontFeatureSettings = fontFeatureSettings,
+                fontRasterizationSettings = fontRasterizationSettings,
+                letterSpacing = letterSpacing,
+                baselineShift = baselineShift,
+                textGeometricTransform = textGeometricTransform,
+                localeList = localeList,
+                background = background,
+                textDecoration = textDecoration,
+                textDecorationLineStyle = textDecorationLineStyle,
+                shadow = shadow,
+                drawStyle = drawStyle,
+                blendMode = blendMode,
+                lineHeight = lineHeight,
+                topRatio = topRatio,
+            )
     }
 
     // Keep mutable variant to merge in place, without additional allocations
@@ -261,7 +271,8 @@ private sealed interface ComputedStyle {
         override var fontSynthesis: FontSynthesis?,
         override var fontFamily: FontFamily?,
         override var fontFeatureSettings: String?,
-        override var fontRasterizationSettings: FontRasterizationSettings = FontRasterizationSettings.PlatformDefault,
+        override var fontRasterizationSettings: FontRasterizationSettings =
+            FontRasterizationSettings.PlatformDefault,
         override var letterSpacing: Float?,
         override var baselineShift: BaselineShift?,
         override var textGeometricTransform: TextGeometricTransform?,
@@ -297,35 +308,34 @@ private sealed interface ComputedStyle {
             other.shadow?.let { shadow = it }
             other.drawStyle?.let { drawStyle = it }
             other.platformStyle?.let { platformStyle ->
-                platformStyle.textDecorationLineStyle?.let {
-                    textDecorationLineStyle = it
-                }
+                platformStyle.textDecorationLineStyle?.let { textDecorationLineStyle = it }
             }
         }
 
-        fun toImmutable() = Immutable(
-            textForegroundStyle = textForegroundStyle,
-            brushSize = brushSize,
-            fontSize = fontSize,
-            fontWeight = fontWeight,
-            fontStyle = fontStyle,
-            fontSynthesis = fontSynthesis,
-            fontFamily = fontFamily,
-            fontFeatureSettings = fontFeatureSettings,
-            fontRasterizationSettings = fontRasterizationSettings,
-            letterSpacing = letterSpacing,
-            baselineShift = baselineShift,
-            textGeometricTransform = textGeometricTransform,
-            localeList = localeList,
-            background = background,
-            textDecoration = textDecoration,
-            textDecorationLineStyle = textDecorationLineStyle,
-            shadow = shadow,
-            drawStyle = drawStyle,
-            blendMode = blendMode,
-            lineHeight = lineHeight,
-            topRatio = topRatio,
-        )
+        fun toImmutable() =
+            Immutable(
+                textForegroundStyle = textForegroundStyle,
+                brushSize = brushSize,
+                fontSize = fontSize,
+                fontWeight = fontWeight,
+                fontStyle = fontStyle,
+                fontSynthesis = fontSynthesis,
+                fontFamily = fontFamily,
+                fontFeatureSettings = fontFeatureSettings,
+                fontRasterizationSettings = fontRasterizationSettings,
+                letterSpacing = letterSpacing,
+                baselineShift = baselineShift,
+                textGeometricTransform = textGeometricTransform,
+                localeList = localeList,
+                background = background,
+                textDecoration = textDecoration,
+                textDecorationLineStyle = textDecorationLineStyle,
+                shadow = shadow,
+                drawStyle = drawStyle,
+                blendMode = blendMode,
+                lineHeight = lineHeight,
+                topRatio = topRatio,
+            )
     }
 }
 
@@ -338,33 +348,38 @@ private fun ComputedStyle(
     blendMode: BlendMode = DrawScope.DefaultBlendMode,
     lineHeight: TextUnit,
     lineHeightStyle: LineHeightStyle?,
-) = ComputedStyle.Mutable(
-    textForegroundStyle = spanStyle.toParagraphTextForegroundStyle(),
-    brushSize = brushSize,
-    fontSize = with(density) { spanStyle.fontSize.toPx() },
-    fontWeight = spanStyle.fontWeight,
-    fontStyle = spanStyle.fontStyle,
-    fontSynthesis = spanStyle.fontSynthesis,
-    fontFamily = spanStyle.fontFamily,
-    fontFeatureSettings = spanStyle.fontFeatureSettings,
-    fontRasterizationSettings = platformParagraphStyle?.fontRasterizationSettings ?: FontRasterizationSettings.PlatformDefault,
-    letterSpacing = if (spanStyle.letterSpacing.isSpecified) {
-        with(density) { spanStyle.letterSpacing.toPx() }
-    } else null,
-    baselineShift = spanStyle.baselineShift,
-    textGeometricTransform = spanStyle.textGeometricTransform,
-    localeList = spanStyle.localeList,
-    background = spanStyle.background,
-    textDecoration = spanStyle.textDecoration,
-    textDecorationLineStyle = spanStyle.platformStyle?.textDecorationLineStyle,
-    shadow = spanStyle.shadow,
-    drawStyle = spanStyle.drawStyle,
-    blendMode = blendMode,
-    lineHeight = if (lineHeight.isSpecified) {
-        lineHeight.toPx(density, spanStyle.fontSize)
-    } else null,
-    topRatio = (lineHeightStyle?.alignment ?: LineHeightStyle.Alignment.Proportional).topRatio,
-)
+) =
+    ComputedStyle.Mutable(
+        textForegroundStyle = spanStyle.toParagraphTextForegroundStyle(),
+        brushSize = brushSize,
+        fontSize = with(density) { spanStyle.fontSize.toPx() },
+        fontWeight = spanStyle.fontWeight,
+        fontStyle = spanStyle.fontStyle,
+        fontSynthesis = spanStyle.fontSynthesis,
+        fontFamily = spanStyle.fontFamily,
+        fontFeatureSettings = spanStyle.fontFeatureSettings,
+        fontRasterizationSettings =
+            platformParagraphStyle?.fontRasterizationSettings
+                ?: FontRasterizationSettings.PlatformDefault,
+        letterSpacing =
+            if (spanStyle.letterSpacing.isSpecified) {
+                with(density) { spanStyle.letterSpacing.toPx() }
+            } else null,
+        baselineShift = spanStyle.baselineShift,
+        textGeometricTransform = spanStyle.textGeometricTransform,
+        localeList = spanStyle.localeList,
+        background = spanStyle.background,
+        textDecoration = spanStyle.textDecoration,
+        textDecorationLineStyle = spanStyle.platformStyle?.textDecorationLineStyle,
+        shadow = spanStyle.shadow,
+        drawStyle = spanStyle.drawStyle,
+        blendMode = blendMode,
+        lineHeight =
+            if (lineHeight.isSpecified) {
+                lineHeight.toPx(density, spanStyle.fontSize)
+            } else null,
+        topRatio = (lineHeightStyle?.alignment ?: LineHeightStyle.Alignment.Proportional).topRatio,
+    )
 
 // Building of SkTextStyle is a relatively expensive operation. We enable simple caching by
 // mapping SpanStyle to SkTextStyle. To increase the efficiency of this mapping we are making
@@ -383,25 +398,29 @@ internal class ParagraphBuilder(
     val density: Density,
     val textDirection: ResolvedTextDirection,
     var drawStyle: DrawStyle? = null,
-    var blendMode: BlendMode = DrawScope.DefaultBlendMode
+    var blendMode: BlendMode = DrawScope.DefaultBlendMode,
+    val onFontResolved: ((State<Any>) -> Unit)? = null,
 ) {
     private var defaultStyle = ComputedStyle.Immutable()
     private lateinit var initialStyle: SpanStyle
     private lateinit var ops: List<Op>
 
+    /** [Bullet]s to be painted next to the paragraphs they are attached to. */
+    val bullets: List<AnnotatedString.Range<Bullet>> = annotations.filterBullets()
+
     private fun prepareDefaultStyle() {
-        initialStyle = textStyle.toSpanStyle().copyWithDefaultFontSize(
-            drawStyle = drawStyle
-        )
-        defaultStyle = ComputedStyle(
-            density = density,
-            spanStyle = initialStyle,
-            platformParagraphStyle = textStyle.toParagraphStyle().platformStyle,
-            brushSize = brushSize,
-            blendMode = blendMode,
-            lineHeight = textStyle.lineHeight,
-            lineHeightStyle = textStyle.lineHeightStyle,
-        ).toImmutable()
+        initialStyle = textStyle.toSpanStyle().copyWithDefaultFontSize(drawStyle = drawStyle)
+        defaultStyle =
+            ComputedStyle(
+                    density = density,
+                    spanStyle = initialStyle,
+                    platformParagraphStyle = textStyle.toParagraphStyle().platformStyle,
+                    brushSize = brushSize,
+                    blendMode = blendMode,
+                    lineHeight = textStyle.lineHeight,
+                    lineHeightStyle = textStyle.lineHeightStyle,
+                )
+                .toImmutable()
     }
 
     fun updateForegroundPaint(paragraph: SkParagraph?) {
@@ -412,21 +431,17 @@ internal class ParagraphBuilder(
     }
 
     /**
-     * SkParagraph styles model doesn't match Compose's one.
-     * SkParagraph has only a stack-based push/pop styles interface that works great with Span
-     * trees.
-     * But in Compose we have a list of SpanStyles attached to arbitrary ranges, possibly
-     * overlapped, where a position in the list denotes style's priority
-     * We map Compose styles to SkParagraph styles by projecting every range start/end to single
-     * positions line and maintaining a list of active styles while building a paragraph. This list
-     * of active styles is being compiled into single SkParagraph's style for every chunk of text
+     * SkParagraph styles model doesn't match Compose's one. SkParagraph has only a stack-based
+     * push/pop styles interface that works great with Span trees. But in Compose we have a list of
+     * SpanStyles attached to arbitrary ranges, possibly overlapped, where a position in the list
+     * denotes style's priority We map Compose styles to SkParagraph styles by projecting every
+     * range start/end to single positions line and maintaining a list of active styles while
+     * building a paragraph. This list of active styles is being compiled into single SkParagraph's
+     * style for every chunk of text
      */
     fun build(): SkParagraph {
         prepareDefaultStyle()
-        ops = makeOps(
-            annotations,
-            placeholders
-        )
+        ops = makeOps(annotations, placeholders)
 
         var pos = 0
         val ps = textStyleToParagraphStyle(textStyle, defaultStyle)
@@ -449,12 +464,14 @@ internal class ParagraphBuilder(
             when (op) {
                 is Op.StyleAdd -> {
                     // FontLoader may have changed, so ensure that Font resolution is still valid
-                    fontFamilyResolver.resolve(
-                        op.style.fontFamily,
-                        op.style.fontWeight ?: FontWeight.Normal,
-                        op.style.fontStyle ?: FontStyle.Normal,
-                        op.style.fontSynthesis ?: FontSynthesis.All
-                    )
+                    fontFamilyResolver
+                        .resolve(
+                            op.style.fontFamily,
+                            op.style.fontWeight ?: FontWeight.Normal,
+                            op.style.fontStyle ?: FontStyle.Normal,
+                            op.style.fontSynthesis ?: FontSynthesis.All,
+                        )
+                        .let { resolveResult -> onFontResolved?.invoke(resolveResult) }
 
                     // It's always mutable at this point, so we can safely cast
                     val style = (op.style as ComputedStyle.Mutable).toImmutable()
@@ -468,11 +485,11 @@ internal class ParagraphBuilder(
                         PlaceholderStyle(
                             op.width,
                             op.height,
-                            op.cut.placeholder.placeholderVerticalAlign
-                                .toSkPlaceholderAlignment(),
-                            // TODO: figure out how exactly we have to work with BaselineMode & offset
+                            op.cut.placeholder.placeholderVerticalAlign.toSkPlaceholderAlignment(),
+                            // TODO: figure out how exactly we have to work with BaselineMode &
+                            // offset
                             BaselineMode.ALPHABETIC,
-                            0f
+                            0f,
                         )
                     pb.addPlaceholder(placeholderStyle)
                     addText = false
@@ -495,22 +512,17 @@ internal class ParagraphBuilder(
     private sealed class Op {
         abstract val position: Int
 
-        data class StyleAdd(
-            override val position: Int,
-            var style: ComputedStyle
-        ) : Op()
+        data class StyleAdd(override val position: Int, var style: ComputedStyle) : Op()
 
         data class PutPlaceholder(
             val cut: Cut.PutPlaceholder,
             var width: Float,
-            var height: Float
+            var height: Float,
         ) : Op() {
             override val position: Int by cut::position
         }
 
-        data class EndPlaceholder(
-            val cut: Cut.EndPlaceholder
-        ) : Op() {
+        data class EndPlaceholder(val cut: Cut.EndPlaceholder) : Op() {
             override val position: Int by cut::position
         }
     }
@@ -518,31 +530,22 @@ internal class ParagraphBuilder(
     private sealed class Cut {
         abstract val position: Int
 
-        data class StyleAdd(
-            override val position: Int,
-            val style: SpanStyle
-        ) : Cut()
+        data class StyleAdd(override val position: Int, val style: SpanStyle) : Cut()
 
-        data class StyleRemove(
-            override val position: Int,
-            val style: SpanStyle
-        ) : Cut()
+        data class StyleRemove(override val position: Int, val style: SpanStyle) : Cut()
 
-        data class PutPlaceholder(
-            override val position: Int,
-            val placeholder: Placeholder,
-        ) : Cut()
+        data class PutPlaceholder(override val position: Int, val placeholder: Placeholder) : Cut()
 
         data class EndPlaceholder(override val position: Int) : Cut()
     }
 
     private fun makeOps(
         annotations: List<AnnotatedString.Range<out AnnotatedString.Annotation>>,
-        placeholders: List<AnnotatedString.Range<Placeholder>>
+        placeholders: List<AnnotatedString.Range<Placeholder>>,
     ): List<Op> {
         val cuts = mutableListOf<Cut>()
         annotations.fastForEach { annotation ->
-            // TODO https://youtrack.jetbrains.com/issue/CMP-7151
+            // Only [SpanStyle] is turned into a skia style span.
             val spanStyle = annotation.item as? SpanStyle ?: return@fastForEach
 
             cuts.add(Cut.StyleAdd(annotation.start, spanStyle))
@@ -566,7 +569,7 @@ internal class ParagraphBuilder(
                         ops.add(
                             Op.StyleAdd(
                                 cut.position,
-                                mergeStyles(activeStyles).also { it.merge(density, cut.style) }
+                                mergeStyles(activeStyles).also { it.merge(density, cut.style) },
                             )
                         )
                     } else {
@@ -581,17 +584,12 @@ internal class ParagraphBuilder(
                 }
                 is Cut.PutPlaceholder -> {
                     val currentStyle = mergeStyles(activeStyles)
-                    val op = Op.PutPlaceholder(
-                        cut = cut,
-                        width = cut.placeholder.width.toPx(
-                            density,
-                            currentStyle.fontSize
-                        ),
-                        height = cut.placeholder.height.toPx(
-                            density,
-                            currentStyle.fontSize
-                        ),
-                    )
+                    val op =
+                        Op.PutPlaceholder(
+                            cut = cut,
+                            width = cut.placeholder.width.toPx(density, currentStyle.fontSize),
+                            height = cut.placeholder.height.toPx(density, currentStyle.fontSize),
+                        )
                     ops.add(op)
                 }
                 is Cut.EndPlaceholder -> ops.add(Op.EndPlaceholder(cut))
@@ -602,15 +600,16 @@ internal class ParagraphBuilder(
 
     private fun mergeStyles(activeStyles: List<SpanStyle>): ComputedStyle.Mutable {
         check(activeStyles.isNotEmpty()) { "There should be at least one active style" }
-        val style = ComputedStyle(
-            density = density,
-            spanStyle = activeStyles[0],
-            platformParagraphStyle = textStyle.toParagraphStyle().platformStyle,
-            brushSize = brushSize,
-            blendMode = blendMode,
-            lineHeight = textStyle.lineHeight,
-            lineHeightStyle = textStyle.lineHeightStyle
-        )
+        val style =
+            ComputedStyle(
+                density = density,
+                spanStyle = activeStyles[0],
+                platformParagraphStyle = textStyle.toParagraphStyle().platformStyle,
+                brushSize = brushSize,
+                blendMode = blendMode,
+                lineHeight = textStyle.lineHeight,
+                lineHeightStyle = textStyle.lineHeightStyle,
+            )
         for (i in 1 until activeStyles.size) {
             style.merge(density, activeStyles[i])
         }
@@ -627,14 +626,12 @@ internal class ParagraphBuilder(
 
     private fun textStyleToParagraphStyle(
         style: TextStyle,
-        computedStyle: ComputedStyle.Immutable
+        computedStyle: ComputedStyle.Immutable,
     ): ParagraphStyle {
         val pStyle = ParagraphStyle()
         pStyle.replaceTabCharacters = true // https://youtrack.jetbrains.com/issue/CMP-6589
         pStyle.textStyle = makeSkTextStyle(computedStyle)
-        style.textAlign.let {
-            pStyle.alignment = it.toSkAlignment()
-        }
+        style.textAlign.let { pStyle.alignment = it.toSkAlignment() }
 
         val lineHeight = computedStyle.lineHeight
         if (lineHeight != null && lineHeight > computedStyle.fontSize) {
@@ -656,24 +653,31 @@ internal class ParagraphBuilder(
 
         pStyle.direction = textDirection.toSkDirection()
         textStyle.textIndent?.run {
-            pStyle.textIndent = SkTextIndent(
-                firstLine.toPx(density, computedStyle.fontSize),
-                restLine.toPx(density, computedStyle.fontSize)
-            )
+            pStyle.textIndent =
+                SkTextIndent(firstLineIndentPx, restLine.toPx(density, computedStyle.fontSize))
         }
         return pStyle
     }
 
     private fun makeSkTextStyle(style: ComputedStyle.Immutable): SkTextStyle {
-        return skTextStylesCache.getOrPut(style) {
-            it.toSkTextStyle(fontFamilyResolver)
-        }
+        return skTextStylesCache.getOrPut(style) { it.toSkTextStyle(fontFamilyResolver) }
     }
 
     internal val defaultFont by lazy {
         val loadResult = textStyle.resolveFontFamily(fontFamilyResolver)
         SkFont(loadResult?.typeface, defaultStyle.fontSize)
     }
+
+    /**
+     * Indentation of the paragraph's first line in pixels, as passed to skia in [SkTextIndent].
+     * Skia leaves the indentation out of the paragraph's intrinsic widths, so
+     * [SkikoParagraphIntrinsics] adds this value back on top of them.
+     *
+     * A font size relative unit resolves against the default font size, which is known only once
+     * [build] has run, so before that this returns [Float.NaN].
+     */
+    internal val firstLineIndentPx: Float
+        get() = textStyle.textIndent?.firstLine?.toPx(density, defaultStyle.fontSize) ?: 0f
 
     // workaround for https://bugs.chromium.org/p/skia/issues/detail?id=11321 :(
     internal fun emptyLineMetrics(paragraph: SkParagraph): Array<LineMetrics> {
@@ -709,63 +713,77 @@ internal class ParagraphBuilder(
                 width = 0.0,
                 left = 0.0,
                 baseline = baseline,
-                lineNumber = 0
+                lineNumber = 0,
             )
         )
     }
 }
 
-private fun TextUnit.orDefaultFontSize() = when {
-    isUnspecified -> DefaultFontSize
-    isEm -> DefaultFontSize * value
-    else -> this
+private fun TextUnit.orDefaultFontSize() =
+    when {
+        isUnspecified -> DefaultFontSize
+        isEm -> DefaultFontSize * value
+        else -> this
+    }
+
+private fun List<AnnotatedString.Range<out AnnotatedString.Annotation>>.filterBullets():
+    List<AnnotatedString.Range<Bullet>> {
+    if (!fastAny { it.item is Bullet }) return emptyList()
+    val bullets = mutableListOf<AnnotatedString.Range<Bullet>>()
+    fastForEach { annotation ->
+        val item = annotation.item
+        if (item is Bullet) {
+            bullets.add(AnnotatedString.Range(item, annotation.start, annotation.end))
+        }
+    }
+    return bullets
 }
 
 private fun TextUnit.toPx(density: Density, fontSize: TextUnit): Float =
     toPx(density, with(density) { fontSize.toPx() })
 
-private fun TextUnit.toPx(density: Density, fontSize: Float): Float = when {
-    isUnspecified -> fontSize
-    isEm -> fontSize * value
-    isSp -> with(density) { toPx() }
-    else -> error("Unexpected size in TextUnit.toPx")
-}
+private fun TextUnit.toPx(density: Density, fontSize: Float): Float =
+    when {
+        isUnspecified -> fontSize
+        isEm -> fontSize * value
+        isSp -> with(density) { toPx() }
+        else -> error("Unexpected size in TextUnit.toPx")
+    }
 
-private fun LineHeightStyle.Trim.toHeightMode(): HeightMode = when(this) {
-    LineHeightStyle.Trim.Both -> HeightMode.DISABLE_ALL
-    LineHeightStyle.Trim.FirstLineTop -> HeightMode.DISABLE_FIRST_ASCENT
-    LineHeightStyle.Trim.LastLineBottom -> HeightMode.DISABLE_LAST_DESCENT
-    LineHeightStyle.Trim.None -> HeightMode.ALL
-    else -> HeightMode.DISABLE_ALL
-}
+private fun LineHeightStyle.Trim.toHeightMode(): HeightMode =
+    when (this) {
+        LineHeightStyle.Trim.Both -> HeightMode.DISABLE_ALL
+        LineHeightStyle.Trim.FirstLineTop -> HeightMode.DISABLE_FIRST_ASCENT
+        LineHeightStyle.Trim.LastLineBottom -> HeightMode.DISABLE_LAST_DESCENT
+        LineHeightStyle.Trim.None -> HeightMode.ALL
+        else -> HeightMode.DISABLE_ALL
+    }
 
-private fun TextStyle.resolveFontFamily(
-    fontFamilyResolver: FontFamily.Resolver
-) = fontFamily?.let {
-    fontFamilyResolver.resolve(
-        fontFamily = it,
-        fontWeight = fontWeight ?: FontWeight.Normal,
-        fontStyle = fontStyle ?: FontStyle.Normal,
-        fontSynthesis = fontSynthesis ?: FontSynthesis.All
-    ).value as FontLoadResult
-}
+private fun TextStyle.resolveFontFamily(fontFamilyResolver: FontFamily.Resolver) =
+    fontFamily?.let {
+        fontFamilyResolver
+            .resolve(
+                fontFamily = it,
+                fontWeight = fontWeight ?: FontWeight.Normal,
+                fontStyle = fontStyle ?: FontStyle.Normal,
+                fontSynthesis = fontSynthesis ?: FontSynthesis.All,
+            )
+            .value as FontLoadResult
+    }
 
 private fun SpanStyle.copyWithDefaultFontSize(drawStyle: DrawStyle? = null): SpanStyle {
     val fontSize = this.fontSize.orDefaultFontSize()
-    val letterSpacing = when {
-        this.letterSpacing.isEm -> fontSize * this.letterSpacing.value
-        else -> this.letterSpacing
-    }
-    return this.copy(
-        fontSize = fontSize,
-        letterSpacing = letterSpacing,
-        drawStyle = drawStyle
-    )
+    val letterSpacing =
+        when {
+            this.letterSpacing.isEm -> fontSize * this.letterSpacing.value
+            else -> this.letterSpacing
+        }
+    return this.copy(fontSize = fontSize, letterSpacing = letterSpacing, drawStyle = drawStyle)
 }
 
 private fun TextDecoration.toSkDecorationStyle(
     color: Color,
-    textDecorationLineStyle: TextDecorationLineStyle?
+    textDecorationLineStyle: TextDecorationLineStyle?,
 ): SkDecorationStyle {
     val underline = contains(TextDecoration.Underline)
     val overline = false
@@ -781,7 +799,7 @@ private fun TextDecoration.toSkDecorationStyle(
         gaps,
         color.toArgb(),
         lineStyle,
-        thicknessMultiplier
+        thicknessMultiplier,
     )
 }
 

@@ -65,34 +65,28 @@ class LegacyPlatformTextInputServiceAdapterTest {
         setContent {
             InterceptPlatformTextInput({ request, _ ->
                 coroutineScope {
+                    launch { snapshotFlow { request.value() }.collect { value = it } }
+                    launch { snapshotFlow { request.state }.collect { state = it } }
+                    launch { snapshotFlow { request.imeOptions }.collect { imeOptions = it } }
                     launch {
-                        snapshotFlow { request.value() }.collect { value = it }
+                        snapshotFlow { request.textLayoutResult() }
+                            .filterNotNull()
+                            .collect { textLayoutResult = it }
                     }
                     launch {
-                        snapshotFlow { request.state }.collect { state = it }
+                        snapshotFlow { request.focusedRectInRoot() }
+                            .filterNotNull()
+                            .collect { focusedRectInRoot = it }
                     }
                     launch {
-                        snapshotFlow { request.imeOptions }.collect { imeOptions = it }
+                        snapshotFlow { request.textFieldRectInRoot() }
+                            .filterNotNull()
+                            .collect { textFieldRectInRoot = it }
                     }
                     launch {
-                        snapshotFlow { request.textLayoutResult() }.filterNotNull().collect {
-                            textLayoutResult = it
-                        }
-                    }
-                    launch {
-                        snapshotFlow { request.focusedRectInRoot() }.filterNotNull().collect {
-                            focusedRectInRoot = it
-                        }
-                    }
-                    launch {
-                        snapshotFlow { request.textFieldRectInRoot() }.filterNotNull().collect {
-                            textFieldRectInRoot = it
-                        }
-                    }
-                    launch {
-                        snapshotFlow { request.textClippingRectInRoot() }.filterNotNull().collect {
-                            textClippingRectInRoot = it
-                        }
+                        snapshotFlow { request.textClippingRectInRoot() }
+                            .filterNotNull()
+                            .collect { textClippingRectInRoot = it }
                     }
                 }
                 awaitCancellation()
@@ -101,9 +95,7 @@ class LegacyPlatformTextInputServiceAdapterTest {
                 BasicTextField(
                     modifier = Modifier.testTag("input"),
                     value = text,
-                    onValueChange = {
-                        text = it
-                    }
+                    onValueChange = { text = it },
                 )
             }
         }
@@ -131,25 +123,21 @@ class LegacyPlatformTextInputServiceAdapterTest {
         var text by mutableStateOf(TextFieldValue(""))
         lateinit var request: PlatformTextInputMethodRequest
         setContent {
-            InterceptPlatformTextInput({ r, nextHandler ->
+            InterceptPlatformTextInput({ r, _ ->
                 request = r
                 awaitCancellation()
             }) {
                 BasicTextField(
                     modifier = Modifier.testTag("input"),
                     value = text,
-                    onValueChange = { text = it }
+                    onValueChange = { text = it },
                 )
             }
         }
         onNodeWithTag("input").requestFocus()
 
-        request.editText {
-            commitText("abc", 1)
-        }
-        request.onEditCommand(
-            listOf(CommitTextCommand("def", 1))
-        )
+        request.editText { commitText("abc", 1) }
+        request.onEditCommand(listOf(CommitTextCommand("def", 1)))
 
         waitForIdle()
 
@@ -157,9 +145,7 @@ class LegacyPlatformTextInputServiceAdapterTest {
         assertThat(text.selection).isEqualTo(TextRange(6, 6))
         assertThat(text.composition).isNull()
 
-        request.editText {
-            this.setComposingText("qwe", 1)
-        }
+        request.editText { this.setComposingText("qwe", 1) }
         waitForIdle()
 
         assertThat(text.text).isEqualTo("abcdefqwe")

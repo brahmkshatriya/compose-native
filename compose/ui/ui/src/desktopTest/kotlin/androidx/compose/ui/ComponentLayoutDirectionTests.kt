@@ -31,15 +31,15 @@ import javax.swing.JFrame
 import javax.swing.SwingUtilities
 import org.junit.Test
 
-
 class ComponentLayoutDirectionTests {
 
-    private val WindowTestMethods = ComponentTestMethods(
-        create = { ComposeWindow() },
-        setContent = { setContent{ it() } },
-        display = { isVisible = true },
-        dispose = { dispose() }
-    )
+    private val WindowTestMethods =
+        ComponentTestMethods(
+            create = { ComposeWindow() },
+            setContent = { setContent { it() } },
+            display = { isVisible = true },
+            dispose = { dispose() },
+        )
 
     @Test
     fun `window componentOrientation modifies LayoutDirection`() =
@@ -57,12 +57,13 @@ class ComponentLayoutDirectionTests {
     fun `window locale does not override component orientation for LayoutDirection`() =
         localeDoesNotOverrideComponentOrientationForLayoutDirection(WindowTestMethods)
 
-    private val DialogWindowTestMethods = ComponentTestMethods(
-        create = { ComposeDialog() },
-        setContent = { setContent{ it() } },
-        display = { isVisible = true },
-        dispose = { dispose() }
-    )
+    private val DialogWindowTestMethods =
+        ComponentTestMethods(
+            create = { ComposeDialog() },
+            setContent = { setContent { it() } },
+            display = { isVisible = true },
+            dispose = { dispose() },
+        )
 
     @Test
     fun `dialog componentOrientation modifies LayoutDirection`() =
@@ -80,27 +81,25 @@ class ComponentLayoutDirectionTests {
     fun `dialog locale does not override component orientation for LayoutDirection`() =
         localeDoesNotOverrideComponentOrientationForLayoutDirection(DialogWindowTestMethods)
 
-    private val PanelTestMethods = ComponentTestMethods(
-        create = {
-            val frame = JFrame("Hello")
-            val panel = ComposePanel()
-            frame.contentPane.add(panel)
-            panel
-        },
-        setContent = { setContent{ it() } },
-        display = {
-            SwingUtilities.getWindowAncestor(this).isVisible = true
-        },
-        dispose = { SwingUtilities.getWindowAncestor(this).dispose() }
-    )
+    private val PanelTestMethods =
+        ComponentTestMethods(
+            create = {
+                val frame = JFrame("Hello")
+                val panel = ComposePanel()
+                frame.contentPane.add(panel)
+                panel
+            },
+            setContent = { setContent { it() } },
+            display = { SwingUtilities.getWindowAncestor(this).isVisible = true },
+            dispose = { SwingUtilities.getWindowAncestor(this).dispose() },
+        )
 
     @Test
     fun `panel componentOrientation modifies LayoutDirection`() =
         componentOrientationModifiesLayoutDirection(PanelTestMethods)
 
     @Test
-    fun `panel locale modifies LayoutDirection`() =
-        localeModifiesLayoutDirection(PanelTestMethods)
+    fun `panel locale modifies LayoutDirection`() = localeModifiesLayoutDirection(PanelTestMethods)
 
     @Test
     fun `panel component orientation overrides locale for LayoutDirection`() =
@@ -111,125 +110,121 @@ class ComponentLayoutDirectionTests {
         localeDoesNotOverrideComponentOrientationForLayoutDirection(PanelTestMethods)
 }
 
-private class ComponentTestMethods<C: Component, S: Any>(
+private class ComponentTestMethods<C : Component, S : Any>(
     val create: () -> C,
     val setContent: C.(content: @Composable S.() -> Unit) -> Unit,
     val display: C.() -> Unit,
-    val dispose: C.() -> Unit
+    val dispose: C.() -> Unit,
 )
 
-private fun <C: Component, S: Any> componentOrientationModifiesLayoutDirection(
+private fun <C : Component, S : Any> componentOrientationModifiesLayoutDirection(
     componentTestMethods: ComponentTestMethods<C, S>
-) = with(componentTestMethods) {
-    runApplicationTest {
-        lateinit var localLayoutDirection: LayoutDirection
-        lateinit var component: C
+) =
+    with(componentTestMethods) {
+        runApplicationTest {
+            lateinit var localLayoutDirection: LayoutDirection
+            lateinit var component: C
 
-        launchTestApplication {
-            component = create()
-            component.componentOrientation = ComponentOrientation.RIGHT_TO_LEFT
+            launchTestApplication {
+                component = create()
+                component.componentOrientation = ComponentOrientation.RIGHT_TO_LEFT
 
-            component.setContent {
-                localLayoutDirection = LocalLayoutDirection.current
+                component.setContent { localLayoutDirection = LocalLayoutDirection.current }
+                component.display()
             }
-            component.display()
+            awaitIdle()
+
+            Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
+
+            // Test that changing the orientation changes the layout direction
+            component.componentOrientation = ComponentOrientation.LEFT_TO_RIGHT
+            awaitIdle()
+            Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Ltr)
+
+            component.dispose()
         }
-        awaitIdle()
-
-        Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
-
-        // Test that changing the orientation changes the layout direction
-        component.componentOrientation = ComponentOrientation.LEFT_TO_RIGHT
-        awaitIdle()
-        Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Ltr)
-
-        component.dispose()
     }
-}
 
-private fun <C: Component, S: Any> localeModifiesLayoutDirection(
+private fun <C : Component, S : Any> localeModifiesLayoutDirection(
     componentTestMethods: ComponentTestMethods<C, S>
-) = with(componentTestMethods) {
-    runApplicationTest {
-        lateinit var localLayoutDirection: LayoutDirection
-        lateinit var component: C
+) =
+    with(componentTestMethods) {
+        runApplicationTest {
+            lateinit var localLayoutDirection: LayoutDirection
+            lateinit var component: C
 
-        launchTestApplication {
-            component = create()
-            component.locale = Locale("he")
+            launchTestApplication {
+                component = create()
+                component.locale = Locale.forLanguageTag("he")
 
-            component.setContent {
-                localLayoutDirection = LocalLayoutDirection.current
+                component.setContent { localLayoutDirection = LocalLayoutDirection.current }
+                component.display()
             }
-            component.display()
+            awaitIdle()
+
+            Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
+
+            // Test that changing the locale changes the layout direction
+            component.locale = Locale.ENGLISH
+            awaitIdle()
+            Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Ltr)
+
+            component.dispose()
         }
-        awaitIdle()
-
-        Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
-
-        // Test that changing the locale changes the layout direction
-        component.locale = Locale("en")
-        awaitIdle()
-        Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Ltr)
-
-        component.dispose()
     }
-}
 
-private fun <C: Component, S: Any> componentOrientationOverridesLocaleForLayoutDirection(
+private fun <C : Component, S : Any> componentOrientationOverridesLocaleForLayoutDirection(
     componentTestMethods: ComponentTestMethods<C, S>
-) = with(componentTestMethods) {
-    runApplicationTest {
-        lateinit var localLayoutDirection: LayoutDirection
-        lateinit var component: C
+) =
+    with(componentTestMethods) {
+        runApplicationTest {
+            lateinit var localLayoutDirection: LayoutDirection
+            lateinit var component: C
 
-        launchTestApplication {
-            component = create()
-            component.locale = Locale("he")
+            launchTestApplication {
+                component = create()
+                component.locale = Locale.forLanguageTag("he")
 
-            component.setContent {
-                localLayoutDirection = LocalLayoutDirection.current
+                component.setContent { localLayoutDirection = LocalLayoutDirection.current }
+                component.display()
             }
-            component.display()
+            awaitIdle()
+
+            Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
+
+            // Test that changing the orientation changes the layout direction
+            component.componentOrientation = ComponentOrientation.LEFT_TO_RIGHT
+            awaitIdle()
+            Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Ltr)
+
+            component.dispose()
         }
-        awaitIdle()
-
-        Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
-
-        // Test that changing the orientation changes the layout direction
-        component.componentOrientation = ComponentOrientation.LEFT_TO_RIGHT
-        awaitIdle()
-        Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Ltr)
-
-        component.dispose()
     }
-}
 
-private fun  <C: Component, S: Any> localeDoesNotOverrideComponentOrientationForLayoutDirection(
+private fun <C : Component, S : Any> localeDoesNotOverrideComponentOrientationForLayoutDirection(
     componentTestMethods: ComponentTestMethods<C, S>
-) = with(componentTestMethods) {
-    runApplicationTest {
-        lateinit var localLayoutDirection: LayoutDirection
-        lateinit var component: C
+) =
+    with(componentTestMethods) {
+        runApplicationTest {
+            lateinit var localLayoutDirection: LayoutDirection
+            lateinit var component: C
 
-        launchTestApplication {
-            component = create()
-            component.componentOrientation = ComponentOrientation.RIGHT_TO_LEFT
+            launchTestApplication {
+                component = create()
+                component.componentOrientation = ComponentOrientation.RIGHT_TO_LEFT
 
-            component.setContent {
-                localLayoutDirection = LocalLayoutDirection.current
+                component.setContent { localLayoutDirection = LocalLayoutDirection.current }
+                component.display()
             }
-            component.display()
+            awaitIdle()
+
+            Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
+
+            // Test that changing the locale doesn't change the layout direction
+            component.locale = Locale.ENGLISH
+            awaitIdle()
+            Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
+
+            component.dispose()
         }
-        awaitIdle()
-
-        Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
-
-        // Test that changing the locale doesn't change the layout direction
-        component.locale = Locale("en")
-        awaitIdle()
-        Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
-
-        component.dispose()
     }
-}

@@ -210,9 +210,7 @@ internal class LookaheadPassDelegate(
         private set
 
     private inline fun forEachChildDelegate(block: (LookaheadPassDelegate) -> Unit) =
-        layoutNode.forEachChild {
-            block(it.layoutDelegate.lookaheadPassDelegate!!)
-        }
+        layoutNode.forEachChild { block(it.layoutDelegate.lookaheadPassDelegate!!) }
 
     private val layoutChildrenBlock = {
         clearPlaceOrder()
@@ -357,6 +355,12 @@ internal class LookaheadPassDelegate(
         innerCoordinator.lookaheadDelegate?.isPlacingForAlignment = wasPlacingForAlignment ?: false
         return alignmentLines.getLastCalculation()
     }
+
+    override var isPlacingForAlignment: Boolean
+        get() = innerCoordinator.lookaheadDelegate?.isPlacingForAlignment == true
+        set(value) {
+            innerCoordinator.lookaheadDelegate?.isPlacingForAlignment = value
+        }
 
     override val parentAlignmentLinesOwner: AlignmentLinesOwner?
         get() = layoutNode.parent?.layoutDelegate?.lookaheadAlignmentLinesOwner

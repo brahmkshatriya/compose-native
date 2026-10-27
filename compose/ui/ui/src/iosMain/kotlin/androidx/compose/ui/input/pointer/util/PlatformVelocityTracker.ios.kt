@@ -29,7 +29,7 @@ private const val AssumePointerMoveStoppedMilliseconds: Int = 40
 private const val MinimumGestureDurationSincePointerStop: Int = 50
 private const val MinimumGestureDurationMilliseconds: Int = 100
 
-private class IosVelocityTracker: PlatformVelocityTracker {
+private class IosVelocityTracker : PlatformVelocityTracker {
     private val xVelocityTracker = PointerVelocityTracker1D(preventOppositeVelocity = true)
     private val yVelocityTracker = PointerVelocityTracker1D(preventOppositeVelocity = true)
     private var lastMoveEventTimeStamp = 0L
@@ -44,25 +44,31 @@ private class IosVelocityTracker: PlatformVelocityTracker {
             lastMoveEventTimeStamp = event.uptimeMillis
         }
 
-        // If this is not ACTION_UP event: Add events to the tracker as per the platform implementation.
-        // In the platform implementation the historical events array is used, they store the current
+        // If this is not ACTION_UP event: Add events to the tracker as per the platform
+        // implementation.
+        // In the platform implementation the historical events array is used, they store the
+        // current
         // event data in the position HistoricalArray.Size. Our historical array doesn't have access
-        // to the final position, but we can get that information from the original event data X and Y
+        // to the final position, but we can get that information from the original event data X and
+        // Y
         // coordinates.
         if (!event.changedToUpIgnoreConsumed()) {
             event.historical.fastForEach {
-                addPosition(it.uptimeMillis, it.position + offset)
+                addPosition(it.uptimeMillis, it.originalEventPosition + offset)
             }
-            addPosition(event.uptimeMillis, event.position + offset)
+            addPosition(event.uptimeMillis, event.originalEventPosition + offset)
         }
 
         if (event.uptimeMillis - lastMoveEventTimeStamp > AssumePointerMoveStoppedMilliseconds) {
             lastPointerStopEventTimeStamp = event.uptimeMillis
         }
 
-        if (event.changedToUpIgnoreConsumed() &&
-            event.uptimeMillis - lastPointerStartEventTimeStamp > MinimumGestureDurationMilliseconds &&
-            event.uptimeMillis - lastPointerStopEventTimeStamp < MinimumGestureDurationSincePointerStop
+        if (
+            event.changedToUpIgnoreConsumed() &&
+                event.uptimeMillis - lastPointerStartEventTimeStamp >
+                    MinimumGestureDurationMilliseconds &&
+                event.uptimeMillis - lastPointerStopEventTimeStamp <
+                    MinimumGestureDurationSincePointerStop
         ) {
             resetTracking()
         }

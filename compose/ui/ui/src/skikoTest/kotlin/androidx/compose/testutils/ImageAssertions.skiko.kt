@@ -42,7 +42,8 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.test.assertEquals
 
-// A copy from compose/test-utils/src/androidMain/kotlin/androidx/compose/testutils/ImageAssertions.android.kt
+// A copy from
+// compose/test-utils/src/androidMain/kotlin/androidx/compose/testutils/ImageAssertions.android.kt
 // TODO: commonize compose/test-utils module properly
 
 /**
@@ -60,7 +61,7 @@ fun ImageBitmap.assertPixels(
     if (expectedSize != null) {
         if (width != expectedSize.width || height != expectedSize.height) {
             throw AssertionError(
-                "Bitmap size is wrong! Expected '$expectedSize' but got " + "'$width x $height'"
+                "Bitmap size is wrong! Expected '$expectedSize' but got '$width x $height'"
             )
         }
     }
@@ -315,12 +316,13 @@ private fun Path.notContains(x: Int, y: Int, center: Offset, margin: Float): Boo
 internal fun Path.contains(offset: Offset): Boolean {
     val path = Path()
     path.addRect(
-        rect = Rect(
-            left = offset.x - 0.01f,
-            top = offset.y - 0.01f,
-            right = offset.x + 0.01f,
-            bottom = offset.y + 0.01f,
-        ),
+        rect =
+            Rect(
+                left = offset.x - 0.01f,
+                top = offset.y - 0.01f,
+                right = offset.x + 0.01f,
+                bottom = offset.y + 0.01f,
+            ),
         direction = Direction.CounterClockwise,
     )
     if (op(path, this, PathOperation.Intersect)) {

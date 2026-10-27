@@ -69,24 +69,23 @@ import org.jetbrains.skiko.hostOs
 import org.junit.Test
 
 sealed class SliderValueEvent {
-    object Change: SliderValueEvent()
-    object ChangeFinished: SliderValueEvent()
+    object Change : SliderValueEvent()
+
+    object ChangeFinished : SliderValueEvent()
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
 class WindowInputEventTest {
     @Test
-    fun `key strokes call onValueChangeFinished on Slider`()
-        = runApplicationTest {
+    fun `key strokes call onValueChangeFinished on Slider`() = runApplicationTest {
         var window: ComposeWindow? = null
-
 
         val sliderValueEvents = mutableListOf<SliderValueEvent>()
 
         launchTestApplication {
             Window(
                 onCloseRequest = ::exitApplication,
-                state = rememberWindowState(width = 200.dp, height = 100.dp)
+                state = rememberWindowState(width = 200.dp, height = 100.dp),
             ) {
                 window = this.window
 
@@ -97,15 +96,13 @@ class WindowInputEventTest {
                         float.value,
                         onValueChange = {
                             float.value = it
-                            print(sliderValueEvents)
                             sliderValueEvents.add(SliderValueEvent.Change)
                         },
                         onValueChangeFinished = {
-                            print(sliderValueEvents)
                             sliderValueEvents.add(SliderValueEvent.ChangeFinished)
                         },
                         valueRange = 0f..10f,
-                        steps = 9
+                        steps = 9,
                     )
 
                     Slider(
@@ -113,7 +110,7 @@ class WindowInputEventTest {
                         onValueChange = {},
                         onValueChangeFinished = {},
                         valueRange = 0f..10f,
-                        steps = 9
+                        steps = 9,
                     )
                 }
             }
@@ -153,12 +150,8 @@ class WindowInputEventTest {
         awaitIdle()
 
         val createExpected = { size: Int ->
-            List(size) {
-                listOf(
-                    SliderValueEvent.Change,
-                    SliderValueEvent.ChangeFinished
-                )
-            }.flatten()
+            List(size) { listOf(SliderValueEvent.Change, SliderValueEvent.ChangeFinished) }
+                .flatten()
         }
 
         assertThat(sliderValueEvents).isEqualTo(createExpected(8))
@@ -185,7 +178,7 @@ class WindowInputEventTest {
                 onKeyEvent = {
                     onKeyEventKeys.add(it.key)
                     it.key == Key.W
-                }
+                },
             ) {
                 window = this.window
             }
@@ -241,13 +234,10 @@ class WindowInputEventTest {
                 window = this.window
 
                 val focusRequester = remember(::FocusRequester)
-                LaunchedEffect(Unit) {
-                    focusRequester.requestFocus()
-                }
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
                 Box(
-                    Modifier
-                        .focusRequester(focusRequester)
+                    Modifier.focusRequester(focusRequester)
                         .focusTarget()
                         .onPreviewKeyEvent {
                             onNodePreviewKeyEventKeys.add(it.key)
@@ -312,7 +302,7 @@ class WindowInputEventTest {
         launchTestApplication {
             Window(
                 onCloseRequest = ::exitApplication,
-                state = rememberWindowState(width = 200.dp, height = 100.dp)
+                state = rememberWindowState(width = 200.dp, height = 100.dp),
             ) {
                 window = this.window
 
@@ -373,13 +363,12 @@ class WindowInputEventTest {
         launchTestApplication {
             Window(
                 onCloseRequest = ::exitApplication,
-                state = rememberWindowState(width = 200.dp, height = 100.dp)
+                state = rememberWindowState(width = 200.dp, height = 100.dp),
             ) {
                 window = this.window
 
                 Box(
-                    Modifier
-                        .fillMaxSize()
+                    Modifier.fillMaxSize()
                         .onPointerEvent(PointerEventType.Move) {
                             onMoves.add(it.changes.first().position)
                         }
@@ -418,11 +407,11 @@ class WindowInputEventTest {
         assertThat(onExits).isEqualTo(0)
 
         // TODO(https://youtrack.jetbrains.com/issue/CMP-5265) fix catching exit event
-//        window.sendMouseEvent(MouseEvent.MOUSE_EXITED, x = 900, y = 500)
-//        awaitIdle()
-//        assertThat(onMoves.size).isEqualTo(2)
-//        assertThat(onEnters).isEqualTo(1)
-//        assertThat(onExits).isEqualTo(1)
+        //        window.sendMouseEvent(MouseEvent.MOUSE_EXITED, x = 900, y = 500)
+        //        awaitIdle()
+        //        assertThat(onMoves.size).isEqualTo(2)
+        //        assertThat(onEnters).isEqualTo(1)
+        //        assertThat(onExits).isEqualTo(1)
     }
 
     @Test
@@ -434,16 +423,14 @@ class WindowInputEventTest {
         launchTestApplication {
             Window(
                 onCloseRequest = ::exitApplication,
-                state = rememberWindowState(width = 200.dp, height = 100.dp)
+                state = rememberWindowState(width = 200.dp, height = 100.dp),
             ) {
                 window = this.window
 
                 Box(
-                    Modifier
-                        .fillMaxSize()
-                        .onPointerEvent(PointerEventType.Scroll) {
-                            deltas.add(it.changes.first().scrollDelta)
-                        }
+                    Modifier.fillMaxSize().onPointerEvent(PointerEventType.Scroll) {
+                        deltas.add(it.changes.first().scrollDelta)
+                    }
                 )
             }
         }
@@ -471,16 +458,14 @@ class WindowInputEventTest {
         launchTestApplication {
             Window(
                 onCloseRequest = ::exitApplication,
-                state = rememberWindowState(width = 200.dp, height = 100.dp)
+                state = rememberWindowState(width = 200.dp, height = 100.dp),
             ) {
                 window = this.window
 
                 Box(
-                    Modifier
-                        .fillMaxSize()
-                        .onPointerEvent(PointerEventType.Scroll) {
-                            deltas.add(it.changes.first().scrollDelta)
-                        }
+                    Modifier.fillMaxSize().onPointerEvent(PointerEventType.Scroll) {
+                        deltas.add(it.changes.first().scrollDelta)
+                    }
                 )
             }
         }
@@ -508,13 +493,12 @@ class WindowInputEventTest {
         launchTestApplication {
             Window(
                 onCloseRequest = ::exitApplication,
-                state = rememberWindowState(width = 200.dp, height = 100.dp)
+                state = rememberWindowState(width = 200.dp, height = 100.dp),
             ) {
                 window = this.window
 
                 Box(
-                    Modifier
-                        .fillMaxSize()
+                    Modifier.fillMaxSize()
                         .onPointerEvent(PointerEventType.Press) {
                             receivedButtons.add(it.buttons)
                             receivedKeyboardModifiers.add(it.keyboardModifiers)
@@ -533,9 +517,8 @@ class WindowInputEventTest {
             id = MOUSE_PRESSED,
             x = 100,
             y = 50,
-            modifiers = SHIFT_DOWN_MASK or CTRL_DOWN_MASK or
-                BUTTON1_DOWN_MASK or BUTTON3_DOWN_MASK,
-            button = BUTTON1
+            modifiers = SHIFT_DOWN_MASK or CTRL_DOWN_MASK or BUTTON1_DOWN_MASK or BUTTON3_DOWN_MASK,
+            button = BUTTON1,
         )
 
         awaitIdle()
@@ -552,10 +535,11 @@ class WindowInputEventTest {
         }
 
         window.sendMouseWheelEvent(
-            100, 50, WHEEL_UNIT_SCROLL,
+            100,
+            50,
+            WHEEL_UNIT_SCROLL,
             wheelRotation = 1.0,
-            modifiers = SHIFT_DOWN_MASK or CTRL_DOWN_MASK or
-                BUTTON1_DOWN_MASK or BUTTON3_DOWN_MASK
+            modifiers = SHIFT_DOWN_MASK or CTRL_DOWN_MASK or BUTTON1_DOWN_MASK or BUTTON3_DOWN_MASK,
         )
 
         awaitIdle()
@@ -578,11 +562,12 @@ class WindowInputEventTest {
         var box2ScrollCount = 0
 
         val windowSizeAwt = 100
-        val window = ComposeWindow().apply {
-            isUndecorated = true
-            isResizable = false
-            size = Dimension(windowSizeAwt, windowSizeAwt)
-        }
+        val window =
+            ComposeWindow().apply {
+                isUndecorated = true
+                isResizable = false
+                size = Dimension(windowSizeAwt, windowSizeAwt)
+            }
 
         window.isVisible = true
 
@@ -617,11 +602,12 @@ class WindowInputEventTest {
         var box2ReleaseCount = 0
 
         val windowSizeAwt = 100
-        val window = ComposeWindow().apply {
-            isUndecorated = true
-            isResizable = false
-            size = Dimension(windowSizeAwt, windowSizeAwt)
-        }
+        val window =
+            ComposeWindow().apply {
+                isUndecorated = true
+                isResizable = false
+                size = Dimension(windowSizeAwt, windowSizeAwt)
+            }
 
         window.isVisible = true
 
@@ -650,6 +636,9 @@ class WindowInputEventTest {
         window.dispose()
     }
 
-    private val PointerEvent.pressed get() = changes.first().pressed
-    private val PointerEvent.position get() = changes.first().position
+    private val PointerEvent.pressed
+        get() = changes.first().pressed
+
+    private val PointerEvent.position
+        get() = changes.first().position
 }

@@ -26,8 +26,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RenderEffect
-import androidx.compose.ui.graphics.SkiaBackedCanvas
-import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.graphics.SkiaCanvasHolder
 import androidx.compose.ui.graphics.asSkiaColorFilter
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -50,9 +49,7 @@ import org.jetbrains.skia.Rect as SkRect
 import org.jetbrains.skiko.node.RenderNode
 
 @OptIn(InternalComposeUiApi::class)
-internal class SkikoGraphicsLayer(
-    renderNode: RenderNode,
-) : PlatformGraphicsLayer {
+internal class SkikoGraphicsLayer(renderNode: RenderNode) : PlatformGraphicsLayer {
     private var renderNode: RenderNode? = renderNode
     private val pictureDrawScope = CanvasDrawScope()
 
@@ -67,6 +64,11 @@ internal class SkikoGraphicsLayer(
 
     private var cachedOutline: Outline? = null
     private var cachedClip: Boolean = false
+
+    // Temporary value holders to reuse an object (not part of a state):
+    private var radii: FloatArray? = null
+
+    private val canvasHolder: SkiaCanvasHolder = SkiaCanvasHolder()
 
     override var compositingStrategy: CompositingStrategy = CompositingStrategy.Auto
         set(value) {
@@ -197,44 +199,51 @@ internal class SkikoGraphicsLayer(
             val dx = outsetLeft.toFloat()
             val dy = outsetTop.toFloat()
             when (outline) {
-                is Outline.Rectangle -> renderNode.setClipRect(
-                    outline.rect.left + dx,
-                    outline.rect.top + dy,
-                    outline.rect.right + dx,
-                    outline.rect.bottom + dy,
-                    antiAlias = true
-                )
-                is Outline.Rounded -> renderNode.setClipRRect(
-                    outline.roundRect.left + dx,
-                    outline.roundRect.top + dy,
-                    outline.roundRect.right + dx,
-                    outline.roundRect.bottom + dy,
-                    floatArrayOf(
-                        outline.roundRect.topLeftCornerRadius.x,
-                        outline.roundRect.topLeftCornerRadius.y,
-                        outline.roundRect.topRightCornerRadius.x,
-                        outline.roundRect.topRightCornerRadius.y,
-                        outline.roundRect.bottomRightCornerRadius.x,
-                        outline.roundRect.bottomRightCornerRadius.y,
-                        outline.roundRect.bottomLeftCornerRadius.x,
-                        outline.roundRect.bottomLeftCornerRadius.y
-                    ),
-                    antiAlias = true
-                )
-                is Outline.Generic -> renderNode.setClipPath(
-                    updatePathOutline(outline.path),
-                    antiAlias = true
-                )
+                is Outline.Rectangle ->
+                    renderNode.setClipRect(
+                        outline.rect.left + dx,
+                        outline.rect.top + dy,
+                        outline.rect.right + dx,
+                        outline.rect.bottom + dy,
+                        antiAlias = true,
+                    )
+                is Outline.Rounded -> {
+                    if (radii == null) radii = FloatArray(8)
+                    with(radii!!) {
+                        this[0] = outline.roundRect.topLeftCornerRadius.x
+                        this[1] = outline.roundRect.topLeftCornerRadius.y
+
+                        this[2] = outline.roundRect.topRightCornerRadius.x
+                        this[3] = outline.roundRect.topRightCornerRadius.y
+
+                        this[4] = outline.roundRect.bottomRightCornerRadius.x
+                        this[5] = outline.roundRect.bottomRightCornerRadius.y
+
+                        this[6] = outline.roundRect.bottomLeftCornerRadius.x
+                        this[7] = outline.roundRect.bottomLeftCornerRadius.y
+                    }
+                    renderNode.setClipRRect(
+                        outline.roundRect.left + dx,
+                        outline.roundRect.top + dy,
+                        outline.roundRect.right + dx,
+                        outline.roundRect.bottom + dy,
+                        radii!!,
+                        antiAlias = true,
+                    )
+                }
+                is Outline.Generic ->
+                    renderNode.setClipPath(updatePathOutline(outline.path), antiAlias = true)
             }
         }
     }
 
     private fun updatePathOutline(path: Path): SkPath =
         if (hasOutsets()) {
-            Path().apply { addPath(path, outsetOffset()) }
-        } else {
-            path
-        }.materializeSkiaPath()
+                Path().apply { addPath(path, outsetOffset()) }
+            } else {
+                path
+            }
+            .materializeSkiaPath()
 
     override fun record(
         density: Density,
@@ -245,21 +254,22 @@ internal class SkikoGraphicsLayer(
         val renderNode = renderNode ?: return
         val recordingCanvas = renderNode.beginRecording()
         try {
-            val composeCanvas = recordingCanvas.asComposeCanvas() as SkiaBackedCanvas
-            if (outsetLeft > 0 || outsetTop > 0) {
-                composeCanvas.save()
-                composeCanvas.translate(outsetLeft.toFloat(), outsetTop.toFloat())
-            }
-            pictureDrawScope.draw(
-                density = density,
-                layoutDirection = layoutDirection,
-                canvas = composeCanvas,
-                size = layer.size.toSize(),
-                graphicsLayer = layer,
-                block = block,
-            )
-            if (outsetLeft > 0 || outsetTop > 0) {
-                composeCanvas.restore()
+            canvasHolder.drawInto(recordingCanvas) {
+                if (outsetLeft > 0 || outsetTop > 0) {
+                    save()
+                    translate(outsetLeft.toFloat(), outsetTop.toFloat())
+                }
+                pictureDrawScope.draw(
+                    density = density,
+                    layoutDirection = layoutDirection,
+                    canvas = this,
+                    size = layer.size.toSize(),
+                    graphicsLayer = layer,
+                    block = block,
+                )
+                if (outsetLeft > 0 || outsetTop > 0) {
+                    restore()
+                }
             }
         } finally {
             renderNode.endRecording()
@@ -279,7 +289,9 @@ internal class SkikoGraphicsLayer(
         require(left >= 0 && top >= 0 && right >= 0 && bottom >= 0) {
             "Outsets cannot be negative! Left: $left, Top: $top, Right: $right, Bottom: $bottom"
         }
-        if (left != outsetLeft || top != outsetTop || right != outsetRight || bottom != outsetBottom) {
+        if (
+            left != outsetLeft || top != outsetTop || right != outsetRight || bottom != outsetBottom
+        ) {
             outsetLeft = left
             outsetTop = top
             outsetRight = right
@@ -292,49 +304,53 @@ internal class SkikoGraphicsLayer(
         }
     }
 
-    private fun updateRenderNodeBounds() {
-        renderNode?.bounds = SkRect.makeXYWH(
-            topLeft.x.toFloat() - outsetLeft,
-            topLeft.y.toFloat() - outsetTop,
-            size.width.toFloat() + outsetLeft + outsetRight,
-            size.height.toFloat() + outsetTop + outsetBottom
+    @Suppress("NOTHING_TO_INLINE")
+    private inline fun updateRenderNodeBounds() {
+        val left = topLeft.x.toFloat() - outsetLeft
+        val top = topLeft.y.toFloat() - outsetTop
+        val right = left + size.width.toFloat() + outsetLeft + outsetRight
+        val bottom = top + size.height.toFloat() + outsetTop + outsetBottom
+        renderNode?.setNodeBounds(left, top, right, bottom)
+    }
+
+    @Suppress("NOTHING_TO_INLINE")
+    private inline fun updateRenderNodePivot() {
+        val isUnspecified = pivotOffset.isUnspecified
+        renderNode?.setNodePivot(
+            if (isUnspecified) {
+                size.width / 2f + outsetLeft
+            } else {
+                pivotOffset.x + outsetLeft
+            },
+            if (isUnspecified) {
+                size.height / 2f + outsetTop
+            } else {
+                pivotOffset.y + outsetTop
+            },
         )
     }
 
-    private fun updateRenderNodePivot() {
-        val renderNode = renderNode ?: return
-        renderNode.pivot =
-            if (pivotOffset.isUnspecified) {
-                Point(
-                    size.width / 2f + outsetLeft,
-                    size.height / 2f + outsetTop
-                )
-            } else {
-                Point(
-                    pivotOffset.x + outsetLeft,
-                    pivotOffset.y + outsetTop
-                )
-            }
-    }
-
-    private fun outsetOffset(): Offset = Offset(outsetLeft.toFloat(), outsetTop.toFloat())
+    @Suppress("NOTHING_TO_INLINE")
+    private inline fun outsetOffset(): Offset = Offset(outsetLeft.toFloat(), outsetTop.toFloat())
 
     private fun updateLayerProperties() {
-        val paint = if (requiresLayer()) {
-            SkPaint().also {
-                it.setAlphaf(alpha)
-                it.imageFilter = renderEffect?.skiaImageFilter
-                it.colorFilter = colorFilter?.asSkiaColorFilter()
-                it.blendMode = blendMode.toSkia()
+        val paint =
+            if (requiresLayer()) {
+                SkPaint().also {
+                    it.setAlphaf(alpha)
+                    it.imageFilter = renderEffect?.skiaImageFilter
+                    it.colorFilter = colorFilter?.asSkiaColorFilter()
+                    it.blendMode = blendMode.toSkia()
+                }
+            } else {
+                null
             }
-        } else {
-            null
-        }
         cachedLayerPaint = paint
         renderNode?.layerPaint = paint
     }
 
-    private fun hasOutsets() = outsetLeft > 0 || outsetTop > 0 || outsetRight > 0 || outsetBottom > 0
+    private fun hasOutsets() =
+        outsetLeft > 0 || outsetTop > 0 || outsetRight > 0 || outsetBottom > 0
 
     private fun requiresLayer(): Boolean {
         val alphaNeedsLayer = alpha < 1f && compositingStrategy != CompositingStrategy.ModulateAlpha
@@ -342,7 +358,22 @@ internal class SkikoGraphicsLayer(
         val hasBlendMode = blendMode != BlendMode.SrcOver
         val hasRenderEffect = renderEffect != null
         val offscreenBufferRequested = compositingStrategy == CompositingStrategy.Offscreen
-        return alphaNeedsLayer || hasColorFilter || hasBlendMode || hasRenderEffect ||
+        return alphaNeedsLayer ||
+            hasColorFilter ||
+            hasBlendMode ||
+            hasRenderEffect ||
             offscreenBufferRequested
     }
+}
+
+// Native and Wasm use older Skiko versions. Newer runtimes resolve these calls to the
+// allocation-free RenderNode members; older runtimes retain their property-based path.
+@Suppress("EXTENSION_SHADOWED_BY_MEMBER")
+private fun RenderNode.setNodeBounds(left: Float, top: Float, right: Float, bottom: Float) {
+    bounds = SkRect.makeLTRB(left, top, right, bottom)
+}
+
+@Suppress("EXTENSION_SHADOWED_BY_MEMBER")
+private fun RenderNode.setNodePivot(x: Float, y: Float) {
+    pivot = Point(x, y)
 }

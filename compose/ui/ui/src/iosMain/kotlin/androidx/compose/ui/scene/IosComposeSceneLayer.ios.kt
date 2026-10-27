@@ -19,7 +19,6 @@ package androidx.compose.ui.scene
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.State
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
@@ -28,10 +27,10 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.navigationevent.IosBackNavigationEventInput
 import androidx.compose.ui.platform.FrameChoreographer
+import androidx.compose.ui.platform.IosUiMediaScope
 import androidx.compose.ui.platform.PlatformArchitectureComponentsOwner
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.uikit.ComposeContainerConfiguration
-import androidx.compose.ui.uikit.InterfaceOrientation
 import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.uikit.density
 import androidx.compose.ui.uikit.embedSubview
@@ -61,7 +60,7 @@ internal class IosComposeSceneLayer(
     consumePointerInputOutside: Boolean = focusedViewsList != null,
     parentCoroutineContext: CoroutineContext,
     private val ownerProvider: PlatformArchitectureComponentsOwner,
-    private val interfaceOrientationState: State<InterfaceOrientation>,
+    private val mediaScope: IosUiMediaScope,
     private var invalidateLayout: () -> Unit,
     private var invalidateDraw: () -> Unit,
 ) : ComposeSceneLayer {
@@ -85,43 +84,45 @@ internal class IosComposeSceneLayer(
             }
         }
 
-    val interactionView = ComposeSceneLayerView(
-        ::onDidMoveToWindow,
-    )
+    val interactionView = ComposeSceneLayerView(::onDidMoveToWindow)
 
-    val overlayView: UIView get() = mediator.overlayView
+    val overlayView: UIView
+        get() = mediator.overlayView
 
     private val navigationEventDispatcher: NavigationEventDispatcher
         get() = ownerProvider.navigationEventDispatcherOwner.navigationEventDispatcher
 
-    private val navigationEventInput = IosBackNavigationEventInput(
-        frameChoreographer = frameChoreographer,
-        density = interactionView.density,
-        initialLayoutDirection = initialLayoutDirection,
-        getTopLeftOffsetInWindow = { boundsInWindow.topLeft },
-        endEdgePanGestureBehavior = configuration.endEdgePanGestureBehavior
-    ).also {
-        navigationEventDispatcher.addInput(it)
-    }
+    private val navigationEventInput =
+        IosBackNavigationEventInput(
+                frameChoreographer = frameChoreographer,
+                density = interactionView.density,
+                initialLayoutDirection = initialLayoutDirection,
+                getTopLeftOffsetInWindow = { boundsInWindow.topLeft },
+                endEdgePanGestureBehavior = configuration.endEdgePanGestureBehavior,
+            )
+            .also { navigationEventDispatcher.addInput(it) }
 
-    private val windowContext get() = layersViewController.windowContext
+    private val windowContext
+        get() = layersViewController.windowContext
 
-    private val mediator = ComposeSceneMediator(
-        frameChoreographer = frameChoreographer,
-        onFocusBehavior = configuration.onFocusBehavior,
-        isClearFocusOnMouseDownEnabled = configuration.isClearFocusOnMouseDownEnabled,
-        focusedViewsList = focusedViewsList,
-        windowContext = windowContext,
-        architectureComponentsOwner = ownerProvider,
-        coroutineContext = layerCoroutineContext,
-        composeSceneFactory = ::createComposeScene,
-        navigationEventInput = navigationEventInput,
-        interfaceOrientationState = interfaceOrientationState,
-        schedulePendingInteropViewUpdates = layersViewController::invalidateDraw,
-    ).also {
-        interactionView.embedSubview(it.backgroundView)
-        it.isInterceptingOutsideEvents = consumePointerInputOutside
-    }
+    private val mediator =
+        ComposeSceneMediator(
+                frameChoreographer = frameChoreographer,
+                onFocusBehavior = configuration.onFocusBehavior,
+                isClearFocusOnMouseDownEnabled = configuration.isClearFocusOnMouseDownEnabled,
+                focusedViewsList = focusedViewsList,
+                windowContext = windowContext,
+                architectureComponentsOwner = ownerProvider,
+                coroutineContext = layerCoroutineContext,
+                composeSceneFactory = ::createComposeScene,
+                navigationEventInput = navigationEventInput,
+                mediaScope = mediaScope,
+                schedulePendingInteropViewUpdates = layersViewController::invalidateDraw,
+            )
+            .also {
+                interactionView.embedSubview(it.backgroundView)
+                it.isInterceptingOutsideEvents = consumePointerInputOutside
+            }
 
     var rootForTestListener: PlatformContext.RootForTestListener?
         get() = mediator.rootForTestListener
@@ -164,9 +165,7 @@ internal class IosComposeSceneLayer(
         set(value) {
             if (field != value) {
                 field = value
-                value?.let {
-                    scrimPaint.color = value
-                }
+                value?.let { scrimPaint.color = value }
             }
         }
 
@@ -179,7 +178,7 @@ internal class IosComposeSceneLayer(
         navigationEventInput.onDidMoveToWindow(window, interactionView)
     }
 
-    fun doMeasureAndLayout() = mediator.measureAndLayout()
+    fun doMeasureAndLayout() = mediator.requestMeasureAndLayout()
 
     fun draw(canvas: Canvas) {
         if (scrimColor != null) {
@@ -194,11 +193,14 @@ internal class IosComposeSceneLayer(
 
     fun retrieveInteropTransaction() = mediator.retrieveInteropTransaction()
 
-    fun retrievePendingViewUpdatesInteropTransaction() = mediator.retrievePendingViewUpdatesInteropTransaction()
+    fun retrievePendingViewUpdatesInteropTransaction() =
+        mediator.retrievePendingViewUpdatesInteropTransaction()
 
-    val needsComposeSceneDraw: Boolean get() = mediator.needsComposeSceneDraw
+    val needsComposeSceneDraw: Boolean
+        get() = mediator.needsComposeSceneDraw
 
-    val hasInteropViews: Boolean get() = mediator.hasInteropViews
+    val hasInteropViews: Boolean
+        get() = mediator.hasInteropViews
 
     fun prepareAndGetSizeTransitionAnimation(withProgress: suspend ((Float) -> Unit) -> Unit) =
         mediator.prepareAndGetSizeTransitionAnimation(withProgress)
@@ -221,12 +223,11 @@ internal class IosComposeSceneLayer(
     }
 
     @Composable
-    private fun ProvideComposeSceneLayerCompositionLocals(
-        content: @Composable () -> Unit
-    ) = CompositionLocalProvider(
-        LocalUIViewController provides layersViewController,
-        content = content
-    )
+    private fun ProvideComposeSceneLayerCompositionLocals(content: @Composable () -> Unit) =
+        CompositionLocalProvider(
+            LocalUIViewController provides layersViewController,
+            content = content,
+        )
 
     override fun setContent(
         parentCompositionContext: CompositionContext,
@@ -239,7 +240,7 @@ internal class IosComposeSceneLayer(
 
     override fun setKeyEventListener(
         onPreviewKeyEvent: ((KeyEvent) -> Boolean)?,
-        onKeyEvent: ((KeyEvent) -> Boolean)?
+        onKeyEvent: ((KeyEvent) -> Boolean)?,
     ) {
         mediator.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)
     }
@@ -247,13 +248,12 @@ internal class IosComposeSceneLayer(
     override fun setOutsidePointerEventListener(
         onOutsidePointerEvent: ((eventType: PointerEventType, button: PointerButton?) -> Unit)?
     ) {
-        mediator.onOutsidePointerEvent = {
-            onOutsidePointerEvent?.invoke(it, null)
-        }
+        mediator.onOutsidePointerEvent = { onOutsidePointerEvent?.invoke(it, null) }
     }
 
     /**
-     * Since layer is assumed to be the same size as the window it is attached to, just return the same position.
+     * Since layer is assumed to be the same size as the window it is attached to, just return the
+     * same position.
      */
     override fun calculateLocalPosition(positionInWindow: IntOffset): IntOffset = positionInWindow
 

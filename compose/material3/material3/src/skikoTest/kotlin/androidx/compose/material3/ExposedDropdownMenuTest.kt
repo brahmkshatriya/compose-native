@@ -49,7 +49,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -82,7 +81,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalTestApi::class)
 class ExposedDropdownMenuTest {
 
     private val TFTag = "TextFieldTag"
@@ -554,9 +552,7 @@ class ExposedDropdownMenuTest {
             }
         }
 
-        CoroutineScope(Dispatchers.Unconfined).launch {
-            scrollState.scrollTo(scrollState.maxValue)
-        }
+        CoroutineScope(Dispatchers.Unconfined).launch { scrollState.scrollTo(scrollState.maxValue) }
 
         onNodeWithTag("MenuContent 1").assertIsNotDisplayed()
         onNodeWithTag("MenuContent 100").assertIsDisplayed()
@@ -590,53 +586,53 @@ class ExposedDropdownMenuTest {
 
         // typical case
         assertThat(
-            edmPositionProvider.calculatePosition(
-                anchorBounds = IntRect(size = anchorSize, offset = IntOffset(0, 0)),
-                windowSize = windowSize,
-                popupContentSize = popupSize,
-                layoutDirection = layoutDirection,
+                edmPositionProvider.calculatePosition(
+                    anchorBounds = IntRect(size = anchorSize, offset = IntOffset(0, 0)),
+                    windowSize = windowSize,
+                    popupContentSize = popupSize,
+                    layoutDirection = layoutDirection,
+                )
             )
-        )
             .isEqualTo(IntOffset(0, anchorSize.height))
 
         // off-screen (above)
         assertThat(
-            edmPositionProvider.calculatePosition(
-                anchorBounds = IntRect(size = anchorSize, offset = IntOffset(0, -150)),
-                windowSize = windowSize,
-                popupContentSize = popupSize,
-                layoutDirection = layoutDirection,
+                edmPositionProvider.calculatePosition(
+                    anchorBounds = IntRect(size = anchorSize, offset = IntOffset(0, -150)),
+                    windowSize = windowSize,
+                    popupContentSize = popupSize,
+                    layoutDirection = layoutDirection,
+                )
             )
-        )
             .isEqualTo(IntOffset(0, verticalMargin))
 
         // interacting with window insets
         assertThat(
-            edmPositionProvider.calculatePosition(
-                anchorBounds =
-                    IntRect(
-                        size = anchorSize,
-                        // If it weren't for topWindowInsets allowance,
-                        // the menu would be considered "off-screen"
-                        offset = IntOffset(0, 100),
-                    ),
-                windowSize = windowSize,
-                popupContentSize = popupSize,
-                layoutDirection = layoutDirection,
+                edmPositionProvider.calculatePosition(
+                    anchorBounds =
+                        IntRect(
+                            size = anchorSize,
+                            // If it weren't for topWindowInsets allowance,
+                            // the menu would be considered "off-screen"
+                            offset = IntOffset(0, 100),
+                        ),
+                    windowSize = windowSize,
+                    popupContentSize = popupSize,
+                    layoutDirection = layoutDirection,
+                )
             )
-        )
             .isEqualTo(IntOffset(0, 100 + anchorSize.height))
 
         // off-screen (below)
         assertThat(
-            edmPositionProvider.calculatePosition(
-                anchorBounds =
-                    IntRect(size = anchorSize, offset = IntOffset(0, windowSize.height + 100)),
-                windowSize = windowSize,
-                popupContentSize = popupSize,
-                layoutDirection = layoutDirection,
+                edmPositionProvider.calculatePosition(
+                    anchorBounds =
+                        IntRect(size = anchorSize, offset = IntOffset(0, windowSize.height + 100)),
+                    windowSize = windowSize,
+                    popupContentSize = popupSize,
+                    layoutDirection = layoutDirection,
+                )
             )
-        )
             .isEqualTo(
                 IntOffset(
                     0,

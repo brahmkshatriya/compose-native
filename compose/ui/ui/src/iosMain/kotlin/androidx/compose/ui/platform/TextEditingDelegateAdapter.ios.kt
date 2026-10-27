@@ -24,12 +24,14 @@ import androidx.compose.ui.unit.DpRect
  * Adapts the [TextInputContainer.Delegate] of a text field to the interface the
  * [NativeTextEditingDelegate] conforming views talk to.
  */
-internal class InactiveTextInputAdapter(
-    private val delegate: TextInputContainer.Delegate,
-) : NativeTextEditingDelegate {
+internal class InactiveTextInputAdapter(private val delegate: TextInputContainer.Delegate) :
+    NativeTextEditingDelegate {
     override val isInteractive: Boolean = false
 
-    private val text: String get() = delegate.text
+    private val text: String
+        get() = delegate.text
+
+    override fun onFocus() = Unit
 
     override fun onResignFocus() = Unit
 
@@ -83,10 +85,11 @@ internal class InactiveTextInputAdapter(
 
     override fun characterRangeAtPoint(point: DpOffset): TextRange? = null
 
-    override val inputTraits: SkikoUITextInputTraits get() = getUITextInputTraits(delegate.imeOptions)
+    override val inputTraits: SkikoUITextInputTraits
+        get() = getUITextInputTraits(delegate.imeOptions)
 
     override fun positionWithinRange(
         range: TextRange,
-        farthestInDirection: TextLayoutDirection
+        farthestInDirection: TextLayoutDirection,
     ): Int? = null
 }

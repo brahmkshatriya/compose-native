@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -35,15 +36,13 @@ import androidx.compose.ui.test.SemanticsNodeInteractionsProvider
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.runComposeUiTest
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.test.performTextReplacement
 import kotlin.test.Test
 
-@OptIn(ExperimentalTestApi::class)
 class TextFieldInputTest {
     @Test
     fun textField_backspace_withDiacritic() = runTextFieldInputTest {
@@ -79,32 +78,27 @@ class TextFieldInputTest {
         backspace_withEmoji("😉")
         backspace_withEmoji("🥺")
         backspace_withEmoji("♥️")
-        backspace_withEmoji("🇮🇱")  // flag
-        backspace_withEmoji("🏴󠁧󠁢󠁥󠁮󠁧󠁿")  // Scotland flag (14 characters)
-        backspace_withEmoji("✌\uD83C\uDFFD")  // victory hand: medium skin tone
-        backspace_withEmoji("👩‍❤️‍💋‍👩")  // 👩 ❤️ 💋‍ 👩 (joined with zero-width-joiner)
+        backspace_withEmoji("🇮🇱") // flag
+        backspace_withEmoji("🏴󠁧󠁢󠁥󠁮󠁧󠁿") // Scotland flag (14 characters)
+        backspace_withEmoji("✌\uD83C\uDFFD") // victory hand: medium skin tone
+        backspace_withEmoji("👩‍❤️‍💋‍👩") // 👩 ❤️ 💋‍ 👩 (joined with zero-width-joiner)
     }
 }
 
-@OptIn(ExperimentalTestApi::class)
-private abstract class TextFieldInputTestScope(
-    val uiTest: ComposeUiTest,
-) : SemanticsNodeInteractionsProvider by uiTest {
+private abstract class TextFieldInputTestScope(val uiTest: ComposeUiTest) :
+    SemanticsNodeInteractionsProvider by uiTest {
     protected val textFieldTag = "TextField"
 
     abstract val text: String
 
-    @Composable
-    abstract fun TextField()
+    @Composable abstract fun TextField()
 
     fun assertTextEquals(expected: String) {
         assertThat(text).isEqualTo(expected)
     }
 
     fun onTextField(block: SemanticsNodeInteraction.() -> Unit) =
-        with(onNodeWithTag(textFieldTag)) {
-            block()
-        }
+        with(onNodeWithTag(textFieldTag)) { block() }
 
     fun SemanticsNodeInteraction.setTextAndPlaceCursorAtEnd(text: String) {
         performTextReplacement(text)
@@ -112,10 +106,7 @@ private abstract class TextFieldInputTestScope(
     }
 }
 
-@OptIn(ExperimentalTestApi::class)
-private class TextField1InputTestScope(
-    uiTest: ComposeUiTest,
-): TextFieldInputTestScope(uiTest) {
+private class TextField1InputTestScope(uiTest: ComposeUiTest) : TextFieldInputTestScope(uiTest) {
     private var textFieldValue by mutableStateOf(TextFieldValue())
 
     override val text: String
@@ -124,26 +115,20 @@ private class TextField1InputTestScope(
     @Composable
     override fun TextField() {
         val focusRequester = FocusRequester()
+        @Suppress("DEPRECATION")
         BasicTextField(
             value = textFieldValue,
             onValueChange = { textFieldValue = it },
-            modifier = Modifier
-                .focusRequester(focusRequester)
-                .testTag(textFieldTag)
+            modifier = Modifier.focusRequester(focusRequester).testTag(textFieldTag),
         )
 
-        LaunchedEffect(focusRequester) {
-            focusRequester.requestFocus()
-        }
+        LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
     }
 
     override fun toString() = "TextField1"
 }
 
-@OptIn(ExperimentalTestApi::class)
-private class TextField2InputTestScope(
-    uiTest: ComposeUiTest,
-): TextFieldInputTestScope(uiTest) {
+private class TextField2InputTestScope(uiTest: ComposeUiTest) : TextFieldInputTestScope(uiTest) {
     private var textFieldState by mutableStateOf(TextFieldState())
 
     override val text: String
@@ -154,14 +139,10 @@ private class TextField2InputTestScope(
         val focusRequester = FocusRequester()
         BasicTextField(
             state = textFieldState,
-            modifier = Modifier
-                .focusRequester(focusRequester)
-                .testTag(textFieldTag)
+            modifier = Modifier.focusRequester(focusRequester).testTag(textFieldTag),
         )
 
-        LaunchedEffect(focusRequester) {
-            focusRequester.requestFocus()
-        }
+        LaunchedEffect(focusRequester) { focusRequester.requestFocus() }
     }
 
     override fun toString() = "TextField2"
@@ -170,18 +151,14 @@ private class TextField2InputTestScope(
 @OptIn(ExperimentalTestApi::class)
 @Suppress("DEPRECATION")
 private fun runTextFieldInputTest(
-    scopeBuilders: List<(ComposeUiTest) -> TextFieldInputTestScope> = listOf(
-        ::TextField1InputTestScope,
-        ::TextField2InputTestScope,
-    ),
-    block: TextFieldInputTestScope.() -> Unit
+    scopeBuilders: List<(ComposeUiTest) -> TextFieldInputTestScope> =
+        listOf(::TextField1InputTestScope, ::TextField2InputTestScope),
+    block: TextFieldInputTestScope.() -> Unit,
 ) {
     for (scopeBuilder in scopeBuilders) {
         runComposeUiTest {
             with(scopeBuilder(this)) {
-                setContent {
-                    TextField()
-                }
+                setContent { TextField() }
                 block()
             }
         }

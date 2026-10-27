@@ -29,21 +29,50 @@ import kotlin.jvm.JvmInline
 @Immutable
 internal actual value class Strings(val value: Int) {
     actual companion object {
-        actual val defaultPaneTitlePrimary = Strings(0)
-        actual val defaultPaneTitleSecondary = Strings(1)
-        actual val defaultPaneTitleTertiary = Strings(2)
-        actual val defaultPaneExpansionDragHandleContentDescription = Strings(3)
-        actual val defaultPaneExpansionDragHandleStateDescription = Strings(4)
-        actual val defaultPaneExpansionDragHandleActionDescription = Strings(5)
-        actual val defaultPaneExpansionProportionAnchorDescription = Strings(6)
-        actual val defaultPaneExpansionStartOffsetAnchorDescription = Strings(7)
-        actual val defaultPaneExpansionEndOffsetAnchorDescription = Strings(8)
-        actual val dragToResizeClickToExpandDescription = Strings(9)
-        actual val dragToResizeClickToCollapseDescription = Strings(10)
-        actual val dragToResizeClickToPartiallyExpandDescription = Strings(11)
-        actual val dragToResizeExpandedStateDescription = Strings(12)
-        actual val dragToResizeCollapsedStateDescription = Strings(13)
-        actual val dragToResizePartiallyExpandedStateDescription = Strings(14)
+        actual inline val defaultPaneTitlePrimary: Strings
+            get() = Strings(0)
+
+        actual inline val defaultPaneTitleSecondary: Strings
+            get() = Strings(1)
+
+        actual inline val defaultPaneTitleTertiary: Strings
+            get() = Strings(2)
+
+        actual inline val defaultPaneExpansionDragHandleContentDescription: Strings
+            get() = Strings(3)
+
+        actual inline val defaultPaneExpansionDragHandleStateDescription: Strings
+            get() = Strings(4)
+
+        actual inline val defaultPaneExpansionDragHandleActionDescription: Strings
+            get() = Strings(5)
+
+        actual inline val defaultPaneExpansionProportionAnchorDescription: Strings
+            get() = Strings(6)
+
+        actual inline val defaultPaneExpansionStartOffsetAnchorDescription: Strings
+            get() = Strings(7)
+
+        actual inline val defaultPaneExpansionEndOffsetAnchorDescription: Strings
+            get() = Strings(8)
+
+        actual inline val dragToResizeClickToExpandDescription: Strings
+            get() = Strings(9)
+
+        actual inline val dragToResizeClickToCollapseDescription: Strings
+            get() = Strings(10)
+
+        actual inline val dragToResizeClickToPartiallyExpandDescription: Strings
+            get() = Strings(11)
+
+        actual inline val dragToResizeExpandedStateDescription: Strings
+            get() = Strings(12)
+
+        actual inline val dragToResizeCollapsedStateDescription: Strings
+            get() = Strings(13)
+
+        actual inline val dragToResizePartiallyExpandedStateDescription: Strings
+            get() = Strings(14)
     }
 }
 
@@ -54,20 +83,20 @@ internal actual value class Strings(val value: Int) {
 internal fun String.format(vararg formatArgs: Any?): String {
     var result = this
     formatArgs.forEachIndexed { index, arg ->
-        result = result
-            .replace("%${index + 1}\$d", arg.toString())
-            .replace("%${index + 1}\$s", arg.toString())
+        result =
+            result
+                .replace("%${index + 1}\$d", arg.toString())
+                .replace("%${index + 1}\$s", arg.toString())
     }
     return result
 }
 
 private fun getTranslation(string: Strings, locale: Locale): String {
     val tag = localeTag(language = locale.language, region = locale.region)
-    val translation = translationByLocaleTag.getOrPut(tag) {
-        findTranslation(locale)
-    }
+    val translation = translationByLocaleTag.getOrPut(tag) { findTranslation(locale) }
     return translation[string]
-        ?: Translations.en()[string] // There are a few missing translations in AOSP, so use EN as backup
+        ?: Translations.en()[
+                string] // There are a few missing translations in AOSP, so use EN as backup
         ?: error("Missing translation for $string")
 }
 
@@ -92,20 +121,16 @@ internal actual fun CompositionLocalConsumerModifierNode.getString(string: Strin
 
 internal actual fun CompositionLocalConsumerModifierNode.getString(
     string: Strings,
-    vararg formatArgs: Any
+    vararg formatArgs: Any,
 ): String {
     val locale = Locale.current
     return getTranslation(string, locale).format(*formatArgs)
 }
 
-/**
- * A single translation; should contain all the [Strings].
- */
+/** A single translation; should contain all the [Strings]. */
 internal typealias Translation = Map<Strings, String>
 
-/**
- * Translations we've already loaded, mapped by the locale tag (see [localeTag]).
- */
+/** Translations we've already loaded, mapped by the locale tag (see [localeTag]). */
 private val translationByLocaleTag = mutableMapOf<String, Translation>()
 
 /**
@@ -113,11 +138,12 @@ private val translationByLocaleTag = mutableMapOf<String, Translation>()
  *
  * Note that this is our internal format; this isn't the same as [Locale.toLanguageTag].
  */
-private fun localeTag(language: String, region: String) = when {
-    language == "" -> ""
-    region == "" -> language
-    else -> "${language}_$region"
-}
+private fun localeTag(language: String, region: String) =
+    when {
+        language == "" -> ""
+        region == "" -> language
+        else -> "${language}_$region"
+    }
 
 /**
  * Returns a sequence of locale tags to use as keys to look up the translation for the given locale.
@@ -135,16 +161,14 @@ private fun localeTagChain(locale: Locale) = sequence {
     yield(localeTag("", ""))
 }
 
-/**
- * Finds a [Translation] for the given locale.
- */
+/** Finds a [Translation] for the given locale. */
 private fun findTranslation(locale: Locale): Map<Strings, String> {
     // We don't need to merge translations because each one should contain all the strings.
     return localeTagChain(locale).firstNotNullOf { translationFor(it) }
 }
 
 /**
- * This object is only needed to provide a namespace for the [Translation] provider functions
- * (e.g. [Translations.en]), to avoid polluting the global namespace.
+ * This object is only needed to provide a namespace for the [Translation] provider functions (e.g.
+ * [Translations.en]), to avoid polluting the global namespace.
  */
 internal object Translations

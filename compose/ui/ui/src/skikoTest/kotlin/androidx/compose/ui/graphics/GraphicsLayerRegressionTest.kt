@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalTestApi::class)
@@ -59,11 +58,13 @@ class GraphicsLayerRegressionTest {
         var drawCount = 0
         setContent {
             val graphicsLayer = rememberGraphicsLayer()
-            Box(Modifier.size(100.dp).drawWithContent {
-                drawCount++
-                graphicsLayer.record { this@drawWithContent.drawContent() }
-                drawLayer(graphicsLayer)
-            })
+            Box(
+                Modifier.size(100.dp).drawWithContent {
+                    drawCount++
+                    graphicsLayer.record { this@drawWithContent.drawContent() }
+                    drawLayer(graphicsLayer)
+                }
+            )
         }
 
         // shouldn't hang
@@ -81,37 +82,28 @@ class GraphicsLayerRegressionTest {
             val backgroundLayer = rememberGraphicsLayer()
 
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .drawWithContent {
-                        backgroundLayer.record {
-                            this@drawWithContent.drawContent()
-                        }
-                        this@drawWithContent.drawContent()
-                    }
+                Modifier.fillMaxSize().drawWithContent {
+                    backgroundLayer.record { this@drawWithContent.drawContent() }
+                    this@drawWithContent.drawContent()
+                }
             ) {
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(scrollState)
-                        .fillMaxWidth()
-                ) {
+                Column(modifier = Modifier.verticalScroll(scrollState).fillMaxWidth()) {
                     repeat(100) {
-                        Box(Modifier
-                            .size(100.dp)
-                            .background(if (it % 2 == 0) Color.Red else Color.Black))
+                        Box(
+                            Modifier.size(100.dp)
+                                .background(if (it % 2 == 0) Color.Red else Color.Black)
+                        )
                     }
                 }
             }
 
             Spacer(
-                modifier = Modifier
-                    .testTag("bar")
-                    .fillMaxWidth()
-                    .height(80.dp)
-                    .clip(RectangleShape)
-                    .drawWithContent {
-                        drawLayer(backgroundLayer)
-                    }
+                modifier =
+                    Modifier.testTag("bar")
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .clip(RectangleShape)
+                        .drawWithContent { drawLayer(backgroundLayer) }
             )
         }
 
@@ -137,40 +129,33 @@ class GraphicsLayerRegressionTest {
             val backgroundLayer = rememberGraphicsLayer()
 
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .drawWithContent {
-                        backgroundLayer.record {
-                            this@drawWithContent.drawContent()
-                        }
-                        this@drawWithContent.drawContent()
-                    }
+                Modifier.fillMaxSize().drawWithContent {
+                    backgroundLayer.record { this@drawWithContent.drawContent() }
+                    this@drawWithContent.drawContent()
+                }
             ) {
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(scrollState)
-                        .fillMaxWidth()
-                ) {
+                Column(modifier = Modifier.verticalScroll(scrollState).fillMaxWidth()) {
                     repeat(100) {
-                        Box(Modifier
-                            .size(100.dp)
-                            .background(if (it % 2 == 0) Color.Red else Color.Black))
+                        Box(
+                            Modifier.size(100.dp)
+                                .background(if (it % 2 == 0) Color.Red else Color.Black)
+                        )
                     }
                 }
             }
 
             Spacer(
-                modifier = Modifier
-                    .testTag("bar")
-                    .fillMaxWidth()
-                    .height(80.dp)
-                    .clip(RectangleShape)
-                    .drawWithContent {
-                        val layer = graphicsContext.createGraphicsLayer()
-                        layer.record { drawLayer(backgroundLayer) }
-                        drawLayer(layer)
-                        graphicsContext.releaseGraphicsLayer(layer)
-                    }
+                modifier =
+                    Modifier.testTag("bar")
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .clip(RectangleShape)
+                        .drawWithContent {
+                            val layer = graphicsContext.createGraphicsLayer()
+                            layer.record { drawLayer(backgroundLayer) }
+                            drawLayer(layer)
+                            graphicsContext.releaseGraphicsLayer(layer)
+                        }
             )
         }
 
@@ -194,29 +179,25 @@ class GraphicsLayerRegressionTest {
             val backgroundLayer = rememberGraphicsLayer()
 
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .drawWithContent {
-                        backgroundLayer.record {
-                            this@drawWithContent.drawContent()
-                        }
-                        this@drawWithContent.drawContent()
-                    }
+                Modifier.fillMaxSize().drawWithContent {
+                    backgroundLayer.record { this@drawWithContent.drawContent() }
+                    this@drawWithContent.drawContent()
+                }
             ) {
-                Box(Modifier.width(100.dp).height(1000.dp).drawWithContent {
-                    drawRect(color, Offset.Zero, Size(100f, 1000f))
-                })
+                Box(
+                    Modifier.width(100.dp).height(1000.dp).drawWithContent {
+                        drawRect(color, Offset.Zero, Size(100f, 1000f))
+                    }
+                )
             }
 
             Spacer(
-                modifier = Modifier
-                    .testTag("bar")
-                    .fillMaxWidth()
-                    .height(80.dp)
-                    .clip(RectangleShape)
-                    .drawWithContent {
-                        drawLayer(backgroundLayer)
-                    }
+                modifier =
+                    Modifier.testTag("bar")
+                        .fillMaxWidth()
+                        .height(80.dp)
+                        .clip(RectangleShape)
+                        .drawWithContent { drawLayer(backgroundLayer) }
             )
         }
 
@@ -234,12 +215,6 @@ class GraphicsLayerRegressionTest {
 
     @OptIn(InternalTestApi::class)
     private fun runLayerTest(body: suspend SkikoComposeUiTest.() -> Unit) {
-        runInternalSkikoComposeUiTest {
-            runOnUiThread {
-                runTest(timeout = 10.seconds) {
-                    body()
-                }
-            }
-        }
+        runInternalSkikoComposeUiTest { runOnUiThread { runTest(timeout = 10.seconds) { body() } } }
     }
 }

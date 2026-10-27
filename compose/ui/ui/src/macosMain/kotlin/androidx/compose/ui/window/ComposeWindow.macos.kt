@@ -20,7 +20,7 @@ package androidx.compose.ui.window
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.graphics.SkiaCanvasHolder
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.toComposeEvent
 import androidx.compose.ui.input.pointer.MacosCursor
@@ -28,14 +28,14 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.platform.DefaultArchitectureComponentsOwner
+import androidx.compose.ui.platform.FrameRecomposer
 import androidx.compose.ui.platform.MacosTextInputService
 import androidx.compose.ui.platform.PlatformContext
+import androidx.compose.ui.platform.TaskDispatchers
 import androidx.compose.ui.platform.WindowInfoImpl
 import androidx.compose.ui.platform.registerSkikoComposeImplementation
 import androidx.compose.ui.scene.CanvasLayersComposeScene
 import androidx.compose.ui.scene.SingleComposeSceneRenderingScope
-import androidx.compose.ui.platform.FrameRecomposer
-import androidx.compose.ui.platform.TaskDispatchers
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
@@ -72,9 +72,7 @@ import platform.AppKit.NSWindowStyleMaskTitled
 import platform.Foundation.NSMakeRect
 
 interface WindowScope {
-    /**
-     * [NSWindow] that was created inside [androidx.compose.ui.window.Window]
-     */
+    /** [NSWindow] that was created inside [androidx.compose.ui.window.Window] */
     val window: NSWindow
 }
 
@@ -83,11 +81,7 @@ fun Window(
     size: DpSize = DpSize(800.dp, 600.dp),
     content: @Composable WindowScope.() -> Unit,
 ) {
-    ComposeWindow(
-        title = title,
-        size = size,
-        content = content,
-    )
+    ComposeWindow(title = title, size = size, content = content)
 }
 
 private class ComposeWindow(
@@ -97,9 +91,7 @@ private class ComposeWindow(
 ) : WindowScope {
     private var isDisposed = false
     private val macosTextInputService = MacosTextInputService()
-    private val _windowInfo = WindowInfoImpl().apply {
-        isWindowFocused = true
-    }
+    private val _windowInfo = WindowInfoImpl().apply { isWindowFocused = true }
     private val archComponentsOwner = DefaultArchitectureComponentsOwner()
 
     // TODO: It must be shared between Compose instances.
@@ -107,22 +99,34 @@ private class ComposeWindow(
     private val frameRecomposer = FrameRecomposer(Dispatchers.Main) { skiaLayer.needRender() }
 
     // TODO: It cannot be used in case of shared [FrameRecomposer], replace this helper with calling
-    //  - [frameRecomposer.performFrame] once per frame (across all instances) before platform views layout phase
-    //  - [scene.measureAndLayout] during platform views layout phase. Note that it should be triggered
-    //    by platform view invalidation (which is triggered by [scene.invalidateLayout] OR by regular platform invalidation)
-    //  - [scene.draw] during drawing phase of platform views (which is triggered by [scene.invalidateDraw]).
-    //    Note that in case of custom GPU surface/V-Sync handling, it needs to be handled differently.
+    //  - [frameRecomposer.performFrame] once per frame (across all instances) before platform views
+    // layout phase
+    //  - [scene.measureAndLayout] during platform views layout phase. Note that it should be
+    // triggered
+    //    by platform view invalidation (which is triggered by [scene.invalidateLayout] OR by
+    // regular platform invalidation)
+    //  - [scene.draw] during drawing phase of platform views (which is triggered by
+    // [scene.invalidateDraw]).
+    //    Note that in case of custom GPU surface/V-Sync handling, it needs to be handled
+    // differently.
     private val sceneRenderingScope = SingleComposeSceneRenderingScope { skiaLayer.needRender() }
 
     private val platformContext: PlatformContext =
         object : PlatformContext by PlatformContext.Empty() {
-            override val windowInfo get() = _windowInfo
-            override val taskDispatchers: TaskDispatchers = object : TaskDispatchers {
-                override val Default = Dispatchers.Default
-                override val IO = Dispatchers.IO
-            }
-            override val architectureComponentsOwner get() = archComponentsOwner
-            override val textInputService get() = macosTextInputService
+            override val windowInfo
+                get() = _windowInfo
+
+            override val taskDispatchers: TaskDispatchers =
+                object : TaskDispatchers {
+                    override val Default = Dispatchers.Default
+                    override val IO = Dispatchers.IO
+                }
+            override val architectureComponentsOwner
+                get() = archComponentsOwner
+
+            override val textInputService
+                get() = macosTextInputService
+
             override fun setPointerIcon(pointerIcon: PointerIcon) {
                 val cursor = (pointerIcon as? MacosCursor)?.cursor ?: NSCursor.arrowCursor
                 cursor.set()
@@ -134,108 +138,144 @@ private class ComposeWindow(
         registerSkikoComposeImplementation()
     }
 
-    private val scene = CanvasLayersComposeScene(
-        frameRecomposer = frameRecomposer,
-        platformContext = platformContext,
-        // TODO: Route these to distinct AppKit invalidation paths: layout work should use
-        // native layout scheduling, while draw work should only mark display dirty.
-        invalidateLayout = sceneRenderingScope::onSceneInvalidation,
-        invalidateDraw = sceneRenderingScope::onSceneInvalidation,
-    )
-    private val renderDelegate = object : SkikoRenderDelegate {
-        override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
-            val sizeInPx = IntSize(width, height)
-            _windowInfo.containerSize = sizeInPx
-            _windowInfo.containerDpSize = sizeInPx.toSize().toDpSize(scene.density)
-            scene.size = sizeInPx // TODO: Move it out from onRender to avoid extra invalidation
-            with(sceneRenderingScope) {
-                scene.render(frameRecomposer, canvas.asComposeCanvas(), nanoTime)
+    private val scene =
+        CanvasLayersComposeScene(
+            frameRecomposer = frameRecomposer,
+            platformContext = platformContext,
+            // TODO: Route these to distinct AppKit invalidation paths: layout work should use
+            // native layout scheduling, while draw work should only mark display dirty.
+            invalidateLayout = sceneRenderingScope::onSceneInvalidation,
+            invalidateDraw = sceneRenderingScope::onSceneInvalidation,
+        )
+
+    private val canvasHolder = SkiaCanvasHolder()
+    private val renderDelegate =
+        object : SkikoRenderDelegate {
+            override fun onRender(canvas: Canvas, width: Int, height: Int, nanoTime: Long) {
+                val sizeInPx = IntSize(width, height)
+                _windowInfo.containerSize = sizeInPx
+                _windowInfo.containerDpSize = sizeInPx.toSize().toDpSize(scene.density)
+                scene.size = sizeInPx // TODO: Move it out from onRender to avoid extra invalidation
+                with(sceneRenderingScope) {
+                    canvasHolder.drawInto(canvas) {
+                        scene.render(frameRecomposer, this@drawInto, nanoTime)
+                    }
+                }
             }
         }
-    }
 
     private val windowStyle =
         NSWindowStyleMaskTitled or
-        NSWindowStyleMaskMiniaturizable or
-        NSWindowStyleMaskClosable or
-        NSWindowStyleMaskResizable
+            NSWindowStyleMaskMiniaturizable or
+            NSWindowStyleMaskClosable or
+            NSWindowStyleMaskResizable
 
-    override val window = object : NSWindow(
-        contentRect = NSMakeRect(
-            x = 0.0,
-            y = 0.0,
-            w = size.width.value.toDouble(),
-            h = size.height.value.toDouble()
-        ),
-        styleMask = windowStyle,
-        backing = NSBackingStoreBuffered,
-        defer = true
-    ) {
-        override fun canBecomeKeyWindow() = true
-        override fun canBecomeMainWindow() = true
-    }
+    override val window =
+        object :
+            NSWindow(
+                contentRect =
+                    NSMakeRect(
+                        x = 0.0,
+                        y = 0.0,
+                        w = size.width.value.toDouble(),
+                        h = size.height.value.toDouble(),
+                    ),
+                styleMask = windowStyle,
+                backing = NSBackingStoreBuffered,
+                defer = true,
+            ) {
+            override fun canBecomeKeyWindow() = true
 
-    private val view = object : NSView(window.frame) {
-        private var trackingArea : NSTrackingArea? = null
-        override fun wantsUpdateLayer() = true
-        override fun acceptsFirstResponder() = true
-        override fun viewWillMoveToWindow(newWindow: NSWindow?) {
-            updateTrackingAreas()
+            override fun canBecomeMainWindow() = true
         }
 
-        override fun updateTrackingAreas() {
-            trackingArea?.let { removeTrackingArea(it) }
-            trackingArea = NSTrackingArea(
-                rect = bounds,
-                options = NSTrackingActiveAlways or
-                    NSTrackingMouseEnteredAndExited or
-                    NSTrackingMouseMoved or
-                    NSTrackingActiveInKeyWindow or
-                    NSTrackingAssumeInside or
-                    NSTrackingInVisibleRect,
-                owner = this, userInfo = null)
-            addTrackingArea(trackingArea!!)
-        }
+    private val view =
+        object : NSView(window.frame) {
+            private var trackingArea: NSTrackingArea? = null
 
-        override fun mouseDown(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Press, PointerButton.Primary)
-        }
-        override fun mouseUp(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Release, PointerButton.Primary)
-        }
-        override fun rightMouseDown(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Press, PointerButton.Secondary)
-        }
-        override fun rightMouseUp(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Release, PointerButton.Secondary)
-        }
-        override fun otherMouseDown(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Press, PointerButton(event.buttonNumber.toInt()))
-        }
-        override fun otherMouseUp(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Release, PointerButton(event.buttonNumber.toInt()))
-        }
-        override fun mouseMoved(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Move)
-        }
-        override fun mouseDragged(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Move)
-        }
-        override fun scrollWheel(event: NSEvent) {
-            onMouseEvent(event, PointerEventType.Scroll)
-        }
-        override fun keyDown(event: NSEvent) {
-            val consumed = onKeyboardEvent(event.toComposeEvent())
-            if (!consumed) {
-                // Pass only unconsumed event to system handler.
-                // It will trigger the system's "beep" sound for unconsumed events.
-                super.keyDown(event)
+            override fun wantsUpdateLayer() = true
+
+            override fun acceptsFirstResponder() = true
+
+            override fun viewWillMoveToWindow(newWindow: NSWindow?) {
+                updateTrackingAreas()
+            }
+
+            override fun updateTrackingAreas() {
+                trackingArea?.let { removeTrackingArea(it) }
+                trackingArea =
+                    NSTrackingArea(
+                        rect = bounds,
+                        options =
+                            NSTrackingActiveAlways or
+                                NSTrackingMouseEnteredAndExited or
+                                NSTrackingMouseMoved or
+                                NSTrackingActiveInKeyWindow or
+                                NSTrackingAssumeInside or
+                                NSTrackingInVisibleRect,
+                        owner = this,
+                        userInfo = null,
+                    )
+                addTrackingArea(trackingArea!!)
+            }
+
+            override fun mouseDown(event: NSEvent) {
+                onMouseEvent(event, PointerEventType.Press, PointerButton.Primary)
+            }
+
+            override fun mouseUp(event: NSEvent) {
+                onMouseEvent(event, PointerEventType.Release, PointerButton.Primary)
+            }
+
+            override fun rightMouseDown(event: NSEvent) {
+                onMouseEvent(event, PointerEventType.Press, PointerButton.Secondary)
+            }
+
+            override fun rightMouseUp(event: NSEvent) {
+                onMouseEvent(event, PointerEventType.Release, PointerButton.Secondary)
+            }
+
+            override fun otherMouseDown(event: NSEvent) {
+                onMouseEvent(
+                    event,
+                    PointerEventType.Press,
+                    PointerButton(event.buttonNumber.toInt()),
+                )
+            }
+
+            override fun otherMouseUp(event: NSEvent) {
+                onMouseEvent(
+                    event,
+                    PointerEventType.Release,
+                    PointerButton(event.buttonNumber.toInt()),
+                )
+            }
+
+            override fun mouseMoved(event: NSEvent) {
+                onMouseEvent(event, PointerEventType.Move)
+            }
+
+            override fun mouseDragged(event: NSEvent) {
+                onMouseEvent(event, PointerEventType.Move)
+            }
+
+            override fun scrollWheel(event: NSEvent) {
+                onMouseEvent(event, PointerEventType.Scroll)
+            }
+
+            override fun keyDown(event: NSEvent) {
+                val consumed = onKeyboardEvent(event.toComposeEvent())
+                if (!consumed) {
+                    // Pass only unconsumed event to system handler.
+                    // It will trigger the system's "beep" sound for unconsumed events.
+                    super.keyDown(event)
+                }
+            }
+
+            override fun keyUp(event: NSEvent) {
+                onKeyboardEvent(event.toComposeEvent())
             }
         }
-        override fun keyUp(event: NSEvent) {
-            onKeyboardEvent(event.toComposeEvent())
-        }
-    }
 
     init {
         window.title = title
@@ -249,9 +289,7 @@ private class ComposeWindow(
         window.makeKeyAndOrderFront(null)
 
         scene.density = Density(window.backingScaleFactor.toFloat())
-        scene.setContent {
-            content()
-        }
+        scene.setContent { content() }
 
         archComponentsOwner.enableSavedStateHandles()
         // TODO: Properly handle lifecycle events
@@ -289,14 +327,10 @@ private class ComposeWindow(
         )
     }
 
-    private val NSEvent.offset: DpOffset get() {
-        val position = locationInWindow.useContents {
-            DpOffset(x = x.dp, y = y.dp)
+    private val NSEvent.offset: DpOffset
+        get() {
+            val position = locationInWindow.useContents { DpOffset(x = x.dp, y = y.dp) }
+            val height = view.frame.useContents { size.height.dp }
+            return DpOffset(x = position.x, y = height - position.y)
         }
-        val height = view.frame.useContents { size.height.dp }
-        return DpOffset(
-            x = position.x,
-            y = height - position.y,
-        )
-    }
 }

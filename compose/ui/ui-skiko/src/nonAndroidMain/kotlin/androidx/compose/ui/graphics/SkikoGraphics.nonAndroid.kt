@@ -55,9 +55,7 @@ internal object SkikoGraphics : PlatformGraphics {
 
     override fun createCanvas(image: ImageBitmap): Canvas {
         val skiaBitmap = image.asSkiaBitmap()
-        require(!skiaBitmap.isImmutable) {
-            "Cannot draw on immutable ImageBitmap"
-        }
+        require(!skiaBitmap.isImmutable) { "Cannot draw on immutable ImageBitmap" }
         return SkCanvas(skiaBitmap).asComposeCanvas()
     }
 
@@ -76,8 +74,7 @@ internal object SkikoGraphics : PlatformGraphics {
         tolerance: Float,
     ): PathIterator = SkiaPathIterator(path, conicEvaluation, tolerance)
 
-    override fun createPathMeasure(): PathMeasure =
-        SkiaBackedPathMeasure()
+    override fun createPathMeasure(): PathMeasure = SkiaBackedPathMeasure()
 
     override fun createImageBitmap(
         width: Int,
@@ -87,11 +84,12 @@ internal object SkikoGraphics : PlatformGraphics {
         colorSpace: ColorSpace,
     ): ImageBitmap {
         require(width > 0 && height > 0) { "width and height must be > 0" }
-        val colorInfo = ColorInfo(
-            config.toSkiaColorType(),
-            if (hasAlpha) ColorAlphaType.PREMUL else ColorAlphaType.OPAQUE,
-            colorSpace.toSkiaColorSpace(),
-        )
+        val colorInfo =
+            ColorInfo(
+                config.toSkiaColorType(),
+                if (hasAlpha) ColorAlphaType.PREMUL else ColorAlphaType.OPAQUE,
+                colorSpace.toSkiaColorSpace(),
+            )
         val bitmap = Bitmap()
         bitmap.allocPixels(ImageInfo(colorInfo, width, height))
         return bitmap.asComposeImageBitmap()
@@ -109,15 +107,13 @@ internal object SkikoGraphics : PlatformGraphics {
     ): androidx.compose.ui.graphics.Shader {
         validateColorStops(colors, colorStops)
         return SkShader.makeLinearGradient(
-            from.x,
-            from.y,
-            to.x,
-            to.y,
-            colors.toSkiaGradient(
-                colorStops = colorStops,
-                tileMode = tileMode,
-            ),
-        ).asComposeShader()
+                from.x,
+                from.y,
+                to.x,
+                to.y,
+                colors.toSkiaGradient(colorStops = colorStops, tileMode = tileMode),
+            )
+            .asComposeShader()
     }
 
     override fun createRadialGradientShader(
@@ -129,14 +125,12 @@ internal object SkikoGraphics : PlatformGraphics {
     ): androidx.compose.ui.graphics.Shader {
         validateColorStops(colors, colorStops)
         return SkShader.makeRadialGradient(
-            center.x,
-            center.y,
-            radius,
-            colors.toSkiaGradient(
-                colorStops = colorStops,
-                tileMode = tileMode,
-            ),
-        ).asComposeShader()
+                center.x,
+                center.y,
+                radius,
+                colors.toSkiaGradient(colorStops = colorStops, tileMode = tileMode),
+            )
+            .asComposeShader()
     }
 
     override fun createSweepGradientShader(
@@ -146,10 +140,11 @@ internal object SkikoGraphics : PlatformGraphics {
     ): androidx.compose.ui.graphics.Shader {
         validateColorStops(colors, colorStops)
         return SkShader.makeSweepGradient(
-            center.x,
-            center.y,
-            colors.toSkiaGradient(colorStops = colorStops),
-        ).asComposeShader()
+                center.x,
+                center.y,
+                colors.toSkiaGradient(colorStops = colorStops),
+            )
+            .asComposeShader()
     }
 
     override fun createImageShader(
@@ -157,7 +152,8 @@ internal object SkikoGraphics : PlatformGraphics {
         tileModeX: TileMode,
         tileModeY: TileMode,
     ): androidx.compose.ui.graphics.Shader =
-        image.asSkiaBitmap()
+        image
+            .asSkiaBitmap()
             .makeShader(tileModeX.toSkiaTileMode(), tileModeY.toSkiaTileMode())
             .asComposeShader()
 
@@ -217,7 +213,9 @@ internal object SkikoGraphics : PlatformGraphics {
     }
 
     override fun createTintColorFilter(color: Color, blendMode: BlendMode): PlatformColorFilter {
-        return SkikoColorFilter(SkColorFilter.makeBlend(color.toArgb(), blendMode.toSkia()) ?: PassThroughColorFilter)
+        return SkikoColorFilter(
+            SkColorFilter.makeBlend(color.toArgb(), blendMode.toSkia()) ?: PassThroughColorFilter
+        )
     }
 
     override fun createColorMatrixColorFilter(colorMatrix: ColorMatrix): PlatformColorFilter {
@@ -240,16 +238,10 @@ internal object SkikoGraphics : PlatformGraphics {
     override fun createCornerPathEffect(radius: Float): PathEffect =
         SkPathEffect.makeCorner(radius).asComposePathEffect()
 
-    override fun createDashPathEffect(
-        intervals: FloatArray,
-        phase: Float,
-    ): PathEffect =
+    override fun createDashPathEffect(intervals: FloatArray, phase: Float): PathEffect =
         SkPathEffect.makeDash(intervals, phase).asComposePathEffect()
 
-    override fun createChainPathEffect(
-        outer: PathEffect,
-        inner: PathEffect,
-    ): PathEffect =
+    override fun createChainPathEffect(outer: PathEffect, inner: PathEffect): PathEffect =
         outer.asSkiaPathEffect().makeCompose(inner.asSkiaPathEffect()).asComposePathEffect()
 
     override fun createStampedPathEffect(
@@ -259,41 +251,48 @@ internal object SkikoGraphics : PlatformGraphics {
         style: StampedPathEffectStyle,
     ): PathEffect =
         SkPathEffect.makePath1D(
-            shape.materializeSkiaPath(),
-            advance,
-            phase,
-            style.toSkiaStampedPathEffectStyle(),
-        ).asComposePathEffect()
+                shape.materializeSkiaPath(),
+                advance,
+                phase,
+                style.toSkiaStampedPathEffectStyle(),
+            )
+            .asComposePathEffect()
 }
 
-private fun ImageBitmapConfig.toSkiaColorType() = when (this) {
-    ImageBitmapConfig.Argb8888 -> ColorType.N32
-    ImageBitmapConfig.Alpha8 -> ColorType.ALPHA_8
-    ImageBitmapConfig.Rgb565 -> ColorType.RGB_565
-    ImageBitmapConfig.F16 -> ColorType.RGBA_F16
-    else -> throw IllegalArgumentException("Unsupported ImageBitmapConfig: $this")
-}
+private fun ImageBitmapConfig.toSkiaColorType() =
+    when (this) {
+        ImageBitmapConfig.Argb8888 -> ColorType.N32
+        ImageBitmapConfig.Alpha8 -> ColorType.ALPHA_8
+        ImageBitmapConfig.Rgb565 -> ColorType.RGB_565
+        ImageBitmapConfig.F16 -> ColorType.RGBA_F16
+        else -> throw IllegalArgumentException("Unsupported ImageBitmapConfig: $this")
+    }
 
-private fun ColorSpace.toSkiaColorSpace(): SkColorSpace = when (this) {
-    ColorSpaces.Srgb -> SkColorSpace.sRGB
-    ColorSpaces.LinearSrgb -> SkColorSpace.sRGBLinear
-    ColorSpaces.DisplayP3 -> SkColorSpace.displayP3
-    else -> SkColorSpace.sRGB
-}
+private fun ColorSpace.toSkiaColorSpace(): SkColorSpace =
+    when (this) {
+        ColorSpaces.Srgb -> SkColorSpace.sRGB
+        ColorSpaces.LinearSrgb -> SkColorSpace.sRGBLinear
+        ColorSpaces.DisplayP3 -> SkColorSpace.displayP3
+        else -> SkColorSpace.sRGB
+    }
 
 private fun List<Color>.toSkiaGradient(
     colorStops: List<Float>?,
     tileMode: TileMode = TileMode.Clamp,
-): Gradient = Gradient(
-    colors = Gradient.Colors(
-        colors = toColor4fArray(),
-        positions = colorStops?.toFloatArray(),
-        tileMode = tileMode.toSkiaTileMode(),
-    ),
-    interpolation = Gradient.Interpolation(
-        inPremul = Gradient.Interpolation.InPremul.YES,
-    ),
-)
+): Gradient =
+    Gradient(
+        colors =
+            Gradient.Colors(
+                colors = toColor4fArray(),
+                positions = colorStops?.toFloatArray(),
+                tileMode = tileMode.toSkiaTileMode(),
+            ),
+        interpolation = Gradient.Interpolation(inPremul = Gradient.Interpolation.InPremul.YES),
+    )
+
+/** This overload avoids iterator allocation in comparison with its stdlib counterpart */
+@Suppress("NOTHING_TO_INLINE")
+internal inline fun List<Float>.toFloatArray(): FloatArray = FloatArray(size) { i -> this[i] }
 
 private fun List<Color>.toColor4fArray(): Array<Color4f> =
     Array(size) { i ->
@@ -318,10 +317,26 @@ private val PassThroughColorFilter by lazy {
     SkColorFilter.makeMatrix(
         SkColorMatrix(
             floatArrayOf(
-                1f, 0f, 0f, 0f, 0f,
-                0f, 1f, 0f, 0f, 0f,
-                0f, 0f, 1f, 0f, 0f,
-                0f, 0f, 0f, 1f, 0f,
+                1f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                1f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                1f,
+                0f,
+                0f,
+                0f,
+                0f,
+                0f,
+                1f,
+                0f,
             )
         )
     )

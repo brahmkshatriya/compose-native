@@ -17,9 +17,9 @@
 package androidx.compose.ui.scene
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.SkikoComposeTestBase
@@ -28,12 +28,12 @@ import androidx.compose.ui.graphics.asComposeCanvas
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.FrameRecomposer
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.platformInteropHitTestTarget
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlin.coroutines.CoroutineContext
+import androidx.compose.ui.window.Popup
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -46,112 +46,138 @@ class CanvasLayersComposeSceneTest : SkikoComposeTestBase() {
 
     @OptIn(InternalComposeUiApi::class)
     @Test
-    fun composePointerTargetWinsOverPlatformInteropTarget() = runTest(StandardTestDispatcher()) {
-        val frameRecomposer = FrameRecomposer(coroutineContext)
-        val interopTarget = Any()
-        CanvasLayersComposeScene(
-            frameRecomposer = frameRecomposer,
-            size = IntSize(100, 100),
-        ).use { scene ->
-            scene.setContent {
-                Box(Modifier.fillMaxSize()) {
-                    Box(
-                        Modifier.size(100.dp)
-                            .platformInteropHitTestTarget(interopTarget)
-                    )
-                    Box(
-                        Modifier.size(50.dp)
-                            .pointerInput(Unit) {}
+    fun composePointerTargetWinsOverPlatformInteropTarget() =
+        runTest(StandardTestDispatcher()) {
+            val frameRecomposer = FrameRecomposer(coroutineContext)
+            val interopTarget = Any()
+            CanvasLayersComposeScene(frameRecomposer = frameRecomposer, size = IntSize(100, 100))
+                .use { scene ->
+                    scene.setContent {
+                        Box(Modifier.fillMaxSize()) {
+                            Box(Modifier.size(100.dp).platformInteropHitTestTarget(interopTarget))
+                            Box(Modifier.size(50.dp).pointerInput(Unit) {})
+                        }
+                    }
+
+                    scene.measureAndLayout()
+
+                    assertEquals(null, scene.hitTestInteropTarget(Offset(25f, 25f)))
+                    assertEquals(interopTarget, scene.hitTestInteropTarget(Offset(75f, 75f)))
+                }
+            frameRecomposer.close()
+        }
+
+    @Test
+    fun sceneSizeChangeTriggersInvalidation() =
+        runTest(StandardTestDispatcher()) {
+            var invalidationCount = 0
+            val frameRecomposer = FrameRecomposer(coroutineContext)
+            CanvasLayersComposeScene(
+                    frameRecomposer = frameRecomposer,
+                    size = IntSize(100, 100),
+                    invalidateLayout = { invalidationCount++ },
+                    invalidateDraw = { invalidationCount++ },
+                )
+                .use { scene ->
+                    scene.setContent { Box(Modifier.fillMaxSize()) }
+
+                    assertEquals(2, invalidationCount)
+                    scene.size = IntSize(120, 120)
+                    assertEquals(4, invalidationCount)
+                }
+            frameRecomposer.close()
+        }
+
+    @Test
+    fun cancelClickForGestureOwner() =
+        runTest(StandardTestDispatcher()) {
+            var rootCancelled = false
+            var popupCancelled = false
+            val frameRecomposer = FrameRecomposer(coroutineContext)
+            CanvasLayersComposeScene(frameRecomposer = frameRecomposer, size = IntSize(100, 100))
+                .use { scene ->
+                    scene.setContent {
+                        Box(modifier = Modifier.fillMaxSize().onCancel { rootCancelled = true })
+
+                        Dialog(onDismissRequest = {}, properties = DialogProperties()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize().onCancel { popupCancelled = true }
+                            )
+                        }
+                    }
+
+                    scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+                    scene.cancelPointerInput()
+
+                    assertFalse(rootCancelled)
+                    assertTrue(popupCancelled)
+                }
+            frameRecomposer.close()
+        }
+
+    @Test
+    fun detachingLayerRequestsDrawPass() =
+        runTest(StandardTestDispatcher()) {
+            var drawInvalidations = 0
+            var layer: ComposeSceneLayer? = null
+            val frameRecomposer = FrameRecomposer(coroutineContext)
+            val surface = Surface.makeRasterN32Premul(100, 100)
+            CanvasLayersComposeScene(
+                    frameRecomposer = frameRecomposer,
+                    size = IntSize(100, 100),
+                    invalidateDraw = { drawInvalidations++ },
+                )
+                .use { scene ->
+                    scene.setContent {
+                        Box(Modifier.fillMaxSize())
+                        layer = rememberComposeSceneLayer(focusable = true)
+                    }
+
+                    // Settle measure/layout/draw so every owner's pending-draw flag is cleared;
+                    // otherwise
+                    // the close below would invalidate simply because an owner was still dirty.
+                    scene.measureAndLayout()
+                    scene.draw(surface.canvas.asComposeCanvas())
+                    assertFalse(scene.hasPendingMeasureOrLayout)
+                    assertFalse(scene.hasPendingDraw)
+
+                    val drawInvalidationsBeforeClose = drawInvalidations
+                    layer!!.close()
+
+                    assertTrue(scene.hasPendingMeasureOrLayout)
+                    assertTrue(scene.hasPendingDraw)
+                    assertTrue(
+                        drawInvalidations > drawInvalidationsBeforeClose,
+                        "Detaching a layer must request a draw pass to repaint the scene without it",
                     )
                 }
-            }
-
-            scene.measureAndLayout()
-
-            assertEquals(null, scene.hitTestInteropTarget(Offset(25f, 25f)))
-            assertEquals(interopTarget, scene.hitTestInteropTarget(Offset(75f, 75f)))
+            frameRecomposer.close()
         }
-        frameRecomposer.close()
-    }
 
     @Test
-    fun sceneSizeChangeTriggersInvalidation() = runTest(StandardTestDispatcher()) {
-        var invalidationCount = 0
-        val frameRecomposer = FrameRecomposer(coroutineContext)
-        CanvasLayersComposeScene(
-            frameRecomposer = frameRecomposer,
-            size = IntSize(100, 100),
-            invalidateLayout = { invalidationCount++ },
-            invalidateDraw = { invalidationCount++ },
-        ).use { scene ->
-            scene.setContent { Box(Modifier.fillMaxSize()) }
+    fun disposedLayersAreIgnoredInMeasureAndLayout() =
+        runTest(StandardTestDispatcher()) {
+            val frameRecomposer = FrameRecomposer(coroutineContext)
+            val surface = Surface.makeRasterN32Premul(100, 100)
+            CanvasLayersComposeScene(frameRecomposer = frameRecomposer, size = IntSize(100, 100))
+                .use { scene ->
+                    scene.setContent {
+                        BoxWithConstraints(Modifier.fillMaxSize()) {
+                            if (constraints.maxWidth > 50) {
+                                Popup { Box(Modifier.size(10.dp)) }
+                            }
+                        }
+                    }
 
-            assertEquals(2, invalidationCount)
-            scene.size = IntSize(120, 120)
-            assertEquals(4, invalidationCount)
-        }
-        frameRecomposer.close()
-    }
+                    scene.measureAndLayout()
+                    scene.draw(surface.canvas.asComposeCanvas())
 
-    @Test
-    fun cancelClickForGestureOwner() = runTest(StandardTestDispatcher()) {
-        var rootCancelled = false
-        var popupCancelled = false
-        val frameRecomposer = FrameRecomposer(coroutineContext)
-        CanvasLayersComposeScene(
-            frameRecomposer = frameRecomposer,
-            size = IntSize(100, 100),
-        ).use { scene ->
-            scene.setContent {
-                Box(modifier = Modifier.fillMaxSize().onCancel { rootCancelled = true })
+                    scene.size =
+                        IntSize(49, 49) // Cause `BoxWithConstraints` content to be recomposed
 
-                Dialog(onDismissRequest = {}, properties = DialogProperties()) {
-                    Box(modifier = Modifier.fillMaxSize().onCancel { popupCancelled = true })
+                    scene.measureAndLayout()
+                    scene.draw(surface.canvas.asComposeCanvas())
                 }
-            }
-
-            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
-            scene.cancelPointerInput()
-
-            assertFalse(rootCancelled)
-            assertTrue(popupCancelled)
+            frameRecomposer.close()
         }
-        frameRecomposer.close()
-    }
-
-    @Test
-    fun detachingLayerRequestsDrawPass() = runTest(StandardTestDispatcher()) {
-        var drawInvalidations = 0
-        var layer: ComposeSceneLayer? = null
-        val frameRecomposer = FrameRecomposer(coroutineContext)
-        val surface = Surface.makeRasterN32Premul(100, 100)
-        CanvasLayersComposeScene(
-            frameRecomposer = frameRecomposer,
-            size = IntSize(100, 100),
-            invalidateDraw = { drawInvalidations++ },
-        ).use { scene ->
-            scene.setContent {
-                Box(Modifier.fillMaxSize())
-                layer = rememberComposeSceneLayer(focusable = true)
-            }
-
-            // Settle measure/layout/draw so every owner's pending-draw flag is cleared; otherwise
-            // the close below would invalidate simply because an owner was still dirty.
-            scene.measureAndLayout()
-            scene.draw(surface.canvas.asComposeCanvas())
-            assertFalse(scene.hasPendingMeasureOrLayout)
-            assertFalse(scene.hasPendingDraw)
-
-            val drawInvalidationsBeforeClose = drawInvalidations
-            layer!!.close()
-
-            assertTrue(scene.hasPendingMeasureOrLayout)
-            assertTrue(scene.hasPendingDraw)
-            assertTrue(
-                drawInvalidations > drawInvalidationsBeforeClose,
-                "Detaching a layer must request a draw pass to repaint the scene without it",
-            )
-        }
-        frameRecomposer.close()
-    }
 }

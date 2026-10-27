@@ -20,32 +20,29 @@ import androidx.compose.material3.internal.PlatformDateFormat
 import androidx.compose.material3.internal.calendarLocale
 import kotlin.test.Test
 
-
-@OptIn(ExperimentalMaterial3Api::class)
 internal class PlatformDateFormatTest {
 
     @Test
     fun hourCycleLocalization() {
-        var locale = calendarLocale("en","US")
+        var locale = calendarLocale("en", "US")
         assertThat(PlatformDateFormat(locale).is24HourFormat()).isEqualTo(false)
 
-        locale = calendarLocale("en","CA")
+        locale = calendarLocale("en", "CA")
         assertThat(PlatformDateFormat(locale).is24HourFormat()).isEqualTo(false)
 
-        locale = calendarLocale("ar","EG")
+        locale = calendarLocale("ar", "EG")
         assertThat(PlatformDateFormat(locale).is24HourFormat()).isEqualTo(false)
 
-        locale = calendarLocale("ko","KR")
+        locale = calendarLocale("ko", "KR")
         assertThat(PlatformDateFormat(locale).is24HourFormat()).isEqualTo(false)
 
-        locale = calendarLocale("en","GB")
+        locale = calendarLocale("en", "GB")
         assertThat(PlatformDateFormat(locale).is24HourFormat()).isEqualTo(true)
 
-        locale = calendarLocale("ru","RU")
+        locale = calendarLocale("ru", "RU")
         assertThat(PlatformDateFormat(locale).is24HourFormat()).isEqualTo(true)
 
-        locale = calendarLocale("de","DE")
+        locale = calendarLocale("de", "DE")
         assertThat(PlatformDateFormat(locale).is24HourFormat()).isEqualTo(true)
     }
-
 }

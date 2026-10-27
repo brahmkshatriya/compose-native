@@ -72,16 +72,10 @@ class WindowInsetsPaddingTest {
             val focusRequester = remember { FocusRequester() }
             Column(modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                 Spacer(modifier = Modifier.weight(1f))
-                TextField(
-                    "",
-                    {},
-                    Modifier.focusRequester(focusRequester)
-                )
+                @Suppress("DEPRECATION") TextField("", {}, Modifier.focusRequester(focusRequester))
                 compositionCount++
             }
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
         }
 
         assertEquals(1, compositionCount)
@@ -89,103 +83,105 @@ class WindowInsetsPaddingTest {
 
     @OptIn(ExperimentalForeignApi::class)
     @Test
-    fun testDisplayCutoutPadding_InterfaceOrientationLandscapeLeft() = runUIKitInstrumentedTest(
-        ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
-        ignoreNotes = "Run for iPhone only"
-    ) {
-        var boxRect = DpRectZero()
+    fun testDisplayCutoutPadding_InterfaceOrientationLandscapeLeft() =
+        runUIKitInstrumentedTest(
+            ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
+            ignoreNotes = "Run for iPhone only",
+        ) {
+            var boxRect = DpRectZero()
 
-        setContent(interfaceOrientation = UIInterfaceOrientationLandscapeLeft) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.displayCutout)
-                    .background(Color.Red)
-                    .onGloballyPositioned({ boxRect = it.boundsInWindow().toDpRect(density) })
-            ) {
-                Text("TEXT")
+            setContent(interfaceOrientation = UIInterfaceOrientationLandscapeLeft) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.displayCutout)
+                        .background(Color.Red)
+                        .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                ) {
+                    Text("TEXT")
+                }
             }
-        }
 
-        assertEquals(
-            DpRect(
-                DpOffset.Zero,
-                DpSize(
-                    screenSize.width - viewController.view.safeAreaInsets.useContents { right }.dp,
-                    screenSize.height
-                )
-            ),
-            boxRect
-        )
-    }
+            assertEquals(
+                DpRect(
+                    DpOffset.Zero,
+                    DpSize(
+                        screenSize.width -
+                            viewController.view.safeAreaInsets.useContents { right }.dp,
+                        screenSize.height,
+                    ),
+                ),
+                boxRect,
+            )
+        }
 
     @OptIn(ExperimentalForeignApi::class)
     @Test
-    fun testDisplayCutoutPadding_InterfaceOrientationLandscapeRight() = runUIKitInstrumentedTest(
-        ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
-        ignoreNotes = "Run for iPhone only"
-    ) {
-        var boxRect = DpRectZero()
+    fun testDisplayCutoutPadding_InterfaceOrientationLandscapeRight() =
+        runUIKitInstrumentedTest(
+            ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
+            ignoreNotes = "Run for iPhone only",
+        ) {
+            var boxRect = DpRectZero()
 
-        setContent(interfaceOrientation = UIInterfaceOrientationLandscapeRight) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.displayCutout)
-                    .background(Color.Red)
-                    .onGloballyPositioned({ boxRect = it.boundsInWindow().toDpRect(density) })
-            ) {
-                Text("TEXT")
+            setContent(interfaceOrientation = UIInterfaceOrientationLandscapeRight) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.displayCutout)
+                        .background(Color.Red)
+                        .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                ) {
+                    Text("TEXT")
+                }
             }
-        }
 
-        assertEquals(
-            DpRect(
-                left = viewController.view.safeAreaInsets.useContents { left }.dp,
-                top = 0.dp,
-                right = screenSize.width,
-                bottom = screenSize.height
-            ),
-            boxRect
-        )
-    }
+            assertEquals(
+                DpRect(
+                    left = viewController.view.safeAreaInsets.useContents { left }.dp,
+                    top = 0.dp,
+                    right = screenSize.width,
+                    bottom = screenSize.height,
+                ),
+                boxRect,
+            )
+        }
 
     @OptIn(ExperimentalForeignApi::class)
     @Test
-    fun testDisplayCutoutPadding_iPad() = runUIKitInstrumentedTest(
-        ignoreIf = UIKitInstrumentedTest.iPadOrientationChangesNotSupported,
-        ignoreNotes = "Run for iPad only",
-        params = listOf(
-            UIInterfaceOrientationPortrait,
-            UIInterfaceOrientationLandscapeRight,
-            UIInterfaceOrientationLandscapeLeft,
-            UIInterfaceOrientationPortraitUpsideDown
-        ),
-    ) { interfaceOrientation ->
-        var boxRect = DpRectZero()
+    fun testDisplayCutoutPadding_iPad() =
+        runUIKitInstrumentedTest(
+            ignoreIf = UIKitInstrumentedTest.iPadOrientationChangesNotSupported,
+            ignoreNotes = "Run for iPad only",
+            params =
+                listOf(
+                    UIInterfaceOrientationPortrait,
+                    UIInterfaceOrientationLandscapeRight,
+                    UIInterfaceOrientationLandscapeLeft,
+                    UIInterfaceOrientationPortraitUpsideDown,
+                ),
+        ) { interfaceOrientation ->
+            var boxRect = DpRectZero()
 
-        setContent(interfaceOrientation = interfaceOrientation) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.displayCutout)
-                    .background(Color.Red)
-                    .onGloballyPositioned({ boxRect = it.boundsInWindow().toDpRect(density) })
-            ) {
-                Text("TEXT")
+            setContent(interfaceOrientation = interfaceOrientation) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.displayCutout)
+                        .background(Color.Red)
+                        .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                ) {
+                    Text("TEXT")
+                }
             }
-        }
 
-        assertEquals(
-            DpRect(
-                left = 0.dp,
-                top = viewController.view.safeAreaInsets.useContents { top }.dp,
-                right = screenSize.width,
-                bottom = screenSize.height
-            ),
-            boxRect
-        )
-    }
+            assertEquals(
+                DpRect(
+                    left = 0.dp,
+                    top = viewController.view.safeAreaInsets.useContents { top }.dp,
+                    right = screenSize.width,
+                    bottom = screenSize.height,
+                ),
+                boxRect,
+            )
+        }
 
     @Test
     fun testContentNotRecomposedWhenContainerRecomposed() = runUIKitInstrumentedTest {
@@ -215,79 +211,29 @@ class WindowInsetsPaddingTest {
         setContent {
             Box(modifier = Modifier.background(Color.Red).fillMaxSize()) {
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .background(Color.Blue)
-                        .size(200.dp, 200.dp)
-                        .onGloballyPositioned {
-                            outerBoxRect = it.boundsInWindow().toDpRect(density)
-                        },
-                ) {
-                    Box(modifier = Modifier
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .background(Color.Green)
-                        .fillMaxSize()
-                        .onGloballyPositioned {
-                            innerBoxRect = it.boundsInWindow().toDpRect(density)
-                        }
-                    )
-                }
-            }
-        }
-
-        // WindowInsets.statusBars should only represent the insets at the top in portrait orientation
-        val topSafeAreaInsetsDp = viewController.view.safeAreaInsets.useContents { top }.dp
-
-        assertEquals(
-            DpRect(
-                left = outerBoxRect.left,
-                top = outerBoxRect.top + topSafeAreaInsetsDp,
-                right = outerBoxRect.right,
-                bottom = outerBoxRect.bottom
-            ),
-            innerBoxRect
-        )
-    }
-
-    @OptIn(ExperimentalForeignApi::class)
-    @Test
-    fun testWindowInsetsPaddingAppliedToNonFullscreenComposeUIViewContent() = runUIKitInstrumentedTest {
-        var innerBoxRect = DpRectZero()
-        var outerBoxRect = DpRectZero()
-
-        setContent {
-            Box(modifier = Modifier.background(Color.Red).fillMaxSize()) {
-                UIKitView(
-                    factory = {
-                        ComposeUIView(
-                            configure = {
-                                enforceStrictPlistSanityCheck = false
-                                opaque = false
+                    modifier =
+                        Modifier.align(Alignment.Center)
+                            .background(Color.Blue)
+                            .size(200.dp, 200.dp)
+                            .onGloballyPositioned {
+                                outerBoxRect = it.boundsInWindow().toDpRect(density)
                             }
-                        ) {
-                            Box(modifier = Modifier
-                                .windowInsetsPadding(WindowInsets.statusBars)
+                ) {
+                    Box(
+                        modifier =
+                            Modifier.windowInsetsPadding(WindowInsets.statusBars)
                                 .background(Color.Green)
                                 .fillMaxSize()
                                 .onGloballyPositioned {
                                     innerBoxRect = it.boundsInWindow().toDpRect(density)
                                 }
-                            )
-                        }.apply {
-                            backgroundColor = UIColor.blueColor
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(200.dp, 200.dp)
-                        .onGloballyPositioned {
-                            outerBoxRect = it.boundsInWindow().toDpRect(density)
-                        }
-                )
+                    )
+                }
             }
         }
 
-        // WindowInsets.statusBars should only represent the insets at the top in portrait orientation
+        // WindowInsets.statusBars should only represent the insets at the top in portrait
+        // orientation
         val topSafeAreaInsetsDp = viewController.view.safeAreaInsets.useContents { top }.dp
 
         assertEquals(
@@ -295,11 +241,66 @@ class WindowInsetsPaddingTest {
                 left = outerBoxRect.left,
                 top = outerBoxRect.top + topSafeAreaInsetsDp,
                 right = outerBoxRect.right,
-                bottom = outerBoxRect.bottom
+                bottom = outerBoxRect.bottom,
             ),
-            innerBoxRect
+            innerBoxRect,
         )
     }
+
+    @OptIn(ExperimentalForeignApi::class)
+    @Test
+    fun testWindowInsetsPaddingAppliedToNonFullscreenComposeUIViewContent() =
+        runUIKitInstrumentedTest {
+            var innerBoxRect = DpRectZero()
+            var outerBoxRect = DpRectZero()
+
+            setContent {
+                Box(modifier = Modifier.background(Color.Red).fillMaxSize()) {
+                    UIKitView(
+                        factory = {
+                            ComposeUIView(
+                                    configure = {
+                                        enforceStrictPlistSanityCheck = false
+                                        opaque = false
+                                    }
+                                ) {
+                                    Box(
+                                        modifier =
+                                            Modifier.windowInsetsPadding(WindowInsets.statusBars)
+                                                .background(Color.Green)
+                                                .fillMaxSize()
+                                                .onGloballyPositioned {
+                                                    innerBoxRect =
+                                                        it.boundsInWindow().toDpRect(density)
+                                                }
+                                    )
+                                }
+                                .apply { backgroundColor = UIColor.blueColor }
+                        },
+                        modifier =
+                            Modifier.align(Alignment.Center)
+                                .size(200.dp, 200.dp)
+                                .onGloballyPositioned {
+                                    outerBoxRect = it.boundsInWindow().toDpRect(density)
+                                },
+                    )
+                }
+            }
+
+            // WindowInsets.statusBars should only represent the insets at the top in portrait
+            // orientation
+            val topSafeAreaInsetsDp = viewController.view.safeAreaInsets.useContents { top }.dp
+
+            assertEquals(
+                DpRect(
+                    left = outerBoxRect.left,
+                    top = outerBoxRect.top + topSafeAreaInsetsDp,
+                    right = outerBoxRect.right,
+                    bottom = outerBoxRect.bottom,
+                ),
+                innerBoxRect,
+            )
+        }
 }
 
 @Composable

@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.use
 import kotlin.test.Test
+import kotlin.test.assertNotNull
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 
@@ -48,64 +49,49 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalFoundationApi::class, InternalComposeUiApi::class)
 class OnClickTest : SkikoComposeTestBase() {
 
-    private fun testClick(
-        pointerMatcher: PointerMatcher,
-        button: PointerButton
-    ) = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(1f)
-    ).use { scene ->
-        var clicksCount = 0
+    private fun testClick(pointerMatcher: PointerMatcher, button: PointerButton) =
+        ImageComposeScene(width = 100, height = 100, density = Density(1f)).use { scene ->
+            var clicksCount = 0
 
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .onClick(matcher = pointerMatcher) {
-                        clicksCount++
-                    }.size(10.dp, 20.dp)
-            )
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.onClick(matcher = pointerMatcher) { clicksCount++ }
+                            .size(10.dp, 20.dp)
+                )
+            }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = button)
+            scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = button)
+            assertThat(clicksCount).isEqualTo(1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
+            scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f), button = button)
+            scene.sendPointerEvent(PointerEventType.Release, Offset(5f, 5f), button = button)
+            assertThat(clicksCount).isEqualTo(2)
         }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = button)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = button)
-        assertThat(clicksCount).isEqualTo(1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f), button = button)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(5f, 5f), button = button)
-        assertThat(clicksCount).isEqualTo(2)
-    }
 
     // https://github.com/JetBrains/compose-multiplatform/issues/3655
     // Isn't reproducible with ImageComposeScene because of Dispatchers.Unconfined
-    @OptIn(ExperimentalFoundationApi::class, ExperimentalCoroutinesApi::class)
+    @OptIn(ExperimentalFoundationApi::class)
     @Test
     fun simpleClickWithoutMove() = runTest {
         val frameRecomposer = FrameRecomposer(coroutineContext)
-        val scene = CanvasLayersComposeScene(
-            frameRecomposer = frameRecomposer,
-        )
+        val scene = CanvasLayersComposeScene(frameRecomposer = frameRecomposer)
         try {
             scene.size = IntSize(100, 100)
-            scene.setContent {
-                Box(
-                    Modifier
-                        .onClick {}
-                        .fillMaxSize()
-                )
-            }
+            scene.setContent { Box(Modifier.onClick {}.fillMaxSize()) }
 
             scene.sendPointerEvent(
                 PointerEventType.Press,
                 Offset(30f, 10f),
-                button = PointerButton.Primary
+                button = PointerButton.Primary,
             )
             scene.sendPointerEvent(
                 PointerEventType.Release,
                 Offset(30f, 10f),
-                button = PointerButton.Primary
+                button = PointerButton.Primary,
             )
         } finally {
             scene.close()
@@ -114,409 +100,449 @@ class OnClickTest : SkikoComposeTestBase() {
     }
 
     @Test
-    fun primaryClicks() = testClick(
-        button = PointerButton.Primary,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Primary)
-    )
-
-    @Test
-    fun secondaryClicks() = testClick(
-        button = PointerButton.Secondary,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Secondary)
-    )
-
-    @Test
-    fun tertiaryClicks() = testClick(
-        button = PointerButton.Tertiary,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Tertiary)
-    )
-
-    @Test
-    fun backClicks() = testClick(
-        button = PointerButton.Back,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Back)
-    )
-
-    @Test
-    fun forwardClicks() = testClick(
-        button = PointerButton.Forward,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Forward)
-    )
-
-    @Test
-    fun clickWithTouch() = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(1f)
-    ).use { scene ->
-        var clicksCount = 0
-
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .onClick(matcher = PointerMatcher.touch) {
-                        clicksCount++
-                    }.size(10.dp, 20.dp)
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f), type = PointerType.Touch)
-        scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), type = PointerType.Touch)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), type = PointerType.Touch)
-        assertThat(clicksCount).isEqualTo(1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f), type = PointerType.Touch)
-        scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f), type = PointerType.Touch)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(5f, 5f), type = PointerType.Touch)
-        assertThat(clicksCount).isEqualTo(2)
-    }
-
-    @Suppress("DEPRECATION")
-    @OptIn(ExperimentalTestApi::class)
-    private fun testDoubleClick(
-        pointerMatcher: PointerMatcher,
-        button: PointerButton
-    ) = runSkikoComposeUiTest {
-        var clicksCount = 0
-        var doubleClickCount = 0
-        var viewConfiguration: ViewConfiguration? = null
-
-        setContent {
-            viewConfiguration = LocalViewConfiguration.current
-            Box(
-                modifier = Modifier
-                    .onClick(
-                        matcher = pointerMatcher,
-                        onDoubleClick = {
-                            doubleClickCount++
-                        }
-                    ) {
-                        clicksCount++
-                    }.size(10.dp, 20.dp)
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = button)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = button)
-
-        waitUntil(timeoutMillis = viewConfiguration!!.doubleTapTimeoutMillis * 2) { clicksCount == 1 }
-        assertThat(clicksCount).isEqualTo(1)
-        assertThat(doubleClickCount).isEqualTo(0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f), button = button, timeMillis = 99)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(5f, 5f), button = button, timeMillis = 100)
-        scene.sendPointerEvent(
-            PointerEventType.Press, Offset(5f, 5f), button = button,
-            timeMillis = 100 + viewConfiguration!!.doubleTapMinTimeMillis
+    fun primaryClicks() =
+        testClick(
+            button = PointerButton.Primary,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Primary),
         )
-        scene.sendPointerEvent(PointerEventType.Release, Offset(5f, 5f), button = button)
-
-        waitUntil(timeoutMillis = viewConfiguration!!.doubleTapTimeoutMillis / 2) { doubleClickCount == 1 }
-        assertThat(clicksCount).isEqualTo(1)
-        assertThat(doubleClickCount).isEqualTo(1)
-    }
 
     @Test
-    fun primaryDoubleClick() = testDoubleClick(
-        button = PointerButton.Primary,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Primary)
-    )
+    fun secondaryClicks() =
+        testClick(
+            button = PointerButton.Secondary,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Secondary),
+        )
 
     @Test
-    fun secondaryDoubleClick() = testDoubleClick(
-        button = PointerButton.Secondary,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Secondary)
-    )
+    fun tertiaryClicks() =
+        testClick(
+            button = PointerButton.Tertiary,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Tertiary),
+        )
 
     @Test
-    fun tertiaryDoubleClick() = testDoubleClick(
-        button = PointerButton.Tertiary,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Tertiary)
-    )
+    fun backClicks() =
+        testClick(
+            button = PointerButton.Back,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Back),
+        )
+
+    @Test
+    fun forwardClicks() =
+        testClick(
+            button = PointerButton.Forward,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Forward),
+        )
+
+    @Test
+    fun clickWithTouch() =
+        ImageComposeScene(width = 100, height = 100, density = Density(1f)).use { scene ->
+            var clicksCount = 0
+
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.onClick(matcher = PointerMatcher.touch) { clicksCount++ }
+                            .size(10.dp, 20.dp)
+                )
+            }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f), type = PointerType.Touch)
+            scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), type = PointerType.Touch)
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(0f, 0f),
+                type = PointerType.Touch,
+            )
+            assertThat(clicksCount).isEqualTo(1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f), type = PointerType.Touch)
+            scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f), type = PointerType.Touch)
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(5f, 5f),
+                type = PointerType.Touch,
+            )
+            assertThat(clicksCount).isEqualTo(2)
+        }
+
+    @Suppress("DEPRECATION")
+    @OptIn(ExperimentalTestApi::class)
+    private fun testDoubleClick(pointerMatcher: PointerMatcher, button: PointerButton) =
+        runSkikoComposeUiTest {
+            var clicksCount = 0
+            var doubleClickCount = 0
+            var viewConfiguration: ViewConfiguration? = null
+
+            setContent {
+                viewConfiguration = LocalViewConfiguration.current
+                Box(
+                    modifier =
+                        Modifier.onClick(
+                                matcher = pointerMatcher,
+                                onDoubleClick = { doubleClickCount++ },
+                            ) {
+                                clicksCount++
+                            }
+                            .size(10.dp, 20.dp)
+                )
+            }
+
+            assertNotNull(viewConfiguration)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = button)
+            scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = button)
+
+            waitUntil(timeoutMillis = viewConfiguration.doubleTapTimeoutMillis * 2) {
+                clicksCount == 1
+            }
+            assertThat(clicksCount).isEqualTo(1)
+            assertThat(doubleClickCount).isEqualTo(0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(5f, 5f),
+                button = button,
+                timeMillis = 99,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(5f, 5f),
+                button = button,
+                timeMillis = 100,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(5f, 5f),
+                button = button,
+                timeMillis = 100 + viewConfiguration.doubleTapMinTimeMillis,
+            )
+            scene.sendPointerEvent(PointerEventType.Release, Offset(5f, 5f), button = button)
+
+            waitUntil(timeoutMillis = viewConfiguration.doubleTapTimeoutMillis / 2) {
+                doubleClickCount == 1
+            }
+            assertThat(clicksCount).isEqualTo(1)
+            assertThat(doubleClickCount).isEqualTo(1)
+        }
+
+    @Test
+    fun primaryDoubleClick() =
+        testDoubleClick(
+            button = PointerButton.Primary,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Primary),
+        )
+
+    @Test
+    fun secondaryDoubleClick() =
+        testDoubleClick(
+            button = PointerButton.Secondary,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Secondary),
+        )
+
+    @Test
+    fun tertiaryDoubleClick() =
+        testDoubleClick(
+            button = PointerButton.Tertiary,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Tertiary),
+        )
 
     @OptIn(ExperimentalTestApi::class)
     @Suppress("DEPRECATION")
-    private fun testLongClick(
-        pointerMatcher: PointerMatcher,
-        button: PointerButton
-    ) = runSkikoComposeUiTest {
-        var clicksCount = 0
-        var longClickCount = 0
-        var viewConfiguration: ViewConfiguration? = null
+    private fun testLongClick(pointerMatcher: PointerMatcher, button: PointerButton) =
+        runSkikoComposeUiTest {
+            var clicksCount = 0
+            var longClickCount = 0
+            var viewConfiguration: ViewConfiguration? = null
 
-        setContent {
-            viewConfiguration = LocalViewConfiguration.current
-            Box(
-                modifier = Modifier
-                    .onClick(
-                        matcher = pointerMatcher,
-                        onLongClick = {
-                            longClickCount++
-                        }) {
-                        clicksCount++
-                    }.size(10.dp, 20.dp)
-            )
+            setContent {
+                viewConfiguration = LocalViewConfiguration.current
+                Box(
+                    modifier =
+                        Modifier.onClick(
+                                matcher = pointerMatcher,
+                                onLongClick = { longClickCount++ },
+                            ) {
+                                clicksCount++
+                            }
+                            .size(10.dp, 20.dp)
+                )
+            }
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = button)
+            scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = button)
+
+            waitUntil(timeoutMillis = viewConfiguration!!.longPressTimeoutMillis) {
+                clicksCount == 1
+            }
+            assertThat(clicksCount).isEqualTo(1)
+            assertThat(longClickCount).isEqualTo(0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
+            scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f), button = button)
+
+            waitUntil(timeoutMillis = viewConfiguration.longPressTimeoutMillis * 2) {
+                longClickCount == 1
+            }
+            assertThat(clicksCount).isEqualTo(1)
+            assertThat(longClickCount).isEqualTo(1)
         }
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = button)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = button)
-
-        waitUntil(timeoutMillis = viewConfiguration!!.longPressTimeoutMillis) { clicksCount == 1 }
-        assertThat(clicksCount).isEqualTo(1)
-        assertThat(longClickCount).isEqualTo(0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f), button = button)
-
-        waitUntil(timeoutMillis = viewConfiguration!!.longPressTimeoutMillis * 2) { longClickCount == 1 }
-        assertThat(clicksCount).isEqualTo(1)
-        assertThat(longClickCount).isEqualTo(1)
-    }
 
     @Test
-    fun primaryLongClick() = testLongClick(
-        button = PointerButton.Primary,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Primary)
-    )
+    fun primaryLongClick() =
+        testLongClick(
+            button = PointerButton.Primary,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Primary),
+        )
 
     @Test
-    fun secondaryLongClick() = testLongClick(
-        button = PointerButton.Secondary,
-        pointerMatcher = PointerMatcher.mouse(PointerButton.Secondary)
-    )
+    fun secondaryLongClick() =
+        testLongClick(
+            button = PointerButton.Secondary,
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Secondary),
+        )
 
     @Test
     fun tertiaryLongClick() =
         testLongClick(
             button = PointerButton.Tertiary,
-            pointerMatcher = PointerMatcher.mouse(PointerButton.Tertiary)
+            pointerMatcher = PointerMatcher.mouse(PointerButton.Tertiary),
         )
 
     @Test
-    fun handles_primary_and_secondary_clicks() = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(1f)
-    ).use { scene ->
-        var primaryClicks = 0
-        var secondaryClicks = 0
+    fun handles_primary_and_secondary_clicks() =
+        ImageComposeScene(width = 100, height = 100, density = Density(1f)).use { scene ->
+            var primaryClicks = 0
+            var secondaryClicks = 0
 
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .onClick(matcher = PointerMatcher.mouse(PointerButton.Primary)) {
-                        primaryClicks++
-                    }
-                    .onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) {
-                        secondaryClicks++
-                    }
-                    .size(40.dp, 40.dp)
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.onClick(matcher = PointerMatcher.mouse(PointerButton.Primary)) {
+                                primaryClicks++
+                            }
+                            .onClick(matcher = PointerMatcher.mouse(PointerButton.Secondary)) {
+                                secondaryClicks++
+                            }
+                            .size(40.dp, 40.dp)
+                )
+            }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
             )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        scene.sendPointerEvent(
-            PointerEventType.Press, Offset(0f, 0f),
-            button = PointerButton.Primary
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Release, Offset(0f, 0f),
-            button = PointerButton.Primary
-        )
-
-        assertThat(primaryClicks).isEqualTo(1)
-        assertThat(secondaryClicks).isEqualTo(0)
-
-        scene.sendPointerEvent(
-            PointerEventType.Press, Offset(0f, 0f),
-            button = PointerButton.Secondary
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Release, Offset(0f, 0f),
-            button = PointerButton.Secondary
-        )
-
-        assertThat(primaryClicks).isEqualTo(1)
-        assertThat(secondaryClicks).isEqualTo(1)
-    }
-
-    @Test
-    fun handles_primary_click_with_alt_keyModifier() = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(1f)
-    ).use { scene ->
-        var genericClicks = 0
-        var withAltClicks = 0
-
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .onClick(matcher = PointerMatcher.mouse(PointerButton.Primary)) {
-                        genericClicks++
-                    }
-                    .onClick(
-                        matcher = PointerMatcher.mouse(PointerButton.Primary),
-                        keyboardModifiers = { isAltPressed },
-                    ) {
-                        withAltClicks++
-                    }
-                    .size(40.dp, 40.dp)
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
             )
+
+            assertThat(primaryClicks).isEqualTo(1)
+            assertThat(secondaryClicks).isEqualTo(0)
+
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(0f, 0f),
+                button = PointerButton.Secondary,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(0f, 0f),
+                button = PointerButton.Secondary,
+            )
+
+            assertThat(primaryClicks).isEqualTo(1)
+            assertThat(secondaryClicks).isEqualTo(1)
         }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        // With Alt pressed
-        scene.sendPointerEvent(
-            PointerEventType.Press, Offset(0f, 0f),
-            button = PointerButton.Primary,
-            keyboardModifiers = PointerKeyboardModifiers(isAltPressed = true)
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Release, Offset(0f, 0f),
-            keyboardModifiers = PointerKeyboardModifiers(isAltPressed = true),
-            button = PointerButton.Primary
-        )
-
-        assertThat(withAltClicks).isEqualTo(1)
-        assertThat(genericClicks).isEqualTo(0)
-
-        // Without Alt pressed (for generic click handler)
-        scene.sendPointerEvent(
-            PointerEventType.Press, Offset(0f, 0f),
-            button = PointerButton.Primary,
-            keyboardModifiers = PointerKeyboardModifiers(isAltPressed = false)
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Release, Offset(0f, 0f),
-            keyboardModifiers = PointerKeyboardModifiers(isAltPressed = false),
-            button = PointerButton.Primary
-        )
-        assertThat(withAltClicks).isEqualTo(1)
-        assertThat(genericClicks).isEqualTo(1)
-    }
 
     @Test
-    fun consume_click() = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(1f)
-    ).use { scene ->
-        var outerBoxClicks = 0
-        var innerBoxClicks = 0
+    fun handles_primary_click_with_alt_keyModifier() =
+        ImageComposeScene(width = 100, height = 100, density = Density(1f)).use { scene ->
+            var genericClicks = 0
+            var withAltClicks = 0
 
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .onClick {
-                        outerBoxClicks++
-                    }
-                    .size(40.dp, 40.dp)
-            ) {
+            scene.setContent {
                 Box(
-                    modifier = Modifier
-                        .onClick {
-                            innerBoxClicks++
-                        }
-                        .size(10.dp, 20.dp)
+                    modifier =
+                        Modifier.onClick(matcher = PointerMatcher.mouse(PointerButton.Primary)) {
+                                genericClicks++
+                            }
+                            .onClick(
+                                matcher = PointerMatcher.mouse(PointerButton.Primary),
+                                keyboardModifiers = { isAltPressed },
+                            ) {
+                                withAltClicks++
+                            }
+                            .size(40.dp, 40.dp)
                 )
             }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            // With Alt pressed
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
+                keyboardModifiers = PointerKeyboardModifiers(isAltPressed = true),
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(0f, 0f),
+                keyboardModifiers = PointerKeyboardModifiers(isAltPressed = true),
+                button = PointerButton.Primary,
+            )
+
+            assertThat(withAltClicks).isEqualTo(1)
+            assertThat(genericClicks).isEqualTo(0)
+
+            // Without Alt pressed (for generic click handler)
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
+                keyboardModifiers = PointerKeyboardModifiers(isAltPressed = false),
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(0f, 0f),
+                keyboardModifiers = PointerKeyboardModifiers(isAltPressed = false),
+                button = PointerButton.Primary,
+            )
+            assertThat(withAltClicks).isEqualTo(1)
+            assertThat(genericClicks).isEqualTo(1)
         }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = PointerButton.Primary)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = PointerButton.Primary)
-        assertThat(outerBoxClicks).isEqualTo(0)
-        assertThat(innerBoxClicks).isEqualTo(1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(30f, 30f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(30f, 30f), button = PointerButton.Primary)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(30f, 30f), button = PointerButton.Primary)
-        assertThat(outerBoxClicks).isEqualTo(1)
-        assertThat(innerBoxClicks).isEqualTo(1)
-    }
 
     @Test
-    fun dont_handle_consumed_click_by_another_click() = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(1f)
-    ).use { scene ->
-        var outerBoxClicks = 0
-        var innerBoxClicks = 0
+    fun consume_click() =
+        ImageComposeScene(width = 100, height = 100, density = Density(1f)).use { scene ->
+            var outerBoxClicks = 0
+            var innerBoxClicks = 0
 
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .onClick {
-                        outerBoxClicks++
-                    }
-                    .size(40.dp, 40.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .onClick {
-                            innerBoxClicks++
-                        }
-                        .size(10.dp, 20.dp)
-                )
+            scene.setContent {
+                Box(modifier = Modifier.onClick { outerBoxClicks++ }.size(40.dp, 40.dp)) {
+                    Box(modifier = Modifier.onClick { innerBoxClicks++ }.size(10.dp, 20.dp))
+                }
             }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
+            )
+            assertThat(outerBoxClicks).isEqualTo(0)
+            assertThat(innerBoxClicks).isEqualTo(1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(30f, 30f))
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(30f, 30f),
+                button = PointerButton.Primary,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(30f, 30f),
+                button = PointerButton.Primary,
+            )
+            assertThat(outerBoxClicks).isEqualTo(1)
+            assertThat(innerBoxClicks).isEqualTo(1)
         }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = PointerButton.Primary)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = PointerButton.Primary)
-        assertThat(outerBoxClicks).isEqualTo(0)
-        assertThat(innerBoxClicks).isEqualTo(1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(30f, 30f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(30f, 30f), button = PointerButton.Primary)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(30f, 30f), button = PointerButton.Primary)
-        assertThat(outerBoxClicks).isEqualTo(1)
-        assertThat(innerBoxClicks).isEqualTo(1)
-    }
 
     @Test
-    fun dont_handle_consumed_click_by_pan() = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(1f)
-    ).use { scene ->
-        var outerBoxTotalPan = Offset.Zero
-        var innerBoxClicks = 0
+    fun dont_handle_consumed_click_by_another_click() =
+        ImageComposeScene(width = 100, height = 100, density = Density(1f)).use { scene ->
+            var outerBoxClicks = 0
+            var innerBoxClicks = 0
 
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, pan, _, _ ->
-                            outerBoxTotalPan += pan
-                        }
-                    }
-                    .size(80.dp, 80.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .onClick {
-                            innerBoxClicks++
-                        }
-                        .size(50.dp, 50.dp)
-                )
+            scene.setContent {
+                Box(modifier = Modifier.onClick { outerBoxClicks++ }.size(40.dp, 40.dp)) {
+                    Box(modifier = Modifier.onClick { innerBoxClicks++ }.size(10.dp, 20.dp))
+                }
             }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
+            )
+            assertThat(outerBoxClicks).isEqualTo(0)
+            assertThat(innerBoxClicks).isEqualTo(1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(30f, 30f))
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(30f, 30f),
+                button = PointerButton.Primary,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(30f, 30f),
+                button = PointerButton.Primary,
+            )
+            assertThat(outerBoxClicks).isEqualTo(1)
+            assertThat(innerBoxClicks).isEqualTo(1)
         }
 
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = PointerButton.Primary)
-        scene.sendPointerEvent(PointerEventType.Move, Offset(20f, 0f))
-        scene.sendPointerEvent(PointerEventType.Release, Offset(20f, 0f), button = PointerButton.Primary)
-        assertThat(outerBoxTotalPan).isEqualTo(Offset(20f, 0f))
-        assertThat(innerBoxClicks).isEqualTo(0)
+    @Test
+    fun dont_handle_consumed_click_by_pan() =
+        ImageComposeScene(width = 100, height = 100, density = Density(1f)).use { scene ->
+            var outerBoxTotalPan = Offset.Zero
+            var innerBoxClicks = 0
 
-        scene.sendPointerEvent(PointerEventType.Press, Offset(20f, 0f), button = PointerButton.Primary)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(20f, 0f), button = PointerButton.Primary)
-        assertThat(outerBoxTotalPan).isEqualTo(Offset(20f, 0f))
-        assertThat(innerBoxClicks).isEqualTo(1)
-    }
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.pointerInput(Unit) {
+                                detectTransformGestures { _, pan, _, _ -> outerBoxTotalPan += pan }
+                            }
+                            .size(80.dp, 80.dp)
+                ) {
+                    Box(modifier = Modifier.onClick { innerBoxClicks++ }.size(50.dp, 50.dp))
+                }
+            }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(0f, 0f),
+                button = PointerButton.Primary,
+            )
+            scene.sendPointerEvent(PointerEventType.Move, Offset(20f, 0f))
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(20f, 0f),
+                button = PointerButton.Primary,
+            )
+            assertThat(outerBoxTotalPan).isEqualTo(Offset(20f, 0f))
+            assertThat(innerBoxClicks).isEqualTo(0)
+
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(20f, 0f),
+                button = PointerButton.Primary,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(20f, 0f),
+                button = PointerButton.Primary,
+            )
+            assertThat(outerBoxTotalPan).isEqualTo(Offset(20f, 0f))
+            assertThat(innerBoxClicks).isEqualTo(1)
+        }
 }

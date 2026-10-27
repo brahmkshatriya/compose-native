@@ -41,10 +41,11 @@ import org.jetbrains.skiko.OS
 import org.jetbrains.skiko.hostOs
 
 private val ResolvedKeyboardActions
-    get() = when (hostOs) {
-        OS.MacOS -> MacosKeyboardActions
-        else -> DefaultKeyboardActions
-    }
+    get() =
+        when (hostOs) {
+            OS.MacOS -> MacosKeyboardActions
+            else -> DefaultKeyboardActions
+        }
 
 class WebSelectionTests {
     private val keyboardActions = ResolvedKeyboardActions
@@ -53,36 +54,31 @@ class WebSelectionTests {
     @Suppress("DEPRECATION")
     private fun textFieldSemanticInteraction(
         initialValue: String = "",
-        runAction: (node: SemanticsNodeInteraction, state: MutableState<TextFieldValue>) -> Unit
-    ) =
-        runComposeUiTest {
-            val state = mutableStateOf(TextFieldValue(initialValue))
+        runAction: (node: SemanticsNodeInteraction, state: MutableState<TextFieldValue>) -> Unit,
+    ) = runComposeUiTest {
+        val state = mutableStateOf(TextFieldValue(initialValue))
 
-            waitForIdle()
+        waitForIdle()
 
-            setContent {
-                BasicTextField(
-                    value = state.value,
-                    onValueChange = { state.value = it },
-                    modifier = Modifier.testTag("textField")
-                )
-            }
-
-            onNodeWithTag("textField").apply {
-                performMouseInput {
-                    click(Offset(0f, 0f))
-                }
-
-                assertIsFocused()
-
-                assertThat(state.value.selection).isEqualTo(TextRange(0, 0))
-
-                runAction(this, state)
-            }
+        setContent {
+            BasicTextField(
+                value = state.value,
+                onValueChange = { state.value = it },
+                modifier = Modifier.testTag("textField"),
+            )
         }
 
+        onNodeWithTag("textField").apply {
+            performMouseInput { click(Offset(0f, 0f)) }
 
-    @OptIn(ExperimentalTestApi::class)
+            assertIsFocused()
+
+            assertThat(state.value.selection).isEqualTo(TextRange(0, 0))
+
+            runAction(this, state)
+        }
+    }
+
     @Test
     fun selectLineStart() =
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { node, state ->
@@ -92,13 +88,13 @@ class WebSelectionTests {
             }
             assertThat(state.value.selection).isEqualTo(TextRange(8, 8))
 
-            node.performKeyInput { keyboardActions.apply { this@performKeyInput.selectLineStart() } }
+            node.performKeyInput {
+                keyboardActions.apply { this@performKeyInput.selectLineStart() }
+            }
 
             assertThat(state.value.selection).isEqualTo(TextRange(8, 7))
         }
 
-
-    @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectTextStart() =
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { node, state ->
@@ -109,13 +105,13 @@ class WebSelectionTests {
 
             assertThat(state.value.selection).isEqualTo(TextRange(8, 8))
 
-            node.performKeyInput { keyboardActions.apply { this@performKeyInput.selectTextStart() } }
+            node.performKeyInput {
+                keyboardActions.apply { this@performKeyInput.selectTextStart() }
+            }
 
             assertThat(state.value.selection).isEqualTo(TextRange(8, 0))
         }
 
-
-    @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectTextEnd() =
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { node, state ->
@@ -130,8 +126,6 @@ class WebSelectionTests {
             assertThat(state.value.selection).isEqualTo(TextRange(8, 34))
         }
 
-
-    @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectLineEnd() =
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { node, state ->
@@ -147,24 +141,21 @@ class WebSelectionTests {
             assertThat(state.value.selection).isEqualTo(TextRange(8, 13))
         }
 
-
-    @OptIn(ExperimentalTestApi::class)
     @Test
-    fun deleteAll() = textFieldSemanticInteraction("") { node, state ->
-        node.performKeyInput { keyboardActions.apply { this@performKeyInput.deleteAll() } }
-        assertThat(state.value.text).isEqualTo("")
-    }
+    fun deleteAll() =
+        textFieldSemanticInteraction("") { node, state ->
+            node.performKeyInput { keyboardActions.apply { this@performKeyInput.deleteAll() } }
+            assertThat(state.value.text).isEqualTo("")
+        }
 
-
-    @OptIn(ExperimentalTestApi::class)
     @Test
-    fun selectAll() = textFieldSemanticInteraction("Select this text") { node, state ->
-        node.performKeyInput { keyboardActions.apply { this@performKeyInput.selectAll() } }
-        assertThat(state.value.selection).isEqualTo(TextRange(0, 16))
+    fun selectAll() =
+        textFieldSemanticInteraction("Select this text") { node, state ->
+            node.performKeyInput { keyboardActions.apply { this@performKeyInput.selectAll() } }
+            assertThat(state.value.selection).isEqualTo(TextRange(0, 16))
 
-        node.performKeyInput { keyDown(Key.Delete) }
-        assertThat(state.value.selection).isEqualTo(TextRange(0, 0))
-        assertThat(state.value.text).isEqualTo("")
-    }
-
+            node.performKeyInput { keyDown(Key.Delete) }
+            assertThat(state.value.selection).isEqualTo(TextRange(0, 0))
+            assertThat(state.value.text).isEqualTo("")
+        }
 }

@@ -5,7 +5,6 @@ import androidx.compose.mpp.demo.bugs.IosBugs
 import androidx.compose.mpp.demo.bugs.StartRecompositionCheck
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.window.ComposeUIViewController
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.autoreleasepool
@@ -42,24 +41,16 @@ fun main(vararg args: String) {
     androidx.compose.ui.util.enableTraceOSLog()
 
     val arg = args.firstOrNull() ?: ""
-    UIKitMain {
-        ComposeUIViewController {
-            IosDemo(arg)
-        }
-    }
+    UIKitMain { ComposeUIViewController { IosDemo(arg) } }
 }
 
 @Composable
-fun IosDemo(
-    arg: String,
-    viewControllerFactory: IosDemoViewControllerFactory? = null,
-) {
+fun IosDemo(arg: String, viewControllerFactory: IosDemoViewControllerFactory? = null) {
     val app = remember {
         App(
-            extraScreens = listOf(
-                IosBugs,
-                IosSpecificFeatures,
-            ) + viewControllerFactory?.extraScreens().orEmpty()
+            extraScreens =
+                listOf(IosBugs, IosSpecificFeatures) +
+                    viewControllerFactory?.extraScreens().orEmpty()
         )
     }
     when (arg) {
@@ -73,77 +64,75 @@ fun IosDemo(
 
 class IosDemoViewControllerFactory(
     val makeHostingController: (Int) -> UIViewController,
-    val makeSwiftUISizeThatFitsSizingDemoController: (UIView, SwiftUISizeThatFitsSizingExample) -> UIViewController,
-    val makeSwiftUIIntrinsicSizingDemoController: (UIView, SwiftUIIntrinsicSizingExample) -> UIViewController,
+    val makeSwiftUISizeThatFitsSizingDemoController:
+        (UIView, SwiftUISizeThatFitsSizingExample) -> UIViewController,
+    val makeSwiftUIIntrinsicSizingDemoController:
+        (UIView, SwiftUIIntrinsicSizingExample) -> UIViewController,
     val makeUIKitSizingDemoController: (UIView, UIKitSizingExample) -> UIViewController,
 ) {
-    internal fun extraScreens(): List<Screen> = listOf(
-        IosSizing(
-            makeSwiftUISizeThatFitsSizingDemoController,
-            makeSwiftUIIntrinsicSizingDemoController,
-            makeUIKitSizingDemoController,
-        ),
-        Screen.Selection(
-            "SwiftUI",
-            SwiftUIInteropExample(makeHostingController),
-        ),
-    )
+    internal fun extraScreens(): List<Screen> =
+        listOf(
+            IosSizing(
+                makeSwiftUISizeThatFitsSizingDemoController,
+                makeSwiftUIIntrinsicSizingDemoController,
+                makeUIKitSizingDemoController,
+            ),
+            Screen.Selection("SwiftUI", SwiftUIInteropExample(makeHostingController)),
+        )
 }
 
 private lateinit var MakeRootViewController: () -> UIViewController
+
 @OptIn(BetaInteropApi::class)
 private fun UIKitMain(makeRootViewController: () -> UIViewController) {
     MakeRootViewController = makeRootViewController
     memScoped {
         val argc = 1
         val argv = arrayOf("ComposeDemo").map { it.cstr.ptr }.toCValues()
-        autoreleasepool {
-            UIApplicationMain(argc, argv, null, NSStringFromClass(AppDelegate))
-        }
+        autoreleasepool { UIApplicationMain(argc, argv, null, NSStringFromClass(AppDelegate)) }
     }
 }
 
 private class AppDelegate : UIResponder, UIApplicationDelegateProtocol {
     companion object Companion : UIResponderMeta(), UIApplicationDelegateProtocolMeta
 
-    @Suppress("unused")
-    @OptIn(BetaInteropApi::class)
-    @OverrideInit
-    constructor() : super()
+    @Suppress("unused") @OptIn(BetaInteropApi::class) @OverrideInit constructor() : super()
 
     override fun application(
         application: UIApplication,
-        didFinishLaunchingWithOptions: Map<Any?, *>?
+        didFinishLaunchingWithOptions: Map<Any?, *>?,
     ): Boolean = true
 
     @OptIn(BetaInteropApi::class)
     override fun application(
         application: UIApplication,
         configurationForConnectingSceneSession: UISceneSession,
-        options: UISceneConnectionOptions
+        options: UISceneConnectionOptions,
     ): UISceneConfiguration {
-        val config = UISceneConfiguration()
+        val config =
+            UISceneConfiguration(
+                name = null,
+                sessionRole = configurationForConnectingSceneSession.role,
+            )
         config.delegateClass = SceneDelegate.`class`()
         config.sceneClass = UIWindowScene.`class`()
         return config
     }
 }
 
-private class SceneDelegate: UIResponder, UIWindowSceneDelegateProtocol, UISceneDelegateProtocol {
+private class SceneDelegate : UIResponder, UIWindowSceneDelegateProtocol, UISceneDelegateProtocol {
     companion object Companion : UIResponderMeta(), UIApplicationDelegateProtocolMeta
 
-    @Suppress("unused")
-    @OptIn(BetaInteropApi::class)
-    @OverrideInit
-    constructor() : super()
+    @Suppress("unused") @OptIn(BetaInteropApi::class) @OverrideInit constructor() : super()
 
     private var _window: UIWindow? = null
+
     override fun window() = _window
 
     override fun scene(
         scene: UIScene,
         willConnectToSession: UISceneSession,
-        options: UISceneConnectionOptions
+        options: UISceneConnectionOptions,
     ) {
         scene as UIWindowScene
         _window = UIWindow(windowScene = scene)

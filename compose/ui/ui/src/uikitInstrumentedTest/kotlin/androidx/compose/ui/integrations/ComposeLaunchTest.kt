@@ -35,25 +35,21 @@ import platform.UIKit.UIGraphicsImageRenderer
 import platform.UIKit.UIViewController
 
 class ComposeLaunchTest {
-    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testViewControllerRenderFirstFrameWhenParallelRenderingDisabled() {
         runViewControllerRenderFirstFrameTest(parallelRenderingEnabled = false)
     }
 
-    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testViewControllerRenderFirstFrameWhenParallelRenderingEnabled() {
         runViewControllerRenderFirstFrameTest(parallelRenderingEnabled = true)
     }
 
-    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testViewRenderFirstFrameWhenParallelRenderingDisabled() {
         runViewRenderFirstFrameTest(parallelRenderingEnabled = false)
     }
 
-    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testViewRenderFirstFrameWhenParallelRenderingEnabled() {
         runViewRenderFirstFrameTest(parallelRenderingEnabled = true)
@@ -64,15 +60,19 @@ class ComposeLaunchTest {
         val appDelegate = MockAppDelegate()
         var drawsCount = 0
 
-        val controller = ComposeUIViewController({
-            enforceStrictPlistSanityCheck = false
-            parallelRendering = parallelRenderingEnabled
-        }) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Blue).drawWithContent {
-                drawsCount++
-                this.drawContent()
-            })
-        }
+        val controller =
+            ComposeUIViewController({
+                enforceStrictPlistSanityCheck = false
+                parallelRendering = parallelRenderingEnabled
+            }) {
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize().background(Color.Blue).drawWithContent {
+                            drawsCount++
+                            this.drawContent()
+                        }
+                )
+            }
 
         appDelegate.setUpWindow(controller)
         val window = appDelegate.window!!
@@ -80,9 +80,10 @@ class ComposeLaunchTest {
         window.backgroundColor = UIColor.yellowColor
 
         val renderer = UIGraphicsImageRenderer(bounds = window.bounds)
-        val image = renderer.imageWithActions {
-            window.drawViewHierarchyInRect(window.bounds, afterScreenUpdates = true)
-        }
+        val image =
+            renderer.imageWithActions {
+                window.drawViewHierarchyInRect(window.bounds, afterScreenUpdates = true)
+            }
 
         assertEquals(1, drawsCount, "Expected to draw only one frame on startup")
 
@@ -98,15 +99,19 @@ class ComposeLaunchTest {
         val appDelegate = MockAppDelegate()
         var drawsCount = 0
 
-        val view = ComposeUIView({
-            enforceStrictPlistSanityCheck = false
-            parallelRendering = parallelRenderingEnabled
-        }) {
-            Box(modifier = Modifier.fillMaxSize().background(Color.Blue).drawWithContent {
-                drawsCount++
-                this.drawContent()
-            })
-        }
+        val view =
+            ComposeUIView({
+                enforceStrictPlistSanityCheck = false
+                parallelRendering = parallelRenderingEnabled
+            }) {
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize().background(Color.Blue).drawWithContent {
+                            drawsCount++
+                            this.drawContent()
+                        }
+                )
+            }
 
         val controller = UIViewController()
         appDelegate.setUpWindow(controller)
@@ -117,9 +122,10 @@ class ComposeLaunchTest {
         controller.view.embedSubview(view)
 
         val renderer = UIGraphicsImageRenderer(bounds = window.bounds)
-        val image = renderer.imageWithActions {
-            window.drawViewHierarchyInRect(window.bounds, afterScreenUpdates = true)
-        }
+        val image =
+            renderer.imageWithActions {
+                window.drawViewHierarchyInRect(window.bounds, afterScreenUpdates = true)
+            }
 
         assertEquals(1, drawsCount, "Expected to draw only one frame on startup")
 

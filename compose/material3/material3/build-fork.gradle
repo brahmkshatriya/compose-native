@@ -96,6 +96,8 @@ androidXMultiplatform {
     defaultPlatform(PlatformIdentifier.LINUX_X_64)
 
     sourceSets {
+        def navigationEventVersion = project.redirectVersions.get('androidx.navigationevent')
+
         commonMain.dependencies {
             // Keep pinned unless there is a need for tip of tree behavior
             implementation("androidx.collection:collection:1.5.0")
@@ -143,7 +145,6 @@ androidXMultiplatform {
                 implementation(composeDependency(":compose:foundation:foundation"))
                 implementation(composeDependency(":compose:ui:ui"))
                 implementation(composeDependency(":compose:runtime:runtime"))
-                def navigationEventVersion = project.redirectVersions.get('androidx.navigationevent')
                 implementation("androidx.navigationevent:navigationevent-testing:$navigationEventVersion")
                 implementation("androidx.navigationevent:navigationevent-compose:$navigationEventVersion")
             }

@@ -34,7 +34,6 @@ import androidx.compose.ui.viewinterop.UIKitView
 import androidx.compose.ui.viewinterop.measureFittingSize
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.NSLayoutConstraint
 import platform.UIKit.UIColor
 import platform.UIKit.UILabel
@@ -42,7 +41,6 @@ import platform.UIKit.UILayoutConstraintAxisVertical
 import platform.UIKit.UIStackView
 import platform.UIKit.UIView
 
-@OptIn(ExperimentalForeignApi::class)
 class UIKitInteropContainerViewsSizingTest {
 
     @Test
@@ -52,8 +50,16 @@ class UIKitInteropContainerViewsSizingTest {
         val fixedWidth = 120.dp
 
         val factory = {
-            val l1 = UILabel().apply { text = "TEXT"; numberOfLines = 1 }
-            val l2 = UILabel().apply { text = List(100) { "TEXT" }.joinToString(" "); numberOfLines = 0 }
+            val l1 =
+                UILabel().apply {
+                    text = "TEXT"
+                    numberOfLines = 1
+                }
+            val l2 =
+                UILabel().apply {
+                    text = List(100) { "TEXT" }.joinToString(" ")
+                    numberOfLines = 0
+                }
 
             UIStackView().apply {
                 axis = UILayoutConstraintAxisVertical
@@ -68,22 +74,22 @@ class UIKitInteropContainerViewsSizingTest {
                 UIKitView(
                     factory = factory,
                     properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                    modifier = Modifier
-                        .width(fixedWidth)
-                        .onGloballyPositioned {
+                    modifier =
+                        Modifier.width(fixedWidth).onGloballyPositioned {
                             composeSize = it.boundsInRoot().size.toDpSize(density)
-                        }
+                        },
                 )
             }
         }
 
-        val expectedSize = factory()
-            .also { it.translatesAutoresizingMaskIntoConstraints = false }
-            .measureFittingSize(
-                fixedWidth = fixedWidth,
-                maxWidth = boxSize.width,
-                maxHeight = boxSize.height
-            )
+        val expectedSize =
+            factory()
+                .also { it.translatesAutoresizingMaskIntoConstraints = false }
+                .measureFittingSize(
+                    fixedWidth = fixedWidth,
+                    maxWidth = boxSize.width,
+                    maxHeight = boxSize.height,
+                )
 
         assertEquals(expectedSize, composeSize)
     }
@@ -110,11 +116,10 @@ class UIKitInteropContainerViewsSizingTest {
                 UIKitView(
                     factory = factory,
                     properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                    modifier = Modifier
-                        .width(fixedWidth)
-                        .onGloballyPositioned {
+                    modifier =
+                        Modifier.width(fixedWidth).onGloballyPositioned {
                             composeSize = it.boundsInRoot().size.toDpSize(density)
-                        }
+                        },
                 )
             }
         }
@@ -123,7 +128,7 @@ class UIKitInteropContainerViewsSizingTest {
     }
 
     @Test
-    fun testAspectRatioRectangleFixedHeight() = runUIKitInstrumentedTestWithInterop { overlay ->
+    fun testAspectRatioRectangleFixedHeight() = runUIKitInstrumentedTestWithInterop {
         var composeSize = DpSize.Zero
         val boxSize = DpSize(300.dp, 300.dp)
         val fixedHeight = 120.dp
@@ -132,38 +137,34 @@ class UIKitInteropContainerViewsSizingTest {
         val factory = {
             UIView().apply {
                 translatesAutoresizingMaskIntoConstraints = false
-               // backgroundColor = UIColor.blueColor
+                // backgroundColor = UIColor.blueColor
                 NSLayoutConstraint.activateConstraints(
                     listOf(
                         widthAnchor.constraintEqualToAnchor(
                             heightAnchor,
-                            multiplier = aspectRatio.toDouble()
-                        ),
+                            multiplier = aspectRatio.toDouble(),
+                        )
                     )
                 )
             }
         }
 
         setContent {
-            Box(Modifier
-                .background(Color.Red)
-                .size(boxSize), contentAlignment = Alignment.Center) {
+            Box(Modifier.background(Color.Red).size(boxSize), contentAlignment = Alignment.Center) {
                 UIKitView(
                     factory = factory,
                     properties = UIKitInteropProperties(placedAsOverlay = false),
-                    modifier = Modifier
-                        .background(Color.Green)
-                        .height(fixedHeight)
-                        .onGloballyPositioned {
+                    modifier =
+                        Modifier.background(Color.Green).height(fixedHeight).onGloballyPositioned {
                             composeSize = it.boundsInRoot().size.toDpSize(density)
-                        }
+                        },
                 )
             }
         }
 
         assertEquals(
             DpSize(width = fixedHeight.times(aspectRatio), height = fixedHeight),
-            composeSize
+            composeSize,
         )
     }
 }

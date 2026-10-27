@@ -56,6 +56,7 @@ import platform.UIKit.UIAccessibilityTraits
 // Private accessibility trait for text fields
 internal val CMPAccessibilityTraitTextView: UIAccessibilityTraits = (1UL shl 18) or (1UL shl 47)
 internal val CMPAccessibilityTraitIsEditing: UIAccessibilityTraits = 1UL shl 21
+internal val CMPAccessibilityTraitToggle: UIAccessibilityTraits = 1UL shl 53
 
 internal fun SemanticsConfiguration.accessibilityTraits(): UIAccessibilityTraits {
     var result = UIAccessibilityTraitNone
@@ -63,7 +64,8 @@ internal fun SemanticsConfiguration.accessibilityTraits(): UIAccessibilityTraits
     if (contains(SemanticsProperties.LiveRegion)) {
         // TODO: LiveRegionMode in the config is currently ignored.
         //  the default behavior due this flag set will actually do `Polite` announcements
-        //  to do `Assertive` announcements, we need to post a notification explicitly on each change
+        //  to do `Assertive` announcements, we need to post a notification explicitly on each
+        // change
         //  which we need to track manually
         result = result or UIAccessibilityTraitUpdatesFrequently
     }
@@ -82,16 +84,8 @@ internal fun SemanticsConfiguration.accessibilityTraits(): UIAccessibilityTraits
         result = result or UIAccessibilityTraitHeader
     }
 
-    getOrNull(SemanticsProperties.ToggleableState)?.let { state ->
-        when (state) {
-            ToggleableState.On -> {
-                result = result or UIAccessibilityTraitSelected
-            }
-
-            ToggleableState.Off, ToggleableState.Indeterminate -> {
-                // Do nothing
-            }
-        }
+    if (contains(SemanticsProperties.ToggleableState)) {
+        result = result or CMPAccessibilityTraitToggle
     }
 
     if (contains(SemanticsProperties.ProgressBarRangeInfo)) {
@@ -131,10 +125,11 @@ internal fun SemanticsConfiguration.accessibilityTraits(): UIAccessibilityTraits
         }
     }
 
-    if (result == UIAccessibilityTraitNone &&
-        contains(SemanticsProperties.Text) &&
-        contains(SemanticsActions.GetTextLayoutResult) &&
-        contains(SemanticsActions.ShowTextSubstitution)
+    if (
+        result == UIAccessibilityTraitNone &&
+            contains(SemanticsProperties.Text) &&
+            contains(SemanticsActions.GetTextLayoutResult) &&
+            contains(SemanticsActions.ShowTextSubstitution)
     ) {
         result = result or UIAccessibilityTraitStaticText
     }
@@ -143,30 +138,45 @@ internal fun SemanticsConfiguration.accessibilityTraits(): UIAccessibilityTraits
 }
 
 internal fun SemanticsConfiguration.accessibilityAttributedValue(): NSAttributedString? {
-    getOrNull(SemanticsProperties.StateDescription)?.takeIf { it.isNotBlank() }?.let {
-        return it.toAccessibilityNSAttributedString()
-    }
+    getOrNull(SemanticsProperties.StateDescription)
+        ?.takeIf { it.isNotBlank() }
+        ?.let {
+            return it.toAccessibilityNSAttributedString()
+        }
 
     if (contains(SemanticsProperties.EditableText)) {
         getOrNull(SemanticsProperties.EditableText)
             ?.takeIf { it.isNotBlank() }
-            ?.let { return it.toAccessibilityNSAttributedString() }
+            ?.let {
+                return it.toAccessibilityNSAttributedString()
+            }
 
         getOrNull(SemanticsProperties.Text)
             ?.joinToString("\n")
             ?.takeIf { it.isNotBlank() }
-            ?.let { return it.toAccessibilityNSAttributedString() }
+            ?.let {
+                return it.toAccessibilityNSAttributedString()
+            }
     }
 
-    return getOrNull(SemanticsProperties.ProgressBarRangeInfo)?.let {
+    getOrNull(SemanticsProperties.ProgressBarRangeInfo)?.let {
         return if (it.range.endInclusive > it.range.start) {
-            val fraction = (it.current - it.range.start) /
-                (it.range.endInclusive - it.range.start)
+            val fraction = (it.current - it.range.start) / (it.range.endInclusive - it.range.start)
             "${(fraction * 100f).roundToInt()}%".toAccessibilityNSAttributedString()
         } else {
             null
         }
     }
+
+    getOrNull(SemanticsProperties.ToggleableState)?.let { state ->
+        return when (state) {
+            ToggleableState.On -> "1"
+            ToggleableState.Off -> "0"
+            ToggleableState.Indeterminate -> null
+        }?.toAccessibilityNSAttributedString()
+    }
+
+    return null
 }
 
 @OptIn(BetaInteropApi::class)
@@ -179,7 +189,7 @@ internal fun AnnotatedString.toAccessibilityNSAttributedString(): NSAttributedSt
                 result.addAttribute(
                     UIAccessibilitySpeechAttributeLanguage,
                     locale.toLanguageTag(),
-                    nsRange(range.start, range.end)
+                    nsRange(range.start, range.end),
                 )
             }
         }
@@ -190,7 +200,7 @@ internal fun AnnotatedString.toAccessibilityNSAttributedString(): NSAttributedSt
             result.addAttribute(
                 UIAccessibilitySpeechAttributeSpellOut,
                 NSNumber(bool = true),
-                nsRange(range.start, range.end)
+                nsRange(range.start, range.end),
             )
         }
     }
@@ -217,7 +227,7 @@ internal fun SemanticsConfiguration.accessibilityCustomActions():
                     } else {
                         it.action.invoke()
                     }
-                }
+                },
             )
         }
     } ?: emptyList()

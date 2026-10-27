@@ -46,22 +46,25 @@ class InteropTextFocusTest {
         val positions = mutableListOf<Rect>()
         var isFocused = false
         setContent {
-            Column(modifier = Modifier.fillMaxSize().safeDrawingPadding().onGloballyPositioned {
-                positions.add(it.boundsInWindow())
-            }) {
+            Column(
+                modifier =
+                    Modifier.fillMaxSize().safeDrawingPadding().onGloballyPositioned {
+                        positions.add(it.boundsInWindow())
+                    }
+            ) {
+                @Suppress("DEPRECATION")
                 TextField(
                     value = "",
                     onValueChange = {},
-                    modifier = Modifier
-                        .focusRequester(requester)
-                        .onFocusChanged {
+                    modifier =
+                        Modifier.focusRequester(requester).onFocusChanged {
                             isFocused = it.isFocused
-                        }
+                        },
                 )
                 UIKitView(
                     factory = { nativeTextField },
                     modifier = Modifier.height(40.dp).fillMaxWidth(),
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
         }
@@ -88,7 +91,7 @@ class InteropTextFocusTest {
 
         assertTrue(
             actual = positions.all { it == positions.first() },
-            message = "Keyboard frame should not change when refocus on native"
+            message = "Keyboard frame should not change when refocus on native",
         )
     }
 }

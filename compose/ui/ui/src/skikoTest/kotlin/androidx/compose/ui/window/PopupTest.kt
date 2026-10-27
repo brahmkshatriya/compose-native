@@ -45,6 +45,7 @@ import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.isEqualTo
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.FrameRecomposer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.PlatformContext
@@ -53,7 +54,6 @@ import androidx.compose.ui.platform.PlatformWindowInsets
 import androidx.compose.ui.platform.WindowInfoImpl
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.scene.CanvasLayersComposeScene
-import androidx.compose.ui.platform.FrameRecomposer
 import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.InternalTestApi
@@ -63,8 +63,8 @@ import androidx.compose.ui.test.assertPositionInRootIsEqualTo
 import androidx.compose.ui.test.assertWidthIsEqualTo
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.runComposeUiTest
-import androidx.compose.ui.test.v2.runInternalSkikoComposeUiTest
 import androidx.compose.ui.test.runSkikoComposeUiTest
+import androidx.compose.ui.test.v2.runInternalSkikoComposeUiTest
 import androidx.compose.ui.touch
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -83,17 +83,13 @@ class PopupTest : SkikoComposeTestBase() {
     @Suppress("DEPRECATION")
     @Test
     fun passCompositionLocalsToPopup() = runSkikoComposeUiTest {
-        val compositionLocal = staticCompositionLocalOf<Int> {
-            error("not set")
-        }
+        val compositionLocal = staticCompositionLocalOf<Int> { error("not set") }
 
         var actualLocalValue = 0
 
         setContent {
             CompositionLocalProvider(compositionLocal provides 3) {
-                Popup {
-                    actualLocalValue = compositionLocal.current
-                }
+                Popup { actualLocalValue = compositionLocal.current }
             }
         }
 
@@ -111,9 +107,7 @@ class PopupTest : SkikoComposeTestBase() {
         // reproduce because first CompositionLocalProvider is recomposed and that triggers
         // recomposition of the popup content, which happens afterward.
 
-        val compositionLocal = staticCompositionLocalOf<Int> {
-            error("not set")
-        }
+        val compositionLocal = staticCompositionLocalOf<Int> { error("not set") }
         var providedValue by mutableStateOf(1)
         var text by mutableStateOf("1")
         var actualLocalValue = 0
@@ -121,9 +115,7 @@ class PopupTest : SkikoComposeTestBase() {
         setContent {
             CompositionLocalProvider(compositionLocal provides providedValue) {
                 Popup {
-                    actualLocalValue = compositionLocal.current.also {
-                        println(it)
-                    }
+                    actualLocalValue = compositionLocal.current.also { println(it) }
                     Text(text)
                 }
             }
@@ -145,9 +137,7 @@ class PopupTest : SkikoComposeTestBase() {
         var layoutDirection by mutableStateOf(LayoutDirection.Rtl)
         setContent {
             CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
-                Popup {
-                    localLayoutDirection = LocalLayoutDirection.current
-                }
+                Popup { localLayoutDirection = LocalLayoutDirection.current }
             }
         }
 
@@ -167,13 +157,7 @@ class PopupTest : SkikoComposeTestBase() {
 
         setContent {
             if (isPopupShowing) {
-                Popup {
-                    DisposableEffect(Unit) {
-                        onDispose {
-                            isDisposed = true
-                        }
-                    }
-                }
+                Popup { DisposableEffect(Unit) { onDispose { isDisposed = true } } }
             }
         }
 
@@ -191,9 +175,7 @@ class PopupTest : SkikoComposeTestBase() {
 
         setContent {
             CompositionLocalProvider(LocalDensity provides density) {
-                Popup {
-                    densityInsidePopup = LocalDensity.current.density
-                }
+                Popup { densityInsidePopup = LocalDensity.current.density }
             }
         }
 
@@ -206,672 +188,654 @@ class PopupTest : SkikoComposeTestBase() {
 
     @Suppress("DEPRECATION")
     @Test
-    fun callDismissIfClickedOutsideOfFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        var onDismissRequestCallCount = 0
+    fun callDismissIfClickedOutsideOfFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            var onDismissRequestCallCount = 0
 
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = true,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = true,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
 
-        setContent {
-            background.Content()
-            popup.Content()
+            setContent {
+                background.Content()
+                popup.Content()
+            }
+
+            assertThat(onDismissRequestCallCount).isEqualTo(0)
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+            background.events.assertReceivedNoEvents()
+            assertThat(onDismissRequestCallCount).isEqualTo(1)
         }
-
-        assertThat(onDismissRequestCallCount).isEqualTo(0)
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
-        background.events.assertReceivedNoEvents()
-        assertThat(onDismissRequestCallCount).isEqualTo(1)
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun callDismissIfClickedOutsideOfNonFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        var onDismissRequestCallCount = 0
+    fun callDismissIfClickedOutsideOfNonFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            var onDismissRequestCallCount = 0
 
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
 
-        setContent {
-            background.Content()
-            popup.Content()
+            setContent {
+                background.Content()
+                popup.Content()
+            }
+
+            assertThat(onDismissRequestCallCount).isEqualTo(0)
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+            background.events.assertReceivedLast(PointerEventType.Press, Offset(10f, 10f))
+            assertThat(onDismissRequestCallCount).isEqualTo(1)
         }
-
-        assertThat(onDismissRequestCallCount).isEqualTo(0)
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
-        background.events.assertReceivedLast(PointerEventType.Press, Offset(10f, 10f))
-        assertThat(onDismissRequestCallCount).isEqualTo(1)
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun callDismissIfClickedOutsideOfMultipleNonFocusablePopups() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        var onDismissRequestCallCount = 0
+    fun callDismissIfClickedOutsideOfMultipleNonFocusablePopups() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            var onDismissRequestCallCount = 0
 
-        val background = FillBox()
-        val popup1 = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
-        val popup2 = PopupState(
-            IntRect(30, 30, 70, 70),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
+            val background = FillBox()
+            val popup1 =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
+            val popup2 =
+                PopupState(
+                    IntRect(30, 30, 70, 70),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
 
-        setContent {
-            background.Content()
-            popup1.Content()
-            popup2.Content()
+            setContent {
+                background.Content()
+                popup1.Content()
+                popup2.Content()
+            }
+
+            assertThat(onDismissRequestCallCount).isEqualTo(0)
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+            background.events.assertReceivedLast(PointerEventType.Press, Offset(10f, 10f))
+            assertThat(onDismissRequestCallCount).isEqualTo(2)
         }
-
-        assertThat(onDismissRequestCallCount).isEqualTo(0)
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
-        background.events.assertReceivedLast(PointerEventType.Press, Offset(10f, 10f))
-        assertThat(onDismissRequestCallCount).isEqualTo(2)
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun callDismissForNonFocusablePopupsAbove() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        var onDismissRequestCallCount = 0
+    fun callDismissForNonFocusablePopupsAbove() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            var onDismissRequestCallCount = 0
 
-        val background = FillBox()
-        val popup1 = PopupState(
-            IntRect(10, 10, 50, 50),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { fail() }
-        )
-        val popup2 = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { fail() }
-        )
-        val popup3 = PopupState(
-            IntRect(30, 30, 70, 70),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
-        val popup4 = PopupState(
-            IntRect(40, 40, 80, 80),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
+            val background = FillBox()
+            val popup1 =
+                PopupState(
+                    IntRect(10, 10, 50, 50),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { fail() },
+                )
+            val popup2 =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { fail() },
+                )
+            val popup3 =
+                PopupState(
+                    IntRect(30, 30, 70, 70),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
+            val popup4 =
+                PopupState(
+                    IntRect(40, 40, 80, 80),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
 
-        setContent {
-            background.Content()
-            popup1.Content()
-            popup2.Content()
-            popup3.Content()
-            popup4.Content()
+            setContent {
+                background.Content()
+                popup1.Content()
+                popup2.Content()
+                popup3.Content()
+                popup4.Content()
+            }
+
+            assertThat(onDismissRequestCallCount).isEqualTo(0)
+            scene.sendPointerEvent(PointerEventType.Press, Offset(55f, 25f))
+            background.events.assertReceivedNoEvents()
+            assertThat(onDismissRequestCallCount).isEqualTo(2)
         }
-
-        assertThat(onDismissRequestCallCount).isEqualTo(0)
-        scene.sendPointerEvent(PointerEventType.Press, Offset(55f, 25f))
-        background.events.assertReceivedNoEvents()
-        assertThat(onDismissRequestCallCount).isEqualTo(2)
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun callDismissForAboveFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        var onDismissRequestCallCount = 0
+    fun callDismissForAboveFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            var onDismissRequestCallCount = 0
 
-        val background = FillBox()
-        val popup1 = PopupState(
-            IntRect(10, 10, 50, 50),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { fail() }
-        )
-        val popup2 = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { fail() }
-        )
-        val popup3 = PopupState(
-            IntRect(30, 30, 70, 70),
-            focusable = true,
-            dismissOnClickOutside = true,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
-        val popup4 = PopupState(
-            IntRect(40, 40, 80, 80),
-            focusable = false,
-            dismissOnClickOutside = true,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
+            val background = FillBox()
+            val popup1 =
+                PopupState(
+                    IntRect(10, 10, 50, 50),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { fail() },
+                )
+            val popup2 =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { fail() },
+                )
+            val popup3 =
+                PopupState(
+                    IntRect(30, 30, 70, 70),
+                    focusable = true,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
+            val popup4 =
+                PopupState(
+                    IntRect(40, 40, 80, 80),
+                    focusable = false,
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
 
-        setContent {
-            background.Content()
-            popup1.Content()
-            popup2.Content()
-            popup3.Content()
-            popup4.Content()
+            setContent {
+                background.Content()
+                popup1.Content()
+                popup2.Content()
+                popup3.Content()
+                popup4.Content()
+            }
+
+            assertThat(onDismissRequestCallCount).isEqualTo(0)
+            scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f))
+            background.events.assertReceivedNoEvents()
+            assertThat(onDismissRequestCallCount).isEqualTo(2)
         }
-
-        assertThat(onDismissRequestCallCount).isEqualTo(0)
-        scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f))
-        background.events.assertReceivedNoEvents()
-        assertThat(onDismissRequestCallCount).isEqualTo(2)
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun passEventIfClickedOutsideOfNonFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        var onDismissRequestCallCount = 0
+    fun passEventIfClickedOutsideOfNonFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            var onDismissRequestCallCount = 0
 
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = false,
-            onDismissRequest = { onDismissRequestCallCount++ }
-        )
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = false,
+                    onDismissRequest = { onDismissRequestCallCount++ },
+                )
 
-        setContent {
-            background.Content()
-            popup.Content()
+            setContent {
+                background.Content()
+                popup.Content()
+            }
+
+            assertThat(onDismissRequestCallCount).isEqualTo(0)
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+            background.events.assertReceivedLast(PointerEventType.Press, Offset(10f, 10f))
+            assertThat(onDismissRequestCallCount).isEqualTo(0)
         }
-
-        assertThat(onDismissRequestCallCount).isEqualTo(0)
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
-        background.events.assertReceivedLast(PointerEventType.Press, Offset(10f, 10f))
-        assertThat(onDismissRequestCallCount).isEqualTo(0)
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun doNotPassEventIfClickedOutsideOfFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = true
-        )
+    fun doNotPassEventIfClickedOutsideOfFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val background = FillBox()
+            val popup = PopupState(IntRect(20, 20, 60, 60), focusable = true)
 
-        setContent {
-            background.Content()
-            popup.Content()
+            setContent {
+                background.Content()
+                popup.Content()
+            }
+
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+            scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
+            background.events.assertReceivedNoEvents()
         }
-
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
-        scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
-        background.events.assertReceivedNoEvents()
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun passEventIfClickedOutsideOfNonBlockingFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = true,
-            consumePointerInputOutside = false,
-            dismissOnClickOutside = false
-        )
+    fun passEventIfClickedOutsideOfNonBlockingFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = true,
+                    consumePointerInputOutside = false,
+                    dismissOnClickOutside = false,
+                )
 
-        setContent {
-            background.Content()
-            popup.Content()
+            setContent {
+                background.Content()
+                popup.Content()
+            }
+
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+            scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
+            background.events.assertReceived(PointerEventType.Press, Offset(10f, 10f))
+            background.events.assertReceived(PointerEventType.Release, Offset(10f, 10f))
         }
-
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
-        scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
-        background.events.assertReceived(PointerEventType.Press, Offset(10f, 10f))
-        background.events.assertReceived(PointerEventType.Release, Offset(10f, 10f))
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun doNotPassEventIfClickedOutsideOfBlockingNonFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = false,
-            consumePointerInputOutside = true
-        )
+    fun doNotPassEventIfClickedOutsideOfBlockingNonFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = false,
+                    consumePointerInputOutside = true,
+                )
 
-        setContent {
-            background.Content()
-            popup.Content()
+            setContent {
+                background.Content()
+                popup.Content()
+            }
+
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
+            scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
+            background.events.assertReceivedNoEvents()
         }
-
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f))
-        scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
-        background.events.assertReceivedNoEvents()
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun canScrollOutsideOfNonFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val background = FillBox()
-        val popup = PopupState(IntRect(20, 20, 60, 60), focusable = false)
+    fun canScrollOutsideOfNonFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val background = FillBox()
+            val popup = PopupState(IntRect(20, 20, 60, 60), focusable = false)
 
-        setContent {
-            background.Content()
-            popup.Content()
+            setContent {
+                background.Content()
+                popup.Content()
+            }
+
+            scene.sendPointerEvent(PointerEventType.Scroll, Offset(10f, 10f))
+            background.events.assertReceivedLast(PointerEventType.Scroll, Offset(10f, 10f))
         }
-
-        scene.sendPointerEvent(PointerEventType.Scroll, Offset(10f, 10f))
-        background.events.assertReceivedLast(PointerEventType.Scroll, Offset(10f, 10f))
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun cannotScrollOutsideOfFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val background = FillBox()
-        val popup = PopupState(IntRect(20, 20, 60, 60), focusable = true)
+    fun cannotScrollOutsideOfFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val background = FillBox()
+            val popup = PopupState(IntRect(20, 20, 60, 60), focusable = true)
 
-        setContent {
-            background.Content()
-            popup.Content()
+            setContent {
+                background.Content()
+                popup.Content()
+            }
+
+            scene.sendPointerEvent(PointerEventType.Scroll, Offset(10f, 10f))
+            background.events.assertReceivedNoEvents()
         }
-
-        scene.sendPointerEvent(PointerEventType.Scroll, Offset(10f, 10f))
-        background.events.assertReceivedNoEvents()
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun openFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val openPopup = mutableStateOf(false)
-        val background = FillBox {
+    fun openFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val openPopup = mutableStateOf(false)
+            val background = FillBox { openPopup.value = true }
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = true,
+                    onDismissRequest = { openPopup.value = false },
+                )
+
+            setContent {
+                background.Content()
+                if (openPopup.value) {
+                    popup.Content()
+                }
+            }
+
+            // Click (Press-Release cycle) opens popup and sends all events to "background"
+            val buttons = PointerButtons(isPrimaryPressed = true)
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(10f, 10f),
+                buttons = buttons,
+                button = PointerButton.Primary,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(10f, 10f),
+                button = PointerButton.Primary,
+            )
+            onNodeWithTag(popup.tag).assertIsDisplayed()
+
+            background.events.assertReceived(PointerEventType.Press, Offset(10f, 10f))
+            background.events.assertReceived(PointerEventType.Release, Offset(10f, 10f))
+            background.events.assertReceived(PointerEventType.Enter, Offset(10f, 10f))
+            background.events.assertReceivedLast(PointerEventType.Exit, Offset(10f, 10f))
+        }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun closeFocusablePopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val openPopup = mutableStateOf(false)
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = true,
+                    onDismissRequest = { openPopup.value = false },
+                )
+
+            setContent {
+                background.Content()
+                if (openPopup.value) {
+                    popup.Content()
+                }
+            }
+
+            // Moving without popup generates Enter because it's in bounds
+            scene.sendPointerEvent(PointerEventType.Move, Offset(15f, 15f))
+            background.events.assertReceivedLast(PointerEventType.Enter, Offset(15f, 15f))
+
+            // Open popup
             openPopup.value = true
-        }
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = true,
-            onDismissRequest = {
-                openPopup.value = false
-            }
-        )
+            onNodeWithTag(popup.tag).assertIsDisplayed()
+            background.events.assertReceivedLast(PointerEventType.Exit, Offset(15f, 15f))
 
-        setContent {
-            background.Content()
-            if (openPopup.value) {
+            // Click (Press-Move-Release cycle) outside closes popup and sends only Enter event to
+            // background
+            val buttons = PointerButtons(isPrimaryPressed = true)
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(10f, 10f),
+                buttons = buttons,
+                button = PointerButton.Primary,
+            )
+            onNodeWithTag(popup.tag)
+                .assertDoesNotExist() // Wait that it's really closed before next events
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(11f, 11f), buttons = buttons)
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                Offset(11f, 11f),
+                button = PointerButton.Primary,
+            )
+            background.events.assertReceivedLast(PointerEventType.Enter, Offset(11f, 11f))
+        }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun secondTouchDoesNotDismissPopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    dismissOnClickOutside = true,
+                    onDismissRequest = { fail() },
+                )
+
+            setContent {
+                background.Content()
                 popup.Content()
             }
-        }
 
-        // Click (Press-Release cycle) opens popup and sends all events to "background"
-        val buttons = PointerButtons(
-            isPrimaryPressed = true
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Press,
-            Offset(10f, 10f),
-            buttons = buttons,
-            button = PointerButton.Primary
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Release,
-            Offset(10f, 10f),
-            button = PointerButton.Primary
-        )
-        onNodeWithTag(popup.tag).assertIsDisplayed()
-
-        background.events.assertReceived(PointerEventType.Press, Offset(10f, 10f))
-        background.events.assertReceived(PointerEventType.Release, Offset(10f, 10f))
-        background.events.assertReceived(PointerEventType.Enter, Offset(10f, 10f))
-        background.events.assertReceivedLast(PointerEventType.Exit, Offset(10f, 10f))
-    }
-
-    @Suppress("DEPRECATION")
-    @Test
-    fun closeFocusablePopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val openPopup = mutableStateOf(false)
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = true,
-            onDismissRequest = {
-                openPopup.value = false
-            }
-        )
-
-        setContent {
-            background.Content()
-            if (openPopup.value) {
-                popup.Content()
-            }
-        }
-
-        // Moving without popup generates Enter because it's in bounds
-        scene.sendPointerEvent(PointerEventType.Move, Offset(15f, 15f))
-        background.events.assertReceivedLast(PointerEventType.Enter, Offset(15f, 15f))
-
-        // Open popup
-        openPopup.value = true
-        onNodeWithTag(popup.tag).assertIsDisplayed()
-        background.events.assertReceivedLast(PointerEventType.Exit, Offset(15f, 15f))
-
-        // Click (Press-Move-Release cycle) outside closes popup and sends only Enter event to background
-        val buttons = PointerButtons(
-            isPrimaryPressed = true
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Press,
-            Offset(10f, 10f),
-            buttons = buttons,
-            button = PointerButton.Primary
-        )
-        onNodeWithTag(popup.tag).assertDoesNotExist() // Wait that it's really closed before next events
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(11f, 11f), buttons = buttons)
-        scene.sendPointerEvent(
-            PointerEventType.Release,
-            Offset(11f, 11f),
-            button = PointerButton.Primary
-        )
-        background.events.assertReceivedLast(PointerEventType.Enter, Offset(11f, 11f))
-    }
-
-    @Suppress("DEPRECATION")
-    @Test
-    fun secondTouchDoesNotDismissPopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            dismissOnClickOutside = true,
-            onDismissRequest = { fail() }
-        )
-
-        setContent {
-            background.Content()
-            popup.Content()
-        }
-
-        scene.sendPointerEvent(
-            PointerEventType.Press,
-            pointers = listOf(
-                touch(50f, 50f, pressed = true, id = 1),
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                pointers = listOf(touch(50f, 50f, pressed = true, id = 1)),
             )
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Press,
-            pointers = listOf(
-                touch(50f, 50f, pressed = true, id = 1),
-                touch(10f, 10f, pressed = true, id = 2),
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                pointers =
+                    listOf(
+                        touch(50f, 50f, pressed = true, id = 1),
+                        touch(10f, 10f, pressed = true, id = 2),
+                    ),
             )
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Release,
-            pointers = listOf(
-                touch(50f, 50f, pressed = false, id = 1),
-                touch(10f, 10f, pressed = true, id = 2),
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                pointers =
+                    listOf(
+                        touch(50f, 50f, pressed = false, id = 1),
+                        touch(10f, 10f, pressed = true, id = 2),
+                    ),
             )
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Release,
-            pointers = listOf(
-                touch(10f, 10f, pressed = false, id = 2),
+            scene.sendPointerEvent(
+                PointerEventType.Release,
+                pointers = listOf(touch(10f, 10f, pressed = false, id = 2)),
             )
-        )
-    }
+        }
 
     @Suppress("DEPRECATION")
     @Test
-    fun secondaryButtonClickDismissPopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val openPopup = mutableStateOf(true)
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = true,
-            onDismissRequest = {
-                openPopup.value = false
-            }
-        )
+    fun secondaryButtonClickDismissPopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val openPopup = mutableStateOf(true)
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = true,
+                    onDismissRequest = { openPopup.value = false },
+                )
 
-        setContent {
-            background.Content()
-            if (openPopup.value) {
-                popup.Content()
+            setContent {
+                background.Content()
+                if (openPopup.value) {
+                    popup.Content()
+                }
             }
+
+            val buttons = PointerButtons(isSecondaryPressed = true)
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                position = Offset(10f, 10f),
+                buttons = buttons,
+                button = PointerButton.Secondary,
+            )
+
+            onNodeWithTag(popup.tag).assertDoesNotExist()
         }
-
-        val buttons = PointerButtons(
-            isSecondaryPressed = true
-        )
-        scene.sendPointerEvent(
-            PointerEventType.Press,
-            position = Offset(10f, 10f),
-            buttons = buttons,
-            button = PointerButton.Secondary
-        )
-
-        onNodeWithTag(popup.tag).assertDoesNotExist()
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun clippingEnabledPopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        setContent {
-            Popup(
-                offset = IntOffset(80, 80)
-            ) {
-                Box(Modifier.size(50.dp).testTag("box1"))
+    fun clippingEnabledPopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            setContent {
+                Popup(offset = IntOffset(80, 80)) { Box(Modifier.size(50.dp).testTag("box1")) }
+                Popup(offset = IntOffset(-30, -30)) { Box(Modifier.size(50.dp).testTag("box2")) }
             }
-            Popup(
-                offset = IntOffset(-30, -30)
-            ) {
-                Box(Modifier.size(50.dp).testTag("box2"))
-            }
+            onNodeWithTag("box1").assertPositionInRootIsEqualTo(50.dp, 50.dp)
+            onNodeWithTag("box2").assertPositionInRootIsEqualTo(0.dp, 0.dp)
         }
-        onNodeWithTag("box1").assertPositionInRootIsEqualTo(50.dp, 50.dp)
-        onNodeWithTag("box2").assertPositionInRootIsEqualTo(0.dp, 0.dp)
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun clippingDisabledPopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        setContent {
-            Popup(
-                offset = IntOffset(80, 80),
-                properties = PopupProperties(clippingEnabled = false)
-            ) {
-                Box(Modifier.size(50.dp).testTag("box1"))
+    fun clippingDisabledPopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            setContent {
+                Popup(
+                    offset = IntOffset(80, 80),
+                    properties = PopupProperties(clippingEnabled = false),
+                ) {
+                    Box(Modifier.size(50.dp).testTag("box1"))
+                }
+                Popup(
+                    offset = IntOffset(-30, -30),
+                    properties = PopupProperties(clippingEnabled = false),
+                ) {
+                    Box(Modifier.size(50.dp).testTag("box2"))
+                }
             }
-            Popup(
-                offset = IntOffset(-30, -30),
-                properties = PopupProperties(clippingEnabled = false)
-            ) {
-                Box(Modifier.size(50.dp).testTag("box2"))
-            }
+            onNodeWithTag("box1").assertPositionInRootIsEqualTo(80.dp, 80.dp)
+            onNodeWithTag("box2").assertPositionInRootIsEqualTo((-30).dp, (-30).dp)
         }
-        onNodeWithTag("box1").assertPositionInRootIsEqualTo(80.dp, 80.dp)
-        onNodeWithTag("box2").assertPositionInRootIsEqualTo((-30).dp, (-30).dp)
-    }
 
     // https://github.com/JetBrains/compose-multiplatform-core/pull/847
     @OptIn(InternalTestApi::class)
     @Test
-    fun popupBoundsWithPlatformInsets() = runInternalSkikoComposeUiTest(
-        width = 200,
-        height = 200,
-        windowInsets = with(Density(1f)) {
-            WindowInsetsConfigSystemBars(
-                insets = PlatformInsets(left = 5.dp, top = 50.dp, right = 5.dp, bottom = 10.dp)
-            )
-        }
-    ) {
-        setContent {
-            Popup(
-                popupPositionProvider = object : PopupPositionProvider {
-                    override fun calculatePosition(
-                        anchorBounds: IntRect,
-                        windowSize: IntSize,
-                        layoutDirection: LayoutDirection,
-                        popupContentSize: IntSize
-                    ): IntOffset = IntOffset.Zero
+    fun popupBoundsWithPlatformInsets() =
+        runInternalSkikoComposeUiTest(
+            width = 200,
+            height = 200,
+            windowInsets =
+                with(Density(1f)) {
+                    WindowInsetsConfigSystemBars(
+                        insets =
+                            PlatformInsets(left = 5.dp, top = 50.dp, right = 5.dp, bottom = 10.dp)
+                    )
+                },
+        ) {
+            setContent {
+                Popup(
+                    popupPositionProvider =
+                        object : PopupPositionProvider {
+                            override fun calculatePosition(
+                                anchorBounds: IntRect,
+                                windowSize: IntSize,
+                                layoutDirection: LayoutDirection,
+                                popupContentSize: IntSize,
+                            ): IntOffset = IntOffset.Zero
+                        }
+                ) {
+                    Box(Modifier.fillMaxSize().testTag("box1"))
                 }
-            ) {
-                Box(Modifier.fillMaxSize().testTag("box1"))
-            }
-            Box(Modifier.offset(30.dp, 100.dp)) {
-                Popup {
-                    Box(Modifier.size(50.dp).testTag("box2"))
+                Box(Modifier.offset(30.dp, 100.dp)) {
+                    Popup { Box(Modifier.size(50.dp).testTag("box2")) }
                 }
             }
+            onNodeWithTag("box1")
+                .assertPositionInRootIsEqualTo(5.dp, 50.dp)
+                .assertWidthIsEqualTo(190.dp)
+                .assertHeightIsEqualTo(140.dp)
+            onNodeWithTag("box2")
+                .assertPositionInRootIsEqualTo(
+                    30.dp,
+                    100.dp,
+                ) // Matches parent position (if inside bounds)
         }
-        onNodeWithTag("box1")
-            .assertPositionInRootIsEqualTo(5.dp, 50.dp)
-            .assertWidthIsEqualTo(190.dp)
-            .assertHeightIsEqualTo(140.dp)
-        onNodeWithTag("box2")
-            .assertPositionInRootIsEqualTo(
-                30.dp,
-                100.dp
-            ) // Matches parent position (if inside bounds)
-    }
 
     @Suppress("DEPRECATION")
     @Test
-    fun doNotLoseHoverOutsideOfPopup() = runSkikoComposeUiTest(
-        size = Size(100f, 100f)
-    ) {
-        val openPopup = mutableStateOf(false)
-        val background = FillBox()
-        val popup = PopupState(
-            IntRect(20, 20, 60, 60),
-            focusable = false,
-            onDismissRequest = {
-                openPopup.value = false
-            }
-        )
+    fun doNotLoseHoverOutsideOfPopup() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val openPopup = mutableStateOf(false)
+            val background = FillBox()
+            val popup =
+                PopupState(
+                    IntRect(20, 20, 60, 60),
+                    focusable = false,
+                    onDismissRequest = { openPopup.value = false },
+                )
 
-        setContent {
-            background.Content()
-            if (openPopup.value) {
-                popup.Content()
+            setContent {
+                background.Content()
+                if (openPopup.value) {
+                    popup.Content()
+                }
+            }
+
+            // Moving without popup generates Enter because it's in bounds
+            scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
+            background.events.assertReceivedLast(PointerEventType.Enter, Offset(5f, 5f))
+
+            // Open popup
+            openPopup.value = true
+            onNodeWithTag(popup.tag).assertIsDisplayed()
+
+            // It should not generate extra Exit/Enter events.
+            // Move events without position change are allowed, as they are delivered when
+            // ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled is true.
+            background.events.list.forEach {
+                assertThat(it.type).isEqualTo(PointerEventType.Move)
+                assertThat(it.changes.first().position).isEqualTo(Offset(5f, 5f))
             }
         }
-
-        // Moving without popup generates Enter because it's in bounds
-        scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
-        background.events.assertReceivedLast(PointerEventType.Enter, Offset(5f, 5f))
-
-        // Open popup
-        openPopup.value = true
-        onNodeWithTag(popup.tag).assertIsDisplayed()
-
-        // It should not generate extra Exit/Enter events
-        background.events.assertReceivedNoEvents()
-    }
 
     @Test
-    fun popupContentLargerThanWindowInfoContainer() = runTest(StandardTestDispatcher()) {
-        lateinit var scene: ComposeScene
-        val size = IntSize(100, 100)
-        val surface = Surface.makeRasterN32Premul(size.width, size.height)
-        val frameRecomposer = FrameRecomposer(coroutineContext)
-        var needsLayout = false
-        var needsDraw = false
-        fun renderUntilIdle() {
-            repeat(10) {
-                var didWork = false
-                if (frameRecomposer.hasPendingWork()) {
-                    frameRecomposer.performFrame(1)
-                    didWork = true
+    fun popupContentLargerThanWindowInfoContainer() =
+        runTest(StandardTestDispatcher()) {
+            lateinit var scene: ComposeScene
+            val size = IntSize(100, 100)
+            val surface = Surface.makeRasterN32Premul(size.width, size.height)
+            val frameRecomposer = FrameRecomposer(coroutineContext)
+            var needsLayout = false
+            var needsDraw = false
+            fun renderUntilIdle() {
+                repeat(10) {
+                    var didWork = false
+                    if (frameRecomposer.hasPendingWork()) {
+                        frameRecomposer.performFrame(1)
+                        didWork = true
+                    }
+                    if (needsLayout || scene.hasPendingMeasureOrLayout) {
+                        needsLayout = false
+                        scene.measureAndLayout()
+                        didWork = true
+                    }
+                    if (needsDraw || scene.hasPendingDraw) {
+                        needsDraw = false
+                        scene.draw(surface.canvas.asComposeCanvas())
+                        didWork = true
+                    }
+                    if (!didWork) return
                 }
-                if (needsLayout || scene.hasPendingMeasureOrLayout) {
-                    needsLayout = false
-                    scene.measureAndLayout()
-                    didWork = true
-                }
-                if (needsDraw || scene.hasPendingDraw) {
-                    needsDraw = false
-                    scene.draw(surface.canvas.asComposeCanvas())
-                    didWork = true
-                }
-                if (!didWork) return
+                error("ComposeScene did not become idle")
             }
-            error("ComposeScene did not become idle")
-        }
-        scene = CanvasLayersComposeScene(
-            frameRecomposer = frameRecomposer,
-            platformContext = PlatformContext.Empty().also {
-                val windowInfo = it.windowInfo as WindowInfoImpl
-                windowInfo.containerSize = IntSize(50, 50)
-            },
-            invalidateLayout = { needsLayout = true },
-            invalidateDraw = { needsDraw = true },
-        )
-        try {
-            scene.size = size
-            scene.setContent {
-                Popup {
-                    Box(Modifier.size(200.dp))
-                }
+            scene =
+                CanvasLayersComposeScene(
+                    frameRecomposer = frameRecomposer,
+                    platformContext =
+                        PlatformContext.Empty().also {
+                            val windowInfo = it.windowInfo as WindowInfoImpl
+                            windowInfo.containerSize = IntSize(50, 50)
+                        },
+                    invalidateLayout = { needsLayout = true },
+                    invalidateDraw = { needsDraw = true },
+                )
+            try {
+                scene.size = size
+                scene.setContent { Popup { Box(Modifier.size(200.dp)) } }
+                renderUntilIdle()
+            } finally {
+                scene.close()
+                frameRecomposer.close()
             }
-            renderUntilIdle()
-        } finally {
-            scene.close()
-            frameRecomposer.close()
         }
-    }
 
     @Suppress("DEPRECATION")
     @Test
     fun popupShownAtCorrectCoordinatesImmediately() = runSkikoComposeUiTest {
-        val positionProvider = object : PopupPositionProvider {
-            override fun calculatePosition(
-                anchorBounds: IntRect,
-                windowSize: IntSize,
-                layoutDirection: LayoutDirection,
-                popupContentSize: IntSize
-            ): IntOffset {
-                return anchorBounds.topLeft
+        val positionProvider =
+            object : PopupPositionProvider {
+                override fun calculatePosition(
+                    anchorBounds: IntRect,
+                    windowSize: IntSize,
+                    layoutDirection: LayoutDirection,
+                    popupContentSize: IntSize,
+                ): IntOffset {
+                    return anchorBounds.topLeft
+                }
             }
-        }
 
         var showPopup by mutableStateOf(false)
         val popupPositions = mutableListOf<Offset>()
@@ -881,11 +845,9 @@ class PopupTest : SkikoComposeTestBase() {
                     if (showPopup) {
                         Popup(popupPositionProvider = positionProvider) {
                             Box(
-                                Modifier
-                                    .size(50.dp)
-                                    .onPlaced {
-                                        popupPositions.add(it.positionInRoot())
-                                    }
+                                Modifier.size(50.dp).onPlaced {
+                                    popupPositions.add(it.positionInRoot())
+                                }
                             )
                         }
                     }
@@ -899,8 +861,8 @@ class PopupTest : SkikoComposeTestBase() {
     }
 }
 
-private fun WindowInsetsConfigSystemBars(
-    insets: PlatformInsets
-): PlatformWindowInsets = object : PlatformWindowInsets {
-    override val systemBars: PlatformInsets get() = insets
-}
+private fun WindowInsetsConfigSystemBars(insets: PlatformInsets): PlatformWindowInsets =
+    object : PlatformWindowInsets {
+        override val systemBars: PlatformInsets
+            get() = insets
+    }

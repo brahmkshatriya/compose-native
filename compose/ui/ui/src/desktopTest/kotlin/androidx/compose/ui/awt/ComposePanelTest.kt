@@ -104,11 +104,9 @@ import org.junit.Test
 import org.junit.rules.Timeout
 
 class ComposePanelTest {
-    @get:Rule
-    val timeout: Timeout = Timeout.seconds(60)
+    @get:Rule val timeout: Timeout = Timeout.seconds(60)
 
-    @get:Rule
-    val throwUncaughtExceptionRule = ThrowUncaughtExceptionRule()
+    @get:Rule val throwUncaughtExceptionRule = ThrowUncaughtExceptionRule()
 
     @Test
     fun `don't override user preferred size`() {
@@ -141,9 +139,7 @@ class ComposePanelTest {
 
         runBlocking(MainUIDispatcher) {
             val composePanel = ComposePanel()
-            composePanel.setContent {
-                Box(Modifier.requiredSize(300.dp, 400.dp))
-            }
+            composePanel.setContent { Box(Modifier.requiredSize(300.dp, 400.dp)) }
 
             val frame = JFrame()
             try {
@@ -170,20 +166,19 @@ class ComposePanelTest {
 
         runBlocking(MainUIDispatcher) {
             var rendererIsCalled = false
-            val analytics = object : SkiaLayerAnalytics {
-                override fun renderer(
-                    skikoVersion: String,
-                    os: OS,
-                    api: GraphicsApi
-                ): SkiaLayerAnalytics.RendererAnalytics {
-                    rendererIsCalled = true
-                    return super.renderer(skikoVersion, os, api)
+            val analytics =
+                object : SkiaLayerAnalytics {
+                    override fun renderer(
+                        skikoVersion: String,
+                        os: OS,
+                        api: GraphicsApi,
+                    ): SkiaLayerAnalytics.RendererAnalytics {
+                        rendererIsCalled = true
+                        return super.renderer(skikoVersion, os, api)
+                    }
                 }
-            }
 
-            val composePanel = ComposePanel(
-                skiaLayerAnalytics = analytics,
-            )
+            val composePanel = ComposePanel(skiaLayerAnalytics = analytics)
             composePanel.size = Dimension(100, 100)
 
             val frame = JFrame()
@@ -237,9 +232,7 @@ class ComposePanelTest {
                 savedState = composePanel.saveState()
             }
 
-            testPanel(savedState) { _ ->
-                assertThat(lastState).isEqualTo(6)
-            }
+            testPanel(savedState) { _ -> assertThat(lastState).isEqualTo(6) }
         } finally {
             frame.dispose()
         }
@@ -252,9 +245,7 @@ class ComposePanelTest {
 
         runBlocking(MainUIDispatcher) {
             var initialStateCounter = 0
-            val composePanel = ComposePanel().apply {
-                isDisposeOnRemove = false
-            }
+            val composePanel = ComposePanel().apply { isDisposeOnRemove = false }
             composePanel.setContent {
                 var state by remember { mutableStateOf(0) }
 
@@ -342,9 +333,7 @@ class ComposePanelTest {
             var size = Size.Zero
             val composePanel = ComposePanel()
             composePanel.setContent {
-                Box(Modifier.fillMaxSize().onGloballyPositioned {
-                    size = it.size.toSize()
-                })
+                Box(Modifier.fillMaxSize().onGloballyPositioned { size = it.size.toSize() })
             }
 
             val frame = JFrame()
@@ -380,15 +369,12 @@ class ComposePanelTest {
 
         runBlocking(MainUIDispatcher) {
             val composePanel = ComposePanel()
-            composePanel.setContent {
-                Text("Content")
-            }
+            composePanel.setContent { Text("Content") }
 
             val frame = JFrame()
             try {
-                val content = JPanel(BorderLayout()).apply {
-                    add(composePanel, BorderLayout.CENTER)
-                }
+                val content =
+                    JPanel(BorderLayout()).apply { add(composePanel, BorderLayout.CENTER) }
                 frame.contentPane.add(content)
                 frame.pack()
 
@@ -410,19 +396,14 @@ class ComposePanelTest {
             val composePanel = ComposePanel()
             composePanel.setContent {
                 LazyColumn(modifier = Modifier.sizeIn(maxHeight = 500.dp)) {
-                    repeat(100_000) {
-                        item {
-                            Text("Text $it")
-                        }
-                    }
+                    repeat(100_000) { item { Text("Text $it") } }
                 }
             }
 
             val frame = JFrame()
             try {
-                val content = JPanel(BorderLayout()).apply {
-                    add(composePanel, BorderLayout.CENTER)
-                }
+                val content =
+                    JPanel(BorderLayout()).apply { add(composePanel, BorderLayout.CENTER) }
                 frame.contentPane.add(content)
                 frame.pack()
 
@@ -442,21 +423,12 @@ class ComposePanelTest {
 
         runBlocking(MainUIDispatcher) {
             val composePanel = ComposePanel()
-            composePanel.setContent {
-                LazyColumn {
-                    repeat(100_000) {
-                        item {
-                            Text("Text $it")
-                        }
-                    }
-                }
-            }
+            composePanel.setContent { LazyColumn { repeat(100_000) { item { Text("Text $it") } } } }
 
             val frame = JFrame()
             try {
-                val content = JPanel(BorderLayout()).apply {
-                    add(composePanel, BorderLayout.CENTER)
-                }
+                val content =
+                    JPanel(BorderLayout()).apply { add(composePanel, BorderLayout.CENTER) }
                 frame.contentPane.add(content)
                 frame.contentPane.preferredSize = Dimension(200, 300)
                 frame.pack()
@@ -480,19 +452,21 @@ class ComposePanelTest {
         val composePanel = ComposePanel()
         composePanel.setBounds(25, 25, 50, 50)
         composePanel.setContent {
-            Box(Modifier.size(50.dp)
-                .onPointerEvent(PointerEventType.Enter) { enterEvents++ }
-                .onPointerEvent(PointerEventType.Exit) { exitEvents++ }
+            Box(
+                Modifier.size(50.dp)
+                    .onPointerEvent(PointerEventType.Enter) { enterEvents++ }
+                    .onPointerEvent(PointerEventType.Exit) { exitEvents++ }
             )
         }
 
         val window = JFrame()
         window.size = Dimension(200, 200)
         try {
-            val content = JPanel(BorderLayout()).apply {
-                layout = null
-                add(composePanel, BorderLayout.CENTER)
-            }
+            val content =
+                JPanel(BorderLayout()).apply {
+                    layout = null
+                    add(composePanel, BorderLayout.CENTER)
+                }
             window.contentPane.add(content)
             window.isVisible = true
 
@@ -526,7 +500,7 @@ class ComposePanelTest {
                         jPanels.add(it)
                     }
                 },
-                modifier = Modifier.size(100.dp)
+                modifier = Modifier.size(100.dp),
             )
         }
 
@@ -554,14 +528,13 @@ class ComposePanelTest {
     }
 
     @Test
-    fun `ComposePanel returns non-null preferred size before added to hierarchy`() = runApplicationTest {
-        val composePanel = ComposePanel()
-        composePanel.setContent {
-            Text("Hello")
-        }
+    fun `ComposePanel returns non-null preferred size before added to hierarchy`() =
+        runApplicationTest {
+            val composePanel = ComposePanel()
+            composePanel.setContent { Text("Hello") }
 
-        assertNotNull(composePanel.preferredSize)
-    }
+            assertNotNull(composePanel.preferredSize)
+        }
 
     @Test
     fun focusablePopup_withComponentLayerType_inComposePanel_grabsFocus() {
@@ -577,28 +550,23 @@ class ComposePanelTest {
                         val composePanel = ComposePanel()
                         composePanel.setContent {
                             val focusRequester = remember { FocusRequester() }
-                            Box(Modifier
-                                .size(100.dp)
-                                .background(Color.Yellow)
-                                .focusRequester(focusRequester)
-                                .focusable()
-                                .onKeyEvent {
-                                    keyEventsOnParent.add(it)
-                                }
+                            Box(
+                                Modifier.size(100.dp)
+                                    .background(Color.Yellow)
+                                    .focusRequester(focusRequester)
+                                    .focusable()
+                                    .onKeyEvent { keyEventsOnParent.add(it) }
                             )
-                            LaunchedEffect(Unit) {
-                                focusRequester.requestFocus()
-                            }
+                            LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
                             if (showPopup) {
                                 Popup(
-                                    properties = PopupProperties(
-                                        focusable = true,
-                                        dismissOnBackPress = true,
-                                    ),
-                                    onDismissRequest = {
-                                        dismissPopupRequested = true
-                                    }
+                                    properties =
+                                        PopupProperties(
+                                            focusable = true,
+                                            dismissOnBackPress = true,
+                                        ),
+                                    onDismissRequest = { dismissPopupRequested = true },
                                 ) {
                                     Box(Modifier.size(50.dp))
                                 }
@@ -642,18 +610,10 @@ class ComposePanelTest {
                     runApplicationTest {
                         val composePanel = ComposePanel()
                         composePanel.setContent {
-                            Box(Modifier
-                                .size(200.dp)
-                                .background(Color.Yellow)
-                            )
+                            Box(Modifier.size(200.dp).background(Color.Yellow))
                             if (showPopup) {
-                                Popup(
-                                    properties = PopupProperties(focusable = false),
-                                ) {
-                                    Box(Modifier
-                                        .size(50.dp)
-                                        .background(Color.Blue)
-                                    )
+                                Popup(properties = PopupProperties(focusable = false)) {
+                                    Box(Modifier.size(50.dp).background(Color.Blue))
                                 }
                             }
                         }
@@ -669,7 +629,8 @@ class ComposePanelTest {
                         val initialChildren = window.layeredPane.components
                         showPopup = true
                         awaitIdle()
-                        val newLayer = (window.layeredPane.components.toSet() - initialChildren).single()
+                        val newLayer =
+                            (window.layeredPane.components.toSet() - initialChildren).single()
                         assertEquals(50, newLayer.size.width)
                         assertEquals(50, newLayer.size.height)
                     }
@@ -688,9 +649,7 @@ class ComposePanelTest {
         composePanel.setContent {
             TextField(
                 state = rememberTextFieldState(),
-                Modifier.onFocusChanged {
-                    isTextFieldFocused = it.isFocused
-                }
+                Modifier.onFocusChanged { isTextFieldFocused = it.isFocused },
             )
         }
 
@@ -732,14 +691,16 @@ class ComposePanelTest {
             val window = JFrame()
             try {
                 window.size = Dimension(200, 200)
-                val scrollPane = JScrollPane(
-                    JPanel().apply {
-                        layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                        add(composePanel)
-                        add(javax.swing.Box.createVerticalStrut(1000))
-                    }
-                )
-                scrollPane.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+                val scrollPane =
+                    JScrollPane(
+                        JPanel().apply {
+                            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                            add(composePanel)
+                            add(javax.swing.Box.createVerticalStrut(1000))
+                        }
+                    )
+                scrollPane.horizontalScrollBarPolicy =
+                    ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
                 window.contentPane.add(scrollPane, BorderLayout.CENTER)
                 window.isVisible = true
 
@@ -752,7 +713,8 @@ class ComposePanelTest {
                 assertThat(scrollPane.viewport.viewPosition.y).isEqualTo(0)
 
                 // Scroll a lot and check that the Swing JScrollPane was scrolled
-                // Note that we need two scroll events for now because Compose can't partially consume
+                // Note that we need two scroll events for now because Compose can't partially
+                // consume
                 // scroll events. So one event is needed to scroll Compose content to the end, and
                 // another one to scroll JScrollPane.
                 window.sendMouseWheelEvent(wheelRotation = 1000.0)
@@ -787,7 +749,11 @@ class ComposePanelTest {
             composePanel.redispatchUnconsumedMouseWheelEvents = true
             val scrollState = ScrollState(0)
             composePanel.setContent {
-                Box(Modifier.size(200.dp, 300.dp).verticalScroll(scrollState).background(Color.Green)) {
+                Box(
+                    Modifier.size(200.dp, 300.dp)
+                        .verticalScroll(scrollState)
+                        .background(Color.Green)
+                ) {
                     Column(Modifier.fillMaxWidth().height(400.dp)) {
                         Text("Hello World")
                         Text("Hello World")
@@ -801,12 +767,13 @@ class ComposePanelTest {
             val container = JPanel(null)
             container.size = Dimension(200, 200)
 
-            val scrollPane = JScrollPane(
-                JPanel().apply {
-                    layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                    add(javax.swing.Box.createVerticalStrut(1000), BorderLayout.CENTER)
-                }
-            )
+            val scrollPane =
+                JScrollPane(
+                    JPanel().apply {
+                        layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                        add(javax.swing.Box.createVerticalStrut(1000), BorderLayout.CENTER)
+                    }
+                )
             scrollPane.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
 
             composePanel.size = Dimension(200, 300)
@@ -829,7 +796,8 @@ class ComposePanelTest {
                 assertThat(scrollState.value).isGreaterThan(0)
 
                 // Scroll a lot and check that the Swing JScrollPane was scrolled
-                // Note that we need two scroll events for now because Compose can't partially consume
+                // Note that we need two scroll events for now because Compose can't partially
+                // consume
                 // scroll events. So one event is needed to scroll Compose content to the end, and
                 // another one to scroll JScrollPane.
                 window.sendMouseWheelEvent(wheelRotation = 1000.0)
@@ -871,28 +839,26 @@ class ComposePanelTest {
 
         val window = JFrame()
         try {
-            window.contentPane.add(ComposePanel().apply {
-                isClearFocusOnMouseDownEnabled = enabled
-                setContent {
-                    Column(Modifier.size(300.dp, 400.dp)) {
-                        BasicTextField(
-                            state = rememberTextFieldState(),
-                            modifier = Modifier
-                                .testTag("textField")
-                                .fillMaxWidth()
-                                .height(100.dp)
-                                .focusRequester(focusRequester)
-                                .onFocusChanged {
-                                    textFieldIsFocused = it.isFocused
-                                }
-                        )
-                        LaunchedEffect(Unit) {
-                            focusRequester.requestFocus()
+            window.contentPane.add(
+                ComposePanel().apply {
+                    isClearFocusOnMouseDownEnabled = enabled
+                    setContent {
+                        Column(Modifier.size(300.dp, 400.dp)) {
+                            BasicTextField(
+                                state = rememberTextFieldState(),
+                                modifier =
+                                    Modifier.testTag("textField")
+                                        .fillMaxWidth()
+                                        .height(100.dp)
+                                        .focusRequester(focusRequester)
+                                        .onFocusChanged { textFieldIsFocused = it.isFocused },
+                            )
+                            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+                            Box(Modifier.testTag("box").fillMaxWidth().weight(1f))
                         }
-                        Box(Modifier.testTag("box").fillMaxWidth().weight(1f))
                     }
                 }
-            })
+            )
             window.size = Dimension(300, 400)
             window.isVisible = true
 
@@ -918,32 +884,42 @@ class ComposePanelTest {
 
         val bgColor = java.awt.Color.RED
 
-        val canvas = java.awt.Canvas().apply {
-            size = Dimension(300, 300)
-            background = bgColor
-        }
+        val canvas =
+            java.awt.Canvas().apply {
+                size = Dimension(300, 300)
+                background = bgColor
+            }
 
-        val composePanel = ComposePanel().apply {
-            size = Dimension(300, 300)
-            background = bgColor
-        }
-        composePanel.setContent { }
+        val composePanel =
+            ComposePanel().apply {
+                size = Dimension(300, 300)
+                background = bgColor
+            }
+        composePanel.setContent {}
 
-
-        val frame = JFrame().apply {
-            contentPane.layout = BoxLayout(contentPane, BoxLayout.Y_AXIS)
-            contentPane.add(canvas)
-            contentPane.add(composePanel)
-            size = Dimension(300, 600)
-        }
+        val frame =
+            JFrame().apply {
+                contentPane.layout = BoxLayout(contentPane, BoxLayout.Y_AXIS)
+                contentPane.add(canvas)
+                contentPane.add(composePanel)
+                size = Dimension(300, 600)
+            }
 
         try {
             frame.isVisible = true
             awaitIdle()
             val robot = java.awt.Robot()
             val frameBounds = frame.bounds
-            val canvasPixel = robot.getPixelColor(frameBounds.centerX.toInt(), (0.25 * frameBounds.centerY).toInt())
-            val composePixel = robot.getPixelColor(frameBounds.centerX.toInt(), (0.75 * frameBounds.centerY).toInt())
+            val canvasPixel =
+                robot.getPixelColor(
+                    frameBounds.centerX.toInt(),
+                    (0.25 * frameBounds.centerY).toInt(),
+                )
+            val composePixel =
+                robot.getPixelColor(
+                    frameBounds.centerX.toInt(),
+                    (0.75 * frameBounds.centerY).toInt(),
+                )
             assertThat(composePixel).isEqualTo(canvasPixel)
         } finally {
             frame.dispose()
@@ -953,16 +929,16 @@ class ComposePanelTest {
     @Test
     fun `ComposePanel provides LocalAwtWindow`() = runApplicationTest {
         var localWindow: Window? = null
-        val composePanel = ComposePanel().apply {
-            size = Dimension(300, 300)
-            setContent {
-                localWindow = LocalAwtWindow.current
+        val composePanel =
+            ComposePanel().apply {
+                size = Dimension(300, 300)
+                setContent { localWindow = LocalAwtWindow.current }
             }
-        }
-        val frame = JFrame().apply {
-            contentPane.add(composePanel)
-            size = Dimension(300, 300)
-        }
+        val frame =
+            JFrame().apply {
+                contentPane.add(composePanel)
+                size = Dimension(300, 300)
+            }
 
         try {
             frame.isVisible = true
@@ -977,18 +953,22 @@ class ComposePanelTest {
     private fun testSettingComposePanelSizeProperty(
         setSizeProperty: ComposePanel.(Dimension) -> Unit,
         getSizeProperty: Component.() -> Dimension?,
-        layoutManager: LayoutManager = LayoutManager(getSizeProperty)
+        layoutManager: LayoutManager = LayoutManager(getSizeProperty),
     ) = runApplicationTest {
         val intrinsicSize = Dimension(500, 400)
-        val composePanel = ComposePanel().also {
-            it.setContent {
-                Box(Modifier.fillMaxSize().size(intrinsicSize.width.dp, intrinsicSize.height.dp))
+        val composePanel =
+            ComposePanel().also {
+                it.setContent {
+                    Box(
+                        Modifier.fillMaxSize().size(intrinsicSize.width.dp, intrinsicSize.height.dp)
+                    )
+                }
             }
-        }
-        val frame = JFrame().apply {
-            contentPane.layout = layoutManager
-            contentPane.add(composePanel)
-        }
+        val frame =
+            JFrame().apply {
+                contentPane.layout = layoutManager
+                contentPane.add(composePanel)
+            }
 
         try {
             val testedSize = Dimension(300, 200)
@@ -998,51 +978,54 @@ class ComposePanelTest {
 
             composePanel.setSizeProperty(Dimension(testedSize.width, UNSPECIFIED_DIMENSION_VALUE))
             frame.pack()
-            assertThat(composePanel.size).isEqualTo(Dimension(testedSize.width, intrinsicSize.height))
+            assertThat(composePanel.size)
+                .isEqualTo(Dimension(testedSize.width, intrinsicSize.height))
 
             composePanel.setSizeProperty(Dimension(UNSPECIFIED_DIMENSION_VALUE, testedSize.height))
             frame.pack()
-            assertThat(composePanel.size).isEqualTo(Dimension(intrinsicSize.width, testedSize.height))
+            assertThat(composePanel.size)
+                .isEqualTo(Dimension(intrinsicSize.width, testedSize.height))
 
             composePanel.setSizeProperty(UnspecifiedDimension())
             frame.pack()
-            assertThat(composePanel.size).isEqualTo(Dimension(intrinsicSize.width, intrinsicSize.height))
+            assertThat(composePanel.size)
+                .isEqualTo(Dimension(intrinsicSize.width, intrinsicSize.height))
         } finally {
             frame.dispose()
         }
     }
 
     @Test
-    fun `ComposePanel minSize`() = testSettingComposePanelSizeProperty(
-        setSizeProperty = { minimumSize = it },
-        getSizeProperty = { minimumSize }
-    )
+    fun `ComposePanel minSize`() =
+        testSettingComposePanelSizeProperty(
+            setSizeProperty = { minimumSize = it },
+            getSizeProperty = { minimumSize },
+        )
 
     @Test
-    fun `ComposePanel prefSize`() = testSettingComposePanelSizeProperty(
-        setSizeProperty = { preferredSize = it },
-        getSizeProperty = { preferredSize }
-    )
+    fun `ComposePanel prefSize`() =
+        testSettingComposePanelSizeProperty(
+            setSizeProperty = { preferredSize = it },
+            getSizeProperty = { preferredSize },
+        )
 
     @Test
-    fun `ComposePanel maxSize`() = testSettingComposePanelSizeProperty(
-        setSizeProperty = { maximumSize = it },
-        getSizeProperty = { maximumSize }
-    )
+    fun `ComposePanel maxSize`() =
+        testSettingComposePanelSizeProperty(
+            setSizeProperty = { maximumSize = it },
+            getSizeProperty = { maximumSize },
+        )
 
     @Test
     fun `ComposePanel with popup prefSize`() = runApplicationTest {
-        val composePanel = ComposePanel().also {
-            it.setContent {
-                Box(Modifier.size(100.dp))
-                Popup {
-                    Box(Modifier.size(500.dp))
+        val composePanel =
+            ComposePanel().also {
+                it.setContent {
+                    Box(Modifier.size(100.dp))
+                    Popup { Box(Modifier.size(500.dp)) }
                 }
             }
-        }
-        val frame = JFrame().apply {
-            contentPane.add(composePanel)
-        }
+        val frame = JFrame().apply { contentPane.add(composePanel) }
 
         try {
             frame.pack()
@@ -1052,11 +1035,44 @@ class ComposePanelTest {
             frame.dispose()
         }
     }
+
+    @Test
+    fun `ComposePanel sets LocalAwtWindow after reattachment`() {
+        runBlocking(MainUIDispatcher) {
+            var localAwtWindow: Window? = null
+            val composePanel = ComposePanel()
+            composePanel.isDisposeOnRemove = false
+            composePanel.setContent {
+                localAwtWindow = LocalAwtWindow.current
+                Box(Modifier.size(100.dp))
+            }
+
+            fun packWindowAssertAndCleanup() {
+                val window = JFrame()
+                try {
+                    window.contentPane.add(composePanel)
+                    window.pack()
+                    assertEquals(window, localAwtWindow)
+                } finally {
+                    window.contentPane.remove(composePanel)
+                    window.dispose()
+                }
+            }
+
+            try {
+                packWindowAssertAndCleanup()
+                packWindowAssertAndCleanup()
+            } finally {
+                composePanel.dispose()
+            }
+        }
+    }
 }
 
 private fun LayoutManager(sizeFunction: Component.() -> Dimension?): LayoutManager {
-    return object: LayoutManager {
+    return object : LayoutManager {
         override fun addLayoutComponent(name: String?, comp: Component?) = Unit
+
         override fun removeLayoutComponent(comp: Component?) = Unit
 
         override fun preferredLayoutSize(parent: Container): Dimension {

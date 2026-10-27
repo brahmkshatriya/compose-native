@@ -44,6 +44,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.testutils.WithTouchSlop
 import androidx.compose.testutils.assertModifierIsPure
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ComposeUiFlags
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
@@ -62,6 +64,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.isDebugInspectorInfoEnabled
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.MouseButton
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -127,10 +130,11 @@ class DraggableTest {
                 durationMillis = 100,
             )
         }
-        val lastTotal = rule.runOnIdle {
-            assertThat(total).isGreaterThan(0)
-            total
-        }
+        val lastTotal =
+            rule.runOnIdle {
+                assertThat(total).isGreaterThan(0)
+                total
+            }
         rule.onNodeWithTag(draggableBoxTag).performTouchInput {
             this.swipe(
                 start = this.center,
@@ -160,10 +164,11 @@ class DraggableTest {
                 durationMillis = 100,
             )
         }
-        val lastTotal = rule.runOnIdle {
-            assertThat(total).isGreaterThan(0)
-            total
-        }
+        val lastTotal =
+            rule.runOnIdle {
+                assertThat(total).isGreaterThan(0)
+                total
+            }
         rule.onNodeWithTag(draggableBoxTag).performTouchInput {
             this.swipe(
                 start = this.center,
@@ -392,10 +397,11 @@ class DraggableTest {
                 durationMillis = 100,
             )
         }
-        val lastTotal = rule.runOnIdle {
-            assertThat(total).isGreaterThan(0)
-            total
-        }
+        val lastTotal =
+            rule.runOnIdle {
+                assertThat(total).isGreaterThan(0)
+                total
+            }
         rule.onNodeWithTag(draggableBoxTag).performTouchInput {
             this.swipe(
                 start = this.center,
@@ -538,11 +544,12 @@ class DraggableTest {
                 durationMillis = 100,
             )
         }
-        val prevTotal = rule.runOnIdle {
-            assertThat(total).isGreaterThan(0f)
-            enabled.value = false
-            total
-        }
+        val prevTotal =
+            rule.runOnIdle {
+                assertThat(total).isGreaterThan(0f)
+                enabled.value = false
+                total
+            }
         rule.onNodeWithTag(draggableBoxTag).performTouchInput {
             this.swipe(
                 start = this.center,
@@ -568,11 +575,12 @@ class DraggableTest {
             swipeRight(startX = TouchPadStart, endX = TouchPadEnd)
         }
 
-        val prevTotal = rule.runOnIdle {
-            assertThat(total).isGreaterThan(0f)
-            enabled.value = false
-            total
-        }
+        val prevTotal =
+            rule.runOnIdle {
+                assertThat(total).isGreaterThan(0f)
+                enabled.value = false
+                total
+            }
         rule.sendIndirectPointerInput(
             indirectPointerEventPrimaryDirectionalMotionAxis =
                 IndirectPointerEventPrimaryDirectionalMotionAxis.X,
@@ -921,11 +929,12 @@ class DraggableTest {
                 down(center)
                 moveBy(Offset(100f, 100f))
             }
-            val prevTotal = rule.runOnIdle {
-                assertThat(dragStopped).isEqualTo(0f)
-                assertThat(total).isGreaterThan(0f)
-                total
-            }
+            val prevTotal =
+                rule.runOnIdle {
+                    assertThat(dragStopped).isEqualTo(0f)
+                    assertThat(total).isGreaterThan(0f)
+                    total
+                }
             state.drag(MutatePriority.PreventUserInput) { dragBy(123f) }
             rule.runOnIdle {
                 assertThat(total).isEqualTo(prevTotal + 123f)
@@ -966,11 +975,12 @@ class DraggableTest {
                 repeat(5) { moveBy(delta = defaultForwardMovementAlongXAxis) }
             }
 
-            val prevTotal = rule.runOnIdle {
-                assertThat(dragStopped).isEqualTo(0f)
-                assertThat(total).isGreaterThan(0f)
-                total
-            }
+            val prevTotal =
+                rule.runOnIdle {
+                    assertThat(dragStopped).isEqualTo(0f)
+                    assertThat(total).isGreaterThan(0f)
+                    total
+                }
             state.drag(MutatePriority.PreventUserInput) { dragBy(123f) }
             rule.runOnIdle {
                 assertThat(total).isEqualTo(prevTotal + 123f)
@@ -2017,6 +2027,70 @@ class DraggableTest {
         }
 
         rule.runOnIdle { assertThat(deltas).isZero() }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun multiPointerFinger_shouldNotMoveIfOnlySecondaryPointersMoves_withTrackpadPanHoverFixEnabled() {
+        val originalFlag = ComposeUiFlags.isTrackpadPanHoverFixEnabled
+        try {
+            ComposeUiFlags.isTrackpadPanHoverFixEnabled = true
+            var deltas = 0f
+            rule.setContent {
+                Box(
+                    Modifier.fillMaxSize()
+                        .draggable(
+                            rememberDraggableState { deltas += it },
+                            orientation = Orientation.Vertical,
+                        )
+                )
+            }
+
+            rule.onRoot().performTouchInput {
+                down(0, center)
+                down(1, center + Offset(50f, 0f))
+                repeat(5) {
+                    // only pointer 1 moved, we should not drag as it is the secondary pointer
+                    moveBy(1, Offset(0f, 50f))
+                }
+                up(0)
+                up(1)
+            }
+
+            rule.runOnIdle { assertThat(deltas).isZero() }
+        } finally {
+            ComposeUiFlags.isTrackpadPanHoverFixEnabled = originalFlag
+        }
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun multiPointerMouse_shouldMoveWithSecondaryMouseButtonOnAndroid_withTrackpadPanHoverFixEnabled() {
+        val originalFlag = ComposeUiFlags.isTrackpadPanHoverFixEnabled
+        try {
+            ComposeUiFlags.isTrackpadPanHoverFixEnabled = true
+            var deltas = 0f
+            rule.setContent {
+                Box(
+                    Modifier.fillMaxSize()
+                        .draggable(
+                            rememberDraggableState { deltas += it },
+                            orientation = Orientation.Vertical,
+                        )
+                )
+            }
+
+            rule.onRoot().performMouseInput {
+                moveTo(center)
+                press(MouseButton.Secondary)
+                moveBy(Offset(0f, 100f))
+                release(MouseButton.Secondary)
+            }
+
+            rule.runOnIdle { assertThat(deltas).isNonZero() }
+        } finally {
+            ComposeUiFlags.isTrackpadPanHoverFixEnabled = originalFlag
+        }
     }
 
     @Test

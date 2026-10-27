@@ -20,7 +20,6 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.runComposeUiTest
 import kotlin.test.Test
 import kotlin.test.assertNotNull
-import kotlinx.coroutines.runBlocking
 
 @OptIn(ExperimentalTestApi::class)
 class UiKitPlatformClipboardTest {
@@ -37,7 +36,7 @@ class UiKitPlatformClipboardTest {
 
         setContent {
             clipboard = LocalClipboard.current
-            nativeClipboard = clipboard?.nativeClipboard
+            nativeClipboard = clipboard.nativeClipboard
         }
 
         waitForIdle()
@@ -54,7 +53,7 @@ class UiKitPlatformClipboardTest {
 
         setContent {
             clipboard = LocalClipboard.current
-            nativeClipboard = clipboard?.nativeClipboard
+            nativeClipboard = clipboard.nativeClipboard
         }
 
         waitForIdle()
@@ -62,11 +61,9 @@ class UiKitPlatformClipboardTest {
         assertNotNull(clipboard)
         assertNotNull(nativeClipboard)
 
-        runBlocking {
-            // Can't do much more asserts in a unit test. For more checks use an instrumented test
-            clipboard!!.setClipEntry(null)
-            clipboard!!.setClipEntry(ClipEntry.withPlainText("test"))
-            clipboard!!.getClipEntry()
-        }
+        // Can't do much more asserts in a unit test. For more checks use an instrumented test
+        clipboard.setClipEntry(null)
+        clipboard.setClipEntry(ClipEntry.withPlainText("test"))
+        clipboard.getClipEntry()
     }
 }

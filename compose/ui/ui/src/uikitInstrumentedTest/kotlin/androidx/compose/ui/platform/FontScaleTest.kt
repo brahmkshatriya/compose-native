@@ -29,8 +29,12 @@ import kotlin.test.assertEquals
 import platform.UIKit.UIContentSizeCategoryAccessibilityLarge
 import platform.UIKit.UIContentSizeCategoryLarge
 
-internal class FontScaleInHostingViewTest: FontScaleTest({ runUIKitInstrumentedTest(true, it) })
-internal class FontScaleInHostingViewControllerTest: FontScaleTest({ runUIKitInstrumentedTest(false, it) })
+@Suppress("unused")
+internal class FontScaleInHostingViewTest : FontScaleTest({ runUIKitInstrumentedTest(true, it) })
+
+@Suppress("unused")
+internal class FontScaleInHostingViewControllerTest :
+    FontScaleTest({ runUIKitInstrumentedTest(false, it) })
 
 internal abstract class FontScaleTest(
     private val runUIKitInstrumentedTest: (UIKitInstrumentedTest.() -> Unit) -> Unit
@@ -64,9 +68,7 @@ internal abstract class FontScaleTest(
 
         setContent {
             if (showPopup.value) {
-                Popup {
-                    popupFontScale = LocalDensity.current.fontScale
-                }
+                Popup { popupFontScale = LocalDensity.current.fontScale }
             }
         }
 
@@ -77,8 +79,8 @@ internal abstract class FontScaleTest(
     }
 
     /**
-     * Android popups use platform density instead of inheriting the creator's LocalDensity override.
-     * Keep iOS scene layers aligned with that behavior for both density and font scale.
+     * Android popups use platform density instead of inheriting the creator's LocalDensity
+     * override. Keep iOS scene layers aligned with that behavior for both density and font scale.
      */
     @Test
     fun popupUsesPlatformDensityInsteadOfCreatorLocalDensity() = runUIKitInstrumentedTest {
@@ -124,9 +126,7 @@ internal abstract class FontScaleTest(
         var dialogFontScale = 0f
 
         setContent {
-            Dialog(onDismissRequest = {}) {
-                dialogFontScale = LocalDensity.current.fontScale
-            }
+            Dialog(onDismissRequest = {}) { dialogFontScale = LocalDensity.current.fontScale }
         }
 
         assertEquals(DefaultFontScale, dialogFontScale)
@@ -136,6 +136,7 @@ internal abstract class FontScaleTest(
         waitUntil { dialogFontScale == AccessibilityLargeFontScale }
     }
 
+    @Suppress("ConstPropertyName")
     private companion object {
         const val DefaultFontScale = 1f
         const val AccessibilityLargeFontScale = 1.5f

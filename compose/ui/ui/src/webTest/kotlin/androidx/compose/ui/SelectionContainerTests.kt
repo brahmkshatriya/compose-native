@@ -26,8 +26,6 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -36,6 +34,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -48,19 +47,38 @@ import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.pointerevents.PointerEvent
 import org.w3c.dom.pointerevents.PointerEventInit
 
-
 class SelectionContainerTests : OnCanvasTests {
 
     private fun HTMLCanvasElement.doClick() {
-        dispatchEvent(PointerEvent("pointerdown", PointerEventInit(clientX = 8, clientY = 8, buttons = 1, button = 1, pointerType = "mouse")))
-        dispatchEvent(PointerEvent("pointerup", PointerEventInit(clientX = 8, clientY = 8, buttons = 0, button = 1, pointerType = "mouse")))
+        dispatchEvent(
+            PointerEvent(
+                "pointerdown",
+                PointerEventInit(
+                    clientX = 8,
+                    clientY = 8,
+                    buttons = 1,
+                    button = 1,
+                    pointerType = "mouse",
+                ),
+            )
+        )
+        dispatchEvent(
+            PointerEvent(
+                "pointerup",
+                PointerEventInit(
+                    clientX = 8,
+                    clientY = 8,
+                    buttons = 0,
+                    button = 1,
+                    pointerType = "mouse",
+                ),
+            )
+        )
     }
 
     @Test
     fun canSelectOneWordUsingDoubleClick() = runTest {
-        val syncChannel = Channel<Selection?>(
-            1, onBufferOverflow = BufferOverflow.DROP_OLDEST
-        )
+        val syncChannel = Channel<Selection?>(1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
         var viewConfiguration: ViewConfiguration? = null
 
@@ -70,15 +88,17 @@ class SelectionContainerTests : OnCanvasTests {
             androidx.compose.foundation.text.selection.SelectionContainer(
                 state = selectionState,
                 modifier = Modifier.fillMaxSize(),
-                // TODO: investigate why explicit @Composable is needed https://youtrack.jetbrains.com/issue/CMP-7410
-                children = @Composable {
-                    Column {
-                        Text("qwerty uiopasdfghjklzxcvbnm")
-                        Text("mnbvcxzlkjhgfdsapoiuytrewq")
-                    }
+                // TODO: investigate why explicit @Composable is needed
+                // https://youtrack.jetbrains.com/issue/CMP-7410
+                children =
+                    @Composable {
+                        Column {
+                            Text("qwerty uiopasdfghjklzxcvbnm")
+                            Text("mnbvcxzlkjhgfdsapoiuytrewq")
+                        }
 
-                    viewConfiguration = LocalViewConfiguration.current
-                }
+                        viewConfiguration = LocalViewConfiguration.current
+                    },
             )
 
             LaunchedEffect(Unit) {
@@ -100,7 +120,7 @@ class SelectionContainerTests : OnCanvasTests {
         // delay to prevent interpreting next single click as a second click of the previous click,
         // so we make sure it won't appear as a double click
         withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis)
+            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
         }
 
         // now double click:
@@ -113,7 +133,7 @@ class SelectionContainerTests : OnCanvasTests {
         assertEquals(6, selection.end.offset)
 
         withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis)
+            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
         }
         // reset selection by clicking
         canvas.doClick()
@@ -123,9 +143,7 @@ class SelectionContainerTests : OnCanvasTests {
 
     @Test
     fun canSelectOneLineUsingTripleClick() = runTest {
-        val syncChannel = Channel<Selection?>(
-            1, onBufferOverflow = BufferOverflow.DROP_OLDEST
-        )
+        val syncChannel = Channel<Selection?>(1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
         var viewConfiguration: ViewConfiguration? = null
 
@@ -135,14 +153,15 @@ class SelectionContainerTests : OnCanvasTests {
             androidx.compose.foundation.text.selection.SelectionContainer(
                 state = selectionState,
                 modifier = Modifier.fillMaxSize(),
-                children = @Composable {
-                    Column {
-                        Text("012345 uiopasdfghjklzxcvbnm")
-                        Text("mnbvcxzlkjhgfdsapoiuytrewq")
-                    }
+                children =
+                    @Composable {
+                        Column {
+                            Text("012345 uiopasdfghjklzxcvbnm")
+                            Text("mnbvcxzlkjhgfdsapoiuytrewq")
+                        }
 
-                    viewConfiguration = LocalViewConfiguration.current
-                }
+                        viewConfiguration = LocalViewConfiguration.current
+                    },
             )
 
             LaunchedEffect(Unit) {
@@ -166,7 +185,7 @@ class SelectionContainerTests : OnCanvasTests {
         assertEquals(27, selection.end.offset)
 
         withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis)
+            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
         }
         // reset selection by clicking
         canvas.doClick()
@@ -176,9 +195,7 @@ class SelectionContainerTests : OnCanvasTests {
 
     @Test
     fun twoSingleClicksDoNotTriggerSelection() = runTest {
-        val syncChannel = Channel<Selection?>(
-            5, onBufferOverflow = BufferOverflow.DROP_OLDEST
-        )
+        val syncChannel = Channel<Selection?>(5, onBufferOverflow = BufferOverflow.DROP_OLDEST)
         var selectionCallbackCounter = 0
 
         var viewConfiguration: ViewConfiguration? = null
@@ -189,14 +206,15 @@ class SelectionContainerTests : OnCanvasTests {
             androidx.compose.foundation.text.selection.SelectionContainer(
                 state = selectionState,
                 modifier = Modifier.fillMaxSize(),
-                children = @Composable {
-                    Column {
-                        Text("asdfgh uiopasdfghjklzxcvbnm")
-                        Text("mnbvcxzlkjhgfdsapoiuytrewq")
-                    }
+                children =
+                    @Composable {
+                        Column {
+                            Text("asdfgh uiopasdfghjklzxcvbnm")
+                            Text("mnbvcxzlkjhgfdsapoiuytrewq")
+                        }
 
-                    viewConfiguration = LocalViewConfiguration.current
-                }
+                        viewConfiguration = LocalViewConfiguration.current
+                    },
             )
             LaunchedEffect(Unit) {
                 snapshotFlow { selectionState.selection }
@@ -215,12 +233,12 @@ class SelectionContainerTests : OnCanvasTests {
         canvas.doClick()
         // pause to ensure no double-click
         withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis)
+            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
         }
         // second single click
         canvas.doClick()
         withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis)
+            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
         }
 
         repeat(selectionCallbackCounter) {

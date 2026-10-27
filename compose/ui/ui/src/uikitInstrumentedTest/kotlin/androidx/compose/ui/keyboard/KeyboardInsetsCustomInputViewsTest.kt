@@ -50,12 +50,10 @@ internal class KeyboardInsetsCustomInputViewsTest {
 
     @Test
     fun testInputAccessoryViewHeightChangesKeyboardOverlapByItsHeight() = runUIKitInstrumentedTest {
-        val inputAccessoryView = mutableStateOf(
-            customInputAccessoryView(frame = CGRectZero.readValue())
-        )
-        val nonZeroInputAccessoryView = customInputAccessoryView(
-            frame = CGRectMake(0.0, 0.0, 150.0, 100.0)
-        )
+        val inputAccessoryView =
+            mutableStateOf(customInputAccessoryView(frame = CGRectZero.readValue()))
+        val nonZeroInputAccessoryView =
+            customInputAccessoryView(frame = CGRectMake(0.0, 0.0, 150.0, 100.0))
 
         setContentWithChangingInputAccessoryView(inputAccessoryView)
         waitForIdle()
@@ -68,7 +66,7 @@ internal class KeyboardInsetsCustomInputViewsTest {
         assertTrue(keyboardOverlapWithoutAccessory > 100.0)
         assertTrue(
             keyboardOverlapWithAccessory > keyboardOverlapWithoutAccessory,
-            "Expected a nonzero input accessory view to increase keyboard overlap"
+            "Expected a nonzero input accessory view to increase keyboard overlap",
         )
         assertEquals(100.0, keyboardOverlapWithAccessory - keyboardOverlapWithoutAccessory)
     }
@@ -82,102 +80,111 @@ internal class KeyboardInsetsCustomInputViewsTest {
     }
 
     @Test
-    fun testNonZeroFrameInputViewHasMatchingKeyboardOverlap_iPhone() = runUIKitInstrumentedTest(
-        ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
-        ignoreNotes = "Run for iPhone only"
-    ) {
-        val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
+    fun testNonZeroFrameInputViewHasMatchingKeyboardOverlap_iPhone() =
+        runUIKitInstrumentedTest(
+            ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
+            ignoreNotes = "Run for iPhone only",
+        ) {
+            val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
 
-        setContentWithInputViews(customInputView = customInputView)
+            setContentWithInputViews(customInputView = customInputView)
 
-        assertEquals(300.0, keyboardOverlapHeight())
-    }
-
-    @Test
-    fun testNonZeroFrameInputViewHasAtLeastCustomViewHeight_iPad() = runUIKitInstrumentedTest(
-        ignoreIf = !UIKitInstrumentedTest.isRunningOnIPad,
-        ignoreNotes = "Run for iPad only"
-    ) {
-        val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
-
-        setContentWithInputViews(customInputView = customInputView)
-
-        assertKeyboardOverlapAtLeast(300.0)
-    }
+            assertEquals(300.0, keyboardOverlapHeight())
+        }
 
     @Test
-    fun testNonZeroFrameInputAndZeroFrameAccessoryViewsHaveMatchingKeyboardOverlap_iPhone() = runUIKitInstrumentedTest(
-        ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
-        ignoreNotes = "Run for iPhone only"
-    ) {
-        val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
-        val customInputAccessoryView = customInputAccessoryView(frame = CGRectZero.readValue())
+    fun testNonZeroFrameInputViewHasAtLeastCustomViewHeight_iPad() =
+        runUIKitInstrumentedTest(
+            ignoreIf = !UIKitInstrumentedTest.isRunningOnIPad,
+            ignoreNotes = "Run for iPad only",
+        ) {
+            val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
 
-        setContentWithInputViews(customInputView, customInputAccessoryView)
+            setContentWithInputViews(customInputView = customInputView)
 
-        assertEquals(300.0, keyboardOverlapHeight())
-    }
-
-    @Test
-    fun testNonZeroFrameInputAndZeroFrameAccessoryViewsHaveAtLeastCustomViewHeight_iPad() = runUIKitInstrumentedTest(
-        ignoreIf = !UIKitInstrumentedTest.isRunningOnIPad,
-        ignoreNotes = "Run for iPad only"
-    ) {
-        val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
-        val customInputAccessoryView = customInputAccessoryView(frame = CGRectZero.readValue())
-
-        setContentWithInputViews(customInputView, customInputAccessoryView)
-
-        assertKeyboardOverlapAtLeast(300.0)
-    }
+            assertKeyboardOverlapAtLeast(300.0)
+        }
 
     @Test
-    fun testNonZeroFrameInputAndAccessoryViewsHaveMatchingKeyboardOverlap_iPhone() = runUIKitInstrumentedTest(
-        ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
-        ignoreNotes = "Run for iPhone only"
-    ) {
-        val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
-        val customInputAccessoryView = customInputAccessoryView(frame = CGRectMake(0.0, 0.0, 150.0, 100.0))
+    fun testNonZeroFrameInputAndZeroFrameAccessoryViewsHaveMatchingKeyboardOverlap_iPhone() =
+        runUIKitInstrumentedTest(
+            ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
+            ignoreNotes = "Run for iPhone only",
+        ) {
+            val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
+            val customInputAccessoryView = customInputAccessoryView(frame = CGRectZero.readValue())
 
-        setContentWithInputViews(customInputView, customInputAccessoryView)
+            setContentWithInputViews(customInputView, customInputAccessoryView)
 
-        assertEquals(400.0, keyboardOverlapHeight())
-    }
+            assertEquals(300.0, keyboardOverlapHeight())
+        }
 
     @Test
-    fun testNonZeroFrameInputAndAccessoryViewsHaveAtLeastCustomViewsHeight_iPad() = runUIKitInstrumentedTest(
-        ignoreIf = !UIKitInstrumentedTest.isRunningOnIPad,
-        ignoreNotes = "Run for iPad only"
-    ) {
-        val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
-        val customInputAccessoryView = customInputAccessoryView(frame = CGRectMake(0.0, 0.0, 150.0, 100.0))
+    fun testNonZeroFrameInputAndZeroFrameAccessoryViewsHaveAtLeastCustomViewHeight_iPad() =
+        runUIKitInstrumentedTest(
+            ignoreIf = !UIKitInstrumentedTest.isRunningOnIPad,
+            ignoreNotes = "Run for iPad only",
+        ) {
+            val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
+            val customInputAccessoryView = customInputAccessoryView(frame = CGRectZero.readValue())
 
-        setContentWithInputViews(customInputView, customInputAccessoryView)
+            setContentWithInputViews(customInputView, customInputAccessoryView)
 
-        assertKeyboardOverlapAtLeast(400.0)
-    }
+            assertKeyboardOverlapAtLeast(300.0)
+        }
+
+    @Test
+    fun testNonZeroFrameInputAndAccessoryViewsHaveMatchingKeyboardOverlap_iPhone() =
+        runUIKitInstrumentedTest(
+            ignoreIf = UIKitInstrumentedTest.isRunningOnIPad,
+            ignoreNotes = "Run for iPhone only",
+        ) {
+            val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
+            val customInputAccessoryView =
+                customInputAccessoryView(frame = CGRectMake(0.0, 0.0, 150.0, 100.0))
+
+            setContentWithInputViews(customInputView, customInputAccessoryView)
+
+            assertEquals(400.0, keyboardOverlapHeight())
+        }
+
+    @Test
+    fun testNonZeroFrameInputAndAccessoryViewsHaveAtLeastCustomViewsHeight_iPad() =
+        runUIKitInstrumentedTest(
+            ignoreIf = !UIKitInstrumentedTest.isRunningOnIPad,
+            ignoreNotes = "Run for iPad only",
+        ) {
+            val customInputView = customInputView(frame = CGRectMake(0.0, 0.0, 150.0, 300.0))
+            val customInputAccessoryView =
+                customInputAccessoryView(frame = CGRectMake(0.0, 0.0, 150.0, 100.0))
+
+            setContentWithInputViews(customInputView, customInputAccessoryView)
+
+            assertKeyboardOverlapAtLeast(400.0)
+        }
 
     private fun UIKitInstrumentedTest.setContentWithInputViews(
         customInputView: UIInputView? = null,
-        customInputAccessoryView: UIView? = null
+        customInputAccessoryView: UIView? = null,
     ) {
         val focusRequester = FocusRequester()
 
         setContent {
+            @Suppress("DEPRECATION")
             TextField(
                 value = "",
                 onValueChange = {},
-                keyboardOptions = KeyboardOptions(
-                    platformImeOptions = PlatformImeOptions {
-                        customInputView?.let(::inputView)
-                        customInputAccessoryView?.let(::inputAccessoryView)
-                    }
-                ),
-                modifier = Modifier.focusRequester(focusRequester)
+                keyboardOptions =
+                    KeyboardOptions(
+                        platformImeOptions =
+                            PlatformImeOptions {
+                                customInputView?.let(::inputView)
+                                customInputAccessoryView?.let(::inputAccessoryView)
+                            }
+                    ),
+                modifier = Modifier.focusRequester(focusRequester),
             )
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
         }
     }
 
@@ -187,30 +194,30 @@ internal class KeyboardInsetsCustomInputViewsTest {
         val focusRequester = FocusRequester()
 
         setContent {
+            @Suppress("DEPRECATION")
             TextField(
                 value = "",
                 onValueChange = {},
-                keyboardOptions = KeyboardOptions(
-                    platformImeOptions = PlatformImeOptions {
-                        inputAccessoryView(inputAccessoryView.value)
-                    }
-                ),
-                modifier = Modifier.focusRequester(focusRequester)
+                keyboardOptions =
+                    KeyboardOptions(
+                        platformImeOptions =
+                            PlatformImeOptions { inputAccessoryView(inputAccessoryView.value) }
+                    ),
+                modifier = Modifier.focusRequester(focusRequester),
             )
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
         }
     }
 
-    private fun customInputView(frame: CValue<CGRect>): UIInputView = object : UIInputView(
-        frame = frame,
-        inputViewStyle = UIInputViewStyle.UIInputViewStyleKeyboard
-    ) {}
+    private fun customInputView(frame: CValue<CGRect>): UIInputView =
+        object :
+            UIInputView(
+                frame = frame,
+                inputViewStyle = UIInputViewStyle.UIInputViewStyleKeyboard,
+            ) {}
 
-    private fun customInputAccessoryView(frame: CValue<CGRect>): UIView = object : UIView(
-        frame = frame
-    ) {}
+    private fun customInputAccessoryView(frame: CValue<CGRect>): UIView =
+        object : UIView(frame = frame) {}
 
     private fun keyboardOverlapHeight(): Double {
         val keyboardFrame = KeyboardVisibilityListener.keyboardFrame
@@ -224,8 +231,7 @@ internal class KeyboardInsetsCustomInputViewsTest {
         val keyboardOverlap = keyboardOverlapHeight()
         assertTrue(
             keyboardOverlap >= minimum,
-            "Expected keyboard overlap >= $minimum, actual=$keyboardOverlap"
+            "Expected keyboard overlap >= $minimum, actual=$keyboardOverlap",
         )
     }
-
 }

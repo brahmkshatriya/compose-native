@@ -37,35 +37,35 @@ import platform.UIKit.UIWindow
 @OptIn(ExperimentalForeignApi::class)
 internal fun UIWindow.touchDown(location: DpOffset, fromEdge: Boolean = false): UITouch {
     return UITouch.touchAtPoint(
-        point = location.toCGPoint(),
-        withType = UITouchTypeDirect,
-        inWindow = this,
-        tapCount = 1L,
-        fromEdge = fromEdge
-    ).also {
-        it.send()
-    }
+            point = location.toCGPoint(),
+            withType = UITouchTypeDirect,
+            inWindow = this,
+            tapCount = 1L,
+            fromEdge = fromEdge,
+        )
+        .also { it.send() }
 }
 
 @OptIn(ExperimentalForeignApi::class)
 internal fun UIWindow.mouseDown(location: DpOffset): UITouch {
     return UITouch.touchAtPoint(
-        point = location.toCGPoint(),
-        withType = UITouchTypeIndirect,
-        inWindow = this,
-        tapCount = 1L,
-        fromEdge = false
-    ).also {
-        it.send()
-    }
+            point = location.toCGPoint(),
+            withType = UITouchTypeIndirect,
+            inWindow = this,
+            tapCount = 1L,
+            fromEdge = false,
+        )
+        .also { it.send() }
 }
 
 @OptIn(ExperimentalForeignApi::class)
+@Suppress("UnusedReceiverParameter")
 internal fun UIWindow.getTouchesEvent(): UIEvent {
     return UITouch.getTouchesEvent()
 }
 
 @OptIn(ExperimentalForeignApi::class)
+@Suppress("UnusedReceiverParameter")
 internal fun UIWindow.resetTouches() {
     UITouch.endAllTouches()
 }

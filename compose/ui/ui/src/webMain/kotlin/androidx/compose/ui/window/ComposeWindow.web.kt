@@ -17,67 +17,65 @@
 package androidx.compose.ui.window
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.ComposeUiFlags
 import kotlin.js.js
 import kotlinx.browser.document
+import org.w3c.dom.DocumentReadyState
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.LOADING
 import org.w3c.dom.OPEN
 import org.w3c.dom.ShadowRootInit
 import org.w3c.dom.ShadowRootMode
 
 /**
- * Creates the composition in HTML canvas created in parent container identified by [viewportContainerId] id.
- * This size of canvas is adjusted with the size of the container
+ * Creates the composition in HTML canvas created in parent container identified by
+ * [viewportContainerId] id. This size of canvas is adjusted with the size of the container
  *
- * @param viewportContainerId - The id of an HTML element which would host the Compose Viewport.
- * If it's null, then `<body>` will be used as a container.
- * @param configure - A lambda for Compose Viewport configuration.
- * See [ComposeViewportConfiguration] for available options.
+ * @param viewportContainerId - The id of an HTML element which would host the Compose Viewport. If
+ *   it's null, then `<body>` will be used as a container.
+ * @param configure - A lambda for Compose Viewport configuration. See
+ *   [ComposeViewportConfiguration] for available options.
  * @param content - The Composable content to be rendered on the `<canvas>` element.
  */
 fun ComposeViewport(
     viewportContainerId: String? = null,
     configure: ComposeViewportConfiguration.() -> Unit = {},
-    content: @Composable () -> Unit = { }
+    content: @Composable () -> Unit = {},
 ) {
     onDomReady {
-        val providedContainer = if (viewportContainerId != null) {
-            document.getElementById(viewportContainerId) ?: error("failed to find element by viewportContainerId: '$viewportContainerId'")
-        } else {
-            document.body ?: error("failed to find <body> element")
-        }
+        val providedContainer =
+            if (viewportContainerId != null) {
+                document.getElementById(viewportContainerId)
+                    ?: error(
+                        "failed to find element by viewportContainerId: '$viewportContainerId'"
+                    )
+            } else {
+                document.body ?: error("failed to find <body> element")
+            }
 
         ComposeViewport(providedContainer, configure, content)
     }
 }
 
 /**
- * Creates the composition in HTML canvas created in parent container identified by [viewportContainer] Element.
- * This size of canvas is adjusted with the size of the container which must have definite dimensions.
+ * Creates the composition in HTML canvas created in parent container identified by
+ * [viewportContainer] Element. This size of canvas is adjusted with the size of the container which
+ * must have definite dimensions.
  *
- * <container>
- *   <positioning_container>
- *     <shadow_container.shadow>
- *       <style/>
- *       <app_container>
- *         <canvas/>
- *         <a11y_container/>
- *       </app_container>
- *     </shadow_container>
- *     <interopContainer/>
- *   <positioning_container/>
- * </container>
+ * <container> <positioning_container> <shadow_container.shadow> <style/> <app_container> <canvas/>
+ * <a11y_container/> </app_container> </shadow_container> <interopContainer/>
+ * <positioning_container/> </container>
  *
  * Note: The viewportContainer will be cleared on composition creation.
  */
 fun ComposeViewport(
     viewportContainer: Element,
     configure: ComposeViewportConfiguration.() -> Unit = {},
-    content: @Composable () -> Unit = { }
+    content: @Composable () -> Unit = {},
 ) = onSkikoReady {
-
     clearNodeChildren(viewportContainer)
     if (!isWebGL2Supported()) {
         // We can't do anything meaningful in this case, except showing a meaningful message.
@@ -87,19 +85,22 @@ fun ComposeViewport(
         return@onSkikoReady
     }
 
-    // Create a common positioning container (parent html element) for shadow and the interop containers
-    // to position at the same place - the interop container is position at 0,0 relative to the shadow.
+    // Create a common positioning container (parent html element) for shadow and the interop
+    // containers
+    // to position at the same place - the interop container is position at 0,0 relative to the
+    // shadow.
     // It simplifies the positioning of the interop views in the container.
-    val positioningContainer = ComposeWindow.createComposeComponent()
+    val positioningContainer = ComposeWindowCustomElement.createComposeComponent()
     positioningContainer.style.apply {
         position = "relative"
-        display = "block" // inline by default for custom elements; 'block' - is the default for <div>
+        display =
+            "block" // inline by default for custom elements; 'block' - is the default for <div>
         width = "100%"
         height = "100%"
     }
     viewportContainer.appendChild(positioningContainer)
 
-    //shadow container
+    // shadow container
     val shadowContainer = document.createElement("div") as HTMLDivElement
     shadowContainer.style.apply {
         position = "relative"
@@ -108,54 +109,57 @@ fun ComposeViewport(
     }
     positioningContainer.appendChild(shadowContainer)
 
-    //shadow
+    // shadow
     val shadowRoot = shadowContainer.attachShadow(ShadowRootInit(ShadowRootMode.OPEN))
     val shadowRootStyle = document.createElement("style")
 
-    // don't style backing .compose-backing-field with opacity, see https://youtrack.jetbrains.com/projects/CMP/issues/CMP-8611
-    shadowRootStyle.textContent = """
-        :host {
-            -webkit-touch-callout: none; 
-            -webkit-user-select: none; 
-            user-select: none;
-            
-            position: relative;
-            padding: 0;
+    // don't style backing .compose-backing-field with opacity, see
+    // https://youtrack.jetbrains.com/projects/CMP/issues/CMP-8611
+    shadowRootStyle.textContent =
+        """
+         :host {
+             -webkit-touch-callout: none;
+             -webkit-user-select: none;
+             user-select: none;
+
+             position: relative;
+             padding: 0;
+         }
+
+         canvas {
+                display: block;
+                width: 100%;
+                height: 100%;
+         }
+
+        .compose-backing-field {
+             position: absolute;
+             height: calc(var(--compose-internal-web-backing-input-height) * 1px);
+             width: calc(var(--compose-internal-web-backing-input-width) * 1px);
+             left: min(var(--compose-internal-web-backing-input-left) * 1px, 100vw - var(--compose-internal-web-backing-input-width) * 1px);
+             top: min(var(--compose-internal-web-backing-input-top) * 1px, 100vh - var(--compose-internal-web-backing-input-height) * 1px);
+
+             overflow: hidden;
+             align-content: center;
+             background: transparent;
+             border: none;
+             caret-color: transparent;
+             color: transparent;
+             font-size: 20px;
+             forced-color-adjust: none;
+             outline: none;
+             padding: 0;
+             resize: none;
+             text-shadow: none;
+             user-select: none;
+             white-space: pre;
+             z-index: -1;
         }
-        
-        canvas {
-               display: block;
-               width: 100%;
-               height: 100%;
-        }
-        
-       .compose-backing-field {
-            position: absolute;
-            height: calc(var(--compose-internal-web-backing-input-height) * 1px);
-            width: calc(var(--compose-internal-web-backing-input-width) * 1px);
-            left: min(var(--compose-internal-web-backing-input-left) * 1px, 100vw - var(--compose-internal-web-backing-input-width) * 1px);
-            top: min(var(--compose-internal-web-backing-input-top) * 1px, 100vh - var(--compose-internal-web-backing-input-height) * 1px);
-            
-            overflow: hidden;
-            align-content: center;
-            background: transparent;
-            border: none;
-            caret-color: transparent;
-            color: transparent;
-            font-size: 20px;
-            forced-color-adjust: none;
-            outline: none;
-            padding: 0;
-            resize: none;
-            text-shadow: none;
-            user-select: none;
-            white-space: pre;
-            z-index: -1;
-       }
-    """.trimIndent()
+        """
+            .trimIndent()
     shadowRoot.appendChild(shadowRootStyle)
 
-    //app container (canvas + a11y)
+    // app container (canvas + a11y)
     val appContainer = document.createElement("div") as HTMLElement
     appContainer.style.apply {
         position = "relative"
@@ -164,33 +168,58 @@ fun ComposeViewport(
     }
     shadowRoot.appendChild(appContainer)
 
-    //canvas
+    // canvas
     val canvas = document.createElement("canvas") as HTMLCanvasElement
     canvas.setAttribute("tabindex", "0")
     canvas.setAttribute("role", "generic")
     canvas.setAttribute("draggable", "true")
     canvas.style.outline = "none" // Fixes https://youtrack.jetbrains.com/issue/CMP-9040
-    canvas.style.setProperty("touch-action", "pan-x pan-y") // allow the browser to scroll when compose is not scrolling
+
+    val touchAction = buildString {
+        // Allow the browser to scroll vertically or to "refresh" when compose is not scrolling:
+        append("pan-y")
+
+        // 'pan-x' often interferes with vertical scroll in Compose - the browser steals the gesture
+        // and won't let Compose scroll.
+        // pan-x might be needed when ComposeViewport in nested in HTML ViewPager-like horizontally
+        // scrollable containers.
+        // In those cases the workaround is to forcefully modify the touch-action style property by
+        // adding pan-x.
+        // We keep it disabled by default:
+        // append(" pan-x")
+
+        if (ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled) {
+            // We do it conditionally, only when 0-position-change move events are supported.
+            // Otherwise, the pointerInput handles do not receive such move events and have no
+            // chance to
+            // consume them. This lets the browser to zoom in/out (unexpectedly).
+            append(
+                " pinch-zoom"
+            ) // allow the browser to pinch-zoom when the app doesn't handle it itself
+        }
+    }
+    canvas.style.setProperty("touch-action", touchAction)
     appContainer.appendChild(canvas)
 
-    //a11y container
+    // a11y container
     val configuration = ComposeViewportConfiguration().apply(configure)
-    val a11yContainerElement = if (configuration.isA11YEnabled) {
-        (document.createElement("div") as HTMLDivElement).also { a11yContainer ->
-            a11yContainer.style.apply {
-                position = "absolute"
-                top = "0"
-                left = "0"
-                width = "100%"
-                height = "100%"
+    val a11yContainerElement =
+        if (configuration.isA11YEnabled) {
+            (document.createElement("div") as HTMLDivElement).also { a11yContainer ->
+                a11yContainer.style.apply {
+                    position = "absolute"
+                    top = "0"
+                    left = "0"
+                    width = "100%"
+                    height = "100%"
+                }
+                appContainer.appendChild(a11yContainer)
             }
-            appContainer.appendChild(a11yContainer)
+        } else {
+            null
         }
-    } else {
-        null
-    }
 
-    //interop container
+    // interop container
     val interopContainerElement = document.createElement("div") as HTMLDivElement
     interopContainerElement.style.apply {
         position = "absolute"
@@ -202,25 +231,39 @@ fun ComposeViewport(
     // To keep DOM focus on the canvas after Tabbing out of the interop container:
     positioningContainer.appendChild(createHtmlFocusDecoy(canvas))
 
-    val composeWindow = ComposeWindow(
-        canvas = canvas,
-        rootNode = shadowRoot,
-        viewportContainer = viewportContainer,
-        layerRoot = appContainer,
-        interopContainerElement = interopContainerElement,
-        a11yContainerElement = a11yContainerElement,
-        content = content,
-        configuration = configuration,
-        state = DefaultWindowState(viewportContainer)
-    )
+    val composeWindow =
+        ComposeWindow(
+            htmlCanvas = canvas,
+            rootNode = shadowRoot,
+            viewportContainer = viewportContainer,
+            layerRoot = appContainer,
+            interopContainerElement = interopContainerElement,
+            a11yContainerElement = a11yContainerElement,
+            content = content,
+            configuration = configuration,
+            state = DefaultWindowState(viewportContainer),
+        )
 
-    ComposeWindow.registerDisposableFor(positioningContainer) {
-        composeWindow.dispose()
+    ComposeWindowCustomElement.onDispose(positioningContainer) { composeWindow.dispose() }
+}
+
+// In K/JS target, an application can't start right away. We should wait until skiko.wasm is ready.
+// We'll do it implicitly, rather than asking the app developers to call it.
+private fun onSkikoReady(block: () -> Unit) {
+    @Suppress("INVISIBLE_REFERENCE") org.jetbrains.skiko.wasm.onWasmReady { block() }
+}
+
+private fun onDomReady(block: () -> Unit) {
+    // https://developer.mozilla.org/en-US/docs/Web/API/Document/DOMContentLoaded_event
+    if (document.readyState == DocumentReadyState.LOADING) {
+        document.addEventListener("DOMContentLoaded", { block() })
+    } else {
+        block()
     }
 }
 
 private fun clearNodeChildren(node: Element): Unit =
-    //language=JavaScript
+    // language=JavaScript
     js(
         """
         {
@@ -228,23 +271,29 @@ private fun clearNodeChildren(node: Element): Unit =
         }
     """
     )
-private const val WEBGL2_NOT_SUPPORTED_MSG = "This application requires WebGL2. " +
-    "Please ensure your browser is updated and hardware acceleration is enabled in the browser settings."
+
+private const val WEBGL2_NOT_SUPPORTED_MSG =
+    "This application requires WebGL2. " +
+        "Please ensure your browser is updated and hardware acceleration is enabled in the browser settings."
+
 private fun isWebGL2Supported(): Boolean =
     js("!!document.createElement('canvas').getContext('webgl2')")
 
 /**
  * Creates a hidden focusable decoy element to be placed after the interop container in DOM order.
  *
- * When Tab is pressed on the last HTML interop element, the browser would normally
- * move focus to the address bar since no further focusable elements exist.
- * This decoy intercepts that focus and immediately redirects it to the canvas,
- * allowing Compose's focus manager to continue navigation to the next Compose element.
+ * When Tab is pressed on the last HTML interop element, the browser would normally move focus to
+ * the address bar since no further focusable elements exist. This decoy intercepts that focus and
+ * immediately redirects it to the canvas, allowing Compose's focus manager to continue navigation
+ * to the next Compose element.
  */
 private fun createHtmlFocusDecoy(canvas: HTMLCanvasElement): HTMLDivElement =
     (document.createElement("div") as HTMLDivElement).apply {
         tabIndex = 0
-        setAttribute("aria-hidden", "true") // Usually it's an antipattern for a focusable element, but it's okay for a decoy element.
+        setAttribute(
+            "aria-hidden",
+            "true",
+        ) // Usually it's an antipattern for a focusable element, but it's okay for a decoy element.
         style.apply {
             position = "absolute" // to remove the decoy completely out of the document layout tree
             width = "0"
@@ -252,7 +301,5 @@ private fun createHtmlFocusDecoy(canvas: HTMLCanvasElement): HTMLDivElement =
             outline = "none"
             setProperty("pointer-events", "none")
         }
-        addEventListener("focus") {
-            canvas.focus()
-        }
+        addEventListener("focus") { canvas.focus() }
     }

@@ -37,24 +37,27 @@ import org.jetbrains.androidx.build.util.ParsedBuildScript.Line
 internal abstract class VerifyForkDependenciesTask : DefaultTask() {
     init {
         group = "verification"
-        description = "Verifies commonMain dependencies in build-fork.gradle files, " +
-            "to be aligned with build.gradle dependencies."
+        description =
+            "Verifies commonMain dependencies in build-fork.gradle files, " +
+                "to be aligned with build.gradle dependencies."
         onlyIf { forkFile.exists() }
     }
 
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    val buildFile: File get() = project.scriptFile("build")
+    val buildFile: File
+        get() = project.scriptFile("build")
 
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
-    val forkFile: File get() = project.scriptFile("build-fork")
+    val forkFile: File
+        get() = project.scriptFile("build-fork")
 
     // needed for CacheableTask to work properly
     @get:OutputFile
     val verificationMarker: File
-        get() = project.layout.buildDirectory.file("fork-dependencies-verification.marker")
-            .get().asFile
+        get() =
+            project.layout.buildDirectory.file("fork-dependencies-verification.marker").get().asFile
 
     @TaskAction
     fun verify() {
@@ -64,12 +67,13 @@ internal abstract class VerifyForkDependenciesTask : DefaultTask() {
         if (expectedForkText != forkText) {
             throw GradleException(
                 buildString {
-                    appendLine("Fork dependencies are out of date.")
-                    appendLine("Run ./gradlew jbUpdateForkDependencies to update them.")
-                    appendLine()
-                    appendLine("Diff:")
-                    append(textDiff(forkText, expectedForkText))
-                }.trimEnd()
+                        appendLine("Fork dependencies are out of date.")
+                        appendLine("Run ./gradlew jbUpdateForkDependencies to update them.")
+                        appendLine()
+                        appendLine("Diff:")
+                        append(textDiff(forkText, expectedForkText))
+                    }
+                    .trimEnd()
             )
         }
     }
@@ -78,8 +82,9 @@ internal abstract class VerifyForkDependenciesTask : DefaultTask() {
 fun textDiff(one: String, two: String): String {
     val oneLines = one.lines().toSet()
     val twoLines = two.lines().toSet()
-    val diffLines = oneLines.filter { it !in twoLines }.map { "-$it" } +
-        twoLines.filter { it !in oneLines }.map { "+$it" }
+    val diffLines =
+        oneLines.filter { it !in twoLines }.map { "-$it" } +
+            twoLines.filter { it !in oneLines }.map { "+$it" }
     return diffLines.joinToString("\n")
 }
 
@@ -87,14 +92,18 @@ fun textDiff(one: String, two: String): String {
 internal abstract class UpdateForkDependenciesTask : DefaultTask() {
     init {
         group = "verification"
-        description = "Updates commonMain dependencies in build-fork.gradle files," +
-            "to align them with build.gradle dependencies."
+        description =
+            "Updates commonMain dependencies in build-fork.gradle files," +
+                "to align them with build.gradle dependencies."
         onlyIf { forkFile.exists() }
         outputs.upToDateWhen { false }
     }
 
-    private val buildFile: File get() = project.scriptFile("build")
-    private val forkFile: File get() = project.scriptFile("build-fork")
+    private val buildFile: File
+        get() = project.scriptFile("build")
+
+    private val forkFile: File
+        get() = project.scriptFile("build-fork")
 
     @TaskAction
     fun update() {
@@ -116,58 +125,59 @@ internal fun Project.configureForkDependenciesTasks() {
     tasks.register("jbUpdateForkDependencies", UpdateForkDependenciesTask::class.java)
 }
 
-internal fun updatedForkText(
-    originalText: String,
-    forkText: String,
-): String {
+internal fun updatedForkText(originalText: String, forkText: String): String {
     val original = ParsedBuildScript(originalText)
     val fork = ParsedBuildScript(forkText)
-    return fork.withSourceSets { forkedSourceSet ->
-        val originalSourceSet = original.sourceSetOf(forkedSourceSet.name)
-        if (originalSourceSet == null || forkedSourceSet.hasMarker(SUPPRESS_VERIFICATION_MARKER)) {
-            forkedSourceSet.lines
-        } else {
-            updatedForkLines(originalSourceSet.lines, forkedSourceSet.lines)
+    return fork
+        .withSourceSets { forkedSourceSet ->
+            val originalSourceSet = original.sourceSetOf(forkedSourceSet.name)
+            if (
+                originalSourceSet == null || forkedSourceSet.hasMarker(SUPPRESS_VERIFICATION_MARKER)
+            ) {
+                forkedSourceSet.lines
+            } else {
+                updatedForkLines(originalSourceSet.lines, forkedSourceSet.lines)
+            }
         }
-    }.text
+        .text
 }
 
 private fun updatedForkLines(originalLines: List<Line>, forkLines: List<Line>): List<Line> {
     fun modifiedOriginalLine(originalLine: Line): Line? {
         if (originalLine !is Line.Dependency) return originalLine
 
-        val forkLine = forkLines.filterIsInstance<Line.Dependency>().firstOrNull {
-            it.hasSameArtifactAs(originalLine) || it.hasSameAssociatedProjectAs(originalLine)
-        }
+        val forkLine =
+            forkLines.filterIsInstance<Line.Dependency>().firstOrNull {
+                it.hasSameArtifactAs(originalLine) || it.hasSameAssociatedProjectAs(originalLine)
+            }
 
         return when {
-            forkLine == null ->
-                originalLine
+            forkLine == null -> originalLine
 
-            forkLine.hasMarker(SUPPRESS_VERIFICATION_MARKER) ->
-                null
+            forkLine.hasMarker(SUPPRESS_VERIFICATION_MARKER) -> null
 
-            forkLine.hasSameArtifactAs(originalLine) ->
-                originalLine.withMaxVersionFrom(forkLine)
+            forkLine.hasSameArtifactAs(originalLine) -> originalLine.withMaxVersionFrom(forkLine)
 
             forkLine.hasSameAssociatedProjectAs(originalLine) ->
                 originalLine.copy(
                     comments = forkLine.comments,
                     inlineComment = forkLine.inlineComment,
-                    dependency = forkLine.dependency
+                    dependency = forkLine.dependency,
                 )
 
             else -> error("Should not happen")
         }
     }
 
-    fun modifiedForkLine(forkLine: Line): Line? = when {
-        forkLine !is Line.Dependency -> forkLine
-        forkLine.hasMarker(SUPPRESS_VERIFICATION_MARKER) -> forkLine
-        else -> null
-    }
+    fun modifiedForkLine(forkLine: Line): Line? =
+        when {
+            forkLine !is Line.Dependency -> forkLine
+            forkLine.hasMarker(SUPPRESS_VERIFICATION_MARKER) -> forkLine
+            else -> null
+        }
 
-    return originalLines.mapNotNull(::modifiedOriginalLine)
+    return originalLines
+        .mapNotNull(::modifiedOriginalLine)
         .plus(Line.Blank)
         .plus(forkLines.mapNotNull(::modifiedForkLine))
         .collapseBlankLines()
@@ -175,13 +185,12 @@ private fun updatedForkLines(originalLines: List<Line>, forkLines: List<Line>): 
 
 private const val SUPPRESS_VERIFICATION_MARKER = "jbVerifyForkDependencies: suppress"
 
-private fun List<Line>.collapseBlankLines() = this
-    .dropWhile { it is Line.Blank }
-    .collapseInnerBlankLines()
-    .dropLastWhile { it is Line.Blank }
+private fun List<Line>.collapseBlankLines() =
+    this.dropWhile { it is Line.Blank }.collapseInnerBlankLines().dropLastWhile { it is Line.Blank }
 
-private fun List<Line>.collapseInnerBlankLines() =
-    filterIndexed { index, line -> line !is Line.Blank || getOrNull(index - 1) !is Line.Blank }
+private fun List<Line>.collapseInnerBlankLines() = filterIndexed { index, line ->
+    line !is Line.Blank || getOrNull(index - 1) !is Line.Blank
+}
 
 private fun Line.Dependency.withMaxVersionFrom(other: Line.Dependency): Line.Dependency {
     val dependency = dependency as Dependency.Artifact
@@ -196,9 +205,7 @@ private fun Dependency.Artifact.withMaxVersionFrom(
     val forkedVersion = Version.parseOrNull(forked.version)
 
     return if (
-        originalVersion != null &&
-        forkedVersion != null &&
-        forkedVersion > originalVersion
+        originalVersion != null && forkedVersion != null && forkedVersion > originalVersion
     ) {
         copy(version = forked.version)
     } else {
@@ -218,8 +225,9 @@ private fun Line.Dependency.hasSameAssociatedProjectAs(other: Line.Dependency) =
         dependency.associatedProjectPath == other.dependency.associatedProjectPath
 
 private val Dependency.associatedProjectPath
-    get() = when (this) {
-        is Dependency.Artifact -> projectPathForCoordinates(group, module)
-        is Dependency.Project -> path
-        is Dependency.LibsReference -> null
-    }
+    get() =
+        when (this) {
+            is Dependency.Artifact -> projectPathForCoordinates(group, module)
+            is Dependency.Project -> path
+            is Dependency.Arbitrary -> null
+        }

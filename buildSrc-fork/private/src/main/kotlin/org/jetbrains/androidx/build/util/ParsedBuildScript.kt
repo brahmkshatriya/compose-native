@@ -20,23 +20,28 @@ internal class ParsedBuildScript(val text: String) {
     private val nameToSourceSet: Map<String, SourceSet> by lazy {
         val sourceSetsBlock = Block(text).subblock("sourceSets {") ?: return@lazy emptyMap()
         val sourceSetsText = sourceSetsBlock.text
-        MAIN_SOURCE_SET_REFERENCE.findAll(sourceSetsText).mapNotNull { match ->
-            val sourceSetBlock =
-                sourceSetsBlock.subblockAt(match.range.last) ?: return@mapNotNull null
-            val dependenciesBlock = if (".dependencies" in match.value) {
-                sourceSetBlock
-            } else {
-                sourceSetBlock.subblock("dependencies {") ?: return@mapNotNull null
+        SOURCE_SET_REFERENCE.findAll(sourceSetsText)
+            .mapNotNull { match ->
+                val sourceSetBlock =
+                    sourceSetsBlock.subblockAt(match.range.last) ?: return@mapNotNull null
+                val dependenciesBlock =
+                    if (".dependencies" in match.value) {
+                        sourceSetBlock
+                    } else {
+                        sourceSetBlock.subblock("dependencies {") ?: return@mapNotNull null
+                    }
+                match.groupValues[1] to
+                    SourceSet(
+                        name = match.groupValues[1],
+                        lineBefore =
+                            sourceSetsText
+                                .substring(0, match.range.first)
+                                .trimEnd()
+                                .substringAfterLast('\n'),
+                        dependencies = dependenciesBlock,
+                    )
             }
-            match.groupValues[1] to SourceSet(
-                name = match.groupValues[1],
-                lineBefore = sourceSetsText
-                    .substring(0, match.range.first)
-                    .trimEnd()
-                    .substringAfterLast('\n'),
-                dependencies = dependenciesBlock,
-            )
-        }.toMap()
+            .toMap()
     }
 
     fun sourceSetOf(name: String): SourceSet? = nameToSourceSet[name]
@@ -67,17 +72,18 @@ internal class ParsedBuildScript(val text: String) {
                     if (nesting == 0) {
                         when {
                             lineText.isBlank() -> add(Line.Blank)
-                            lineText.trimStart().startsWith("//") -> comments += lineText.trimStart()
+                            lineText.trimStart().startsWith("//") ->
+                                comments += lineText.trimStart()
                             // By design, only simple dependency declarations are managed;
                             // other lines are not supported at the moment.
-                            else -> parseLine(lineText)?.let { line ->
-                                add(line.copy(comments = comments.toList()))
-                                comments.clear()
-                            }
+                            else ->
+                                parseLine(lineText)?.let { line ->
+                                    add(line.copy(comments = comments.toList()))
+                                    comments.clear()
+                                }
                         }
                     }
-                    val nestingChange =
-                        lineText.count { it == '{' } - lineText.count { it == '}' }
+                    val nestingChange = lineText.count { it == '{' } - lineText.count { it == '}' }
                     if (nesting == 0 && nestingChange > 0) {
                         println(
                             "Warning: jbVerifyForkDependencies ignores unsupported nested blocks: " +
@@ -94,43 +100,45 @@ internal class ParsedBuildScript(val text: String) {
         internal fun textFor(lines: List<Line>): String =
             lines.joinToString("") { formattedLine(it, dependencies.declarationIndentation) }
 
-        private fun formattedLine(line: Line, indentation: String): String = when (line) {
-            Line.Blank -> "\n"
-            is Line.Dependency -> buildString {
-                line.comments.forEach { comment ->
-                    appendLine("$indentation$comment")
-                }
-                append("$indentation${line.type}(${line.dependency.formatted})")
-                if (line.inlineComment != null) {
-                    append(" ").append(line.inlineComment)
-                }
-                appendLine()
+        private fun formattedLine(line: Line, indentation: String): String =
+            when (line) {
+                Line.Blank -> "\n"
+                is Line.Dependency ->
+                    buildString {
+                        line.comments.forEach { comment -> appendLine("$indentation$comment") }
+                        append("$indentation${line.type}(${line.dependency.formatted})")
+                        if (line.inlineComment != null) {
+                            append(" ").append(line.inlineComment)
+                        }
+                        appendLine()
+                    }
             }
-        }
 
         private fun parseLine(text: String): Line.Dependency? {
             val (type, argument, inlineComment) =
-                DEPENDENCY_CALL.matchEntire(text)?.destructured
-                    ?: return null
-            val dependency = parseDependency(argument.trim()) ?: return null
+                DEPENDENCY_CALL.matchEntire(text)?.destructured ?: return null
             return Line.Dependency(
                 type = type,
-                dependency = dependency,
+                dependency = parseDependency(argument.trim()),
                 inlineComment = inlineComment.takeIf { it.isNotEmpty() },
             )
         }
 
-        private fun parseDependency(argument: String): Dependency? = when {
-            argument.startsWith("project(") && argument.endsWith(")") ->
-                Dependency.Project(
-                    argument.removeSurrounding("project(", ")").trim().trim('"', '\'')
-                )
+        private fun parseDependency(argument: String): Dependency =
+            when {
+                argument.startsWith("project(") && argument.endsWith(")") ->
+                    Dependency.Project(
+                        argument.removeSurrounding("project(", ")").trim().trim('"', '\'')
+                    )
 
-            argument.startsWith("libs.") -> Dependency.LibsReference(argument)
-            else -> argument.trim('"', '\'').split(":")
-                .takeIf { it.size == 3 }
-                ?.let { Dependency.Artifact(it[0], it[1], it[2]) }
-        }
+                else ->
+                    argument
+                        .trim('"', '\'')
+                        .split(":")
+                        .takeIf { it.size == 3 }
+                        ?.let { Dependency.Artifact(it[0], it[1], it[2]) }
+                        ?: Dependency.Arbitrary(argument)
+            }
     }
 
     internal sealed interface Line {
@@ -149,30 +157,26 @@ internal class ParsedBuildScript(val text: String) {
     internal sealed interface Dependency {
         val formatted: String
 
-        data class Artifact(
-            val group: String,
-            val module: String,
-            val version: String,
-        ) : Dependency {
-            override val formatted: String get() = "\"$group:$module:$version\""
+        data class Artifact(val group: String, val module: String, val version: String) :
+            Dependency {
+            override val formatted: String
+                get() = "\"$group:$module:$version\""
         }
 
-        data class Project(
-            val path: String,
-        ) : Dependency {
-            override val formatted: String get() = "project(\"$path\")"
+        data class Project(val path: String) : Dependency {
+            override val formatted: String
+                get() = "project(\"$path\")"
         }
 
-        data class LibsReference(
-            val notation: String,
-        ) : Dependency {
-            override val formatted: String get() = notation
+        data class Arbitrary(val notation: String) : Dependency {
+            override val formatted: String
+                get() = notation
         }
     }
 }
 
-private val MAIN_SOURCE_SET_REFERENCE =
-    Regex("""(?:val\s+)?(\w+Main)(?:\.dependencies|\s+by\s+\w+)?\s*\{""")
+private val SOURCE_SET_REFERENCE =
+    Regex("""(?:val\s+)?(\w+(?:Main|Test))(?:\.dependencies|\s+by\s+\w+)?\s*\{""")
 private val DEPENDENCY_CALL = Regex("""\s*(\w+)\((.*)\)(?:\s*\{)?\s*(//.*)?""")
 
 internal data class Block(
@@ -181,12 +185,14 @@ internal data class Block(
     val end: Int = source.length,
     val declarationIndentation: String = "",
 ) {
-    val text: String get() = source.substring(start, end)
+    val text: String
+        get() = source.substring(start, end)
 
-    val lines: List<String> get() =
-        // if text doesn't contain \n, it means it is an empty block (with zero lines)
-        // lineSequence won't help because it always returns one line
-        text.split('\n').dropLast(1)
+    val lines: List<String>
+        get() =
+            // if text doesn't contain \n, it means it is an empty block (with zero lines)
+            // lineSequence won't help because it always returns one line
+            text.split('\n').dropLast(1)
 
     fun subblock(marker: String): Block? {
         val markerStart = source.indexOf(marker, start)

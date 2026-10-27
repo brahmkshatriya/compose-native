@@ -24,21 +24,23 @@ import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextIndent
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import kotlin.math.ceil
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
-import kotlin.test.assertNotEquals
 import kotlinx.test.IgnoreJsTarget
 import kotlinx.test.IgnoreWasmTarget
 
-// Adopted tests from text/text/src/androidTest/java/androidx/compose/ui/text/android/selection/WordBoundaryTest.kt
+// Adopted tests from
+// text/text/src/androidTest/java/androidx/compose/ui/text/android/selection/WordBoundaryTest.kt
 @OptIn(InternalComposeUiApi::class)
 class SkikoParagraphTest {
     @BeforeTest
@@ -62,9 +64,7 @@ class SkikoParagraphTest {
         val text = "text"
         val paragraph = simpleParagraph(text)
 
-        assertFailsWith<IllegalArgumentException> {
-            paragraph.getWordBoundary(-1)
-        }
+        assertFailsWith<IllegalArgumentException> { paragraph.getWordBoundary(-1) }
     }
 
     @Test
@@ -72,9 +72,7 @@ class SkikoParagraphTest {
         val text = "text"
         val paragraph = simpleParagraph(text)
 
-        assertFailsWith<IllegalArgumentException> {
-            paragraph.getWordBoundary(text.length + 1)
-        }
+        assertFailsWith<IllegalArgumentException> { paragraph.getWordBoundary(text.length + 1) }
     }
 
     @Test
@@ -82,20 +80,14 @@ class SkikoParagraphTest {
         val text = "text"
         val paragraph = simpleParagraph(text)
 
-        assertEquals(
-            TextRange(0, text.length),
-            paragraph.getWordBoundary(text.length)
-        )
+        assertEquals(TextRange(0, text.length), paragraph.getWordBoundary(text.length))
     }
 
     @Test
     fun getWordBoundary_empty_string() {
         val paragraph = simpleParagraph("")
 
-        assertEquals(
-            TextRange(0, 0),
-            paragraph.getWordBoundary(0)
-        )
+        assertEquals(TextRange(0, 0), paragraph.getWordBoundary(0))
     }
 
     @Test
@@ -105,27 +97,27 @@ class SkikoParagraphTest {
 
         assertEquals(
             TextRange(text.indexOf('a'), text.indexOf(' ')),
-            paragraph.getWordBoundary(text.indexOf('a'))
+            paragraph.getWordBoundary(text.indexOf('a')),
         )
         assertEquals(
             TextRange(text.indexOf('a'), text.indexOf(' ')),
-            paragraph.getWordBoundary(text.indexOf('c'))
+            paragraph.getWordBoundary(text.indexOf('c')),
         )
         assertEquals(
             TextRange(text.indexOf('a'), text.indexOf(' ')),
-            paragraph.getWordBoundary(text.indexOf(' '))
+            paragraph.getWordBoundary(text.indexOf(' ')),
         )
         assertEquals(
             TextRange(text.indexOf('d'), text.indexOf('-')),
-            paragraph.getWordBoundary(text.indexOf('d'))
+            paragraph.getWordBoundary(text.indexOf('d')),
         )
         assertEquals(
             TextRange(text.indexOf('g'), text.indexOf('.')),
-            paragraph.getWordBoundary(text.indexOf('i'))
+            paragraph.getWordBoundary(text.indexOf('i')),
         )
         assertEquals(
             TextRange(text.indexOf('j'), text.indexOf('l') + 1),
-            paragraph.getWordBoundary(text.indexOf('k'))
+            paragraph.getWordBoundary(text.indexOf('k')),
         )
     }
 
@@ -136,15 +128,15 @@ class SkikoParagraphTest {
 
         assertEquals(
             TextRange(text.indexOf('a'), text.indexOf('b') + 1),
-            paragraph.getWordBoundary(text.indexOf('b') + 1)
+            paragraph.getWordBoundary(text.indexOf('b') + 1),
         )
         assertEquals(
             TextRange(text.indexOf('c'), text.indexOf('d') + 1),
-            paragraph.getWordBoundary(text.indexOf('c'))
+            paragraph.getWordBoundary(text.indexOf('c')),
         )
         assertEquals(
             TextRange(text.indexOf('d') + 2, text.indexOf('d') + 2),
-            paragraph.getWordBoundary(text.indexOf('d') + 2)
+            paragraph.getWordBoundary(text.indexOf('d') + 2),
         )
     }
 
@@ -155,23 +147,23 @@ class SkikoParagraphTest {
 
         assertEquals(
             TextRange(text.indexOf('a'), text.indexOf('c') + 1),
-            paragraph.getWordBoundary(text.indexOf('b'))
+            paragraph.getWordBoundary(text.indexOf('b')),
         )
         assertEquals(
             TextRange(text.indexOf('a'), text.indexOf('c') + 1),
-            paragraph.getWordBoundary(text.indexOf('\u00A0'))
+            paragraph.getWordBoundary(text.indexOf('\u00A0')),
         )
         assertEquals(
             TextRange(text.indexOf('d'), text.length),
-            paragraph.getWordBoundary(text.indexOf('d'))
+            paragraph.getWordBoundary(text.indexOf('d')),
         )
         assertEquals(
             TextRange(text.indexOf('d'), text.length),
-            paragraph.getWordBoundary(text.indexOf('\u202F'))
+            paragraph.getWordBoundary(text.indexOf('\u202F')),
         )
         assertEquals(
             TextRange(text.indexOf('d'), text.length),
-            paragraph.getWordBoundary(text.length)
+            paragraph.getWordBoundary(text.length),
         )
     }
 
@@ -182,19 +174,19 @@ class SkikoParagraphTest {
 
         assertEquals(
             TextRange(text.indexOf('\u05d0'), text.indexOf(' ')),
-            paragraph.getWordBoundary(text.indexOf('\u05d0'))
+            paragraph.getWordBoundary(text.indexOf('\u05d0')),
         )
         assertEquals(
             TextRange(text.indexOf('\u05d0'), text.indexOf(' ')),
-            paragraph.getWordBoundary(text.indexOf('\u05d2'))
+            paragraph.getWordBoundary(text.indexOf('\u05d2')),
         )
         assertEquals(
             TextRange(text.indexOf('\u05d0'), text.indexOf(' ')),
-            paragraph.getWordBoundary(text.indexOf(' '))
+            paragraph.getWordBoundary(text.indexOf(' ')),
         )
         assertEquals(
             TextRange(text.indexOf('\u05d3'), text.indexOf('-')),
-            paragraph.getWordBoundary(text.indexOf('\u05d4'))
+            paragraph.getWordBoundary(text.indexOf('\u05d4')),
         )
         /*
         TODO: Port punctuation handling from Android.
@@ -209,11 +201,11 @@ class SkikoParagraphTest {
          */
         assertEquals(
             TextRange(text.indexOf('\u05d5'), text.indexOf('.')),
-            paragraph.getWordBoundary(text.indexOf('\u05d6'))
+            paragraph.getWordBoundary(text.indexOf('\u05d6')),
         )
         assertEquals(
             TextRange(text.indexOf('\u05d7'), text.length),
-            paragraph.getWordBoundary(text.indexOf('\u05d7'))
+            paragraph.getWordBoundary(text.indexOf('\u05d7')),
         )
     }
 
@@ -224,7 +216,7 @@ class SkikoParagraphTest {
 
         assertEquals(
             TextRange(text.indexOf('\u3042'), text.indexOf('\u3042') + 1),
-            paragraph.getWordBoundary(text.indexOf('\u3042'))
+            paragraph.getWordBoundary(text.indexOf('\u3042')),
         )
         /*
         TODO: figure out why skia's ICU split words this way
@@ -235,7 +227,7 @@ class SkikoParagraphTest {
          */
         assertEquals(
             TextRange(text.indexOf('\u30A2'), text.indexOf('\u30A4') + 1),
-            paragraph.getWordBoundary(text.indexOf('\u30A4'))
+            paragraph.getWordBoundary(text.indexOf('\u30A4')),
         )
         /*
         TODO: figure out why skia's ICU split words this way
@@ -254,27 +246,27 @@ class SkikoParagraphTest {
 
         assertEquals(
             TextRange(text.indexOf('i'), text.indexOf('t') + 1),
-            paragraph.getWordBoundary(text.indexOf('i'))
+            paragraph.getWordBoundary(text.indexOf('i')),
         )
         assertEquals(
             TextRange(text.indexOf('i'), text.indexOf('t') + 1),
-            paragraph.getWordBoundary(text.indexOf('n'))
+            paragraph.getWordBoundary(text.indexOf('n')),
         )
         assertEquals(
             TextRange(text.indexOf('i'), text.indexOf('t') + 1),
-            paragraph.getWordBoundary(text.indexOf('\''))
+            paragraph.getWordBoundary(text.indexOf('\'')),
         )
         assertEquals(
             TextRange(text.indexOf('i'), text.indexOf('t') + 1),
-            paragraph.getWordBoundary(text.indexOf('t'))
+            paragraph.getWordBoundary(text.indexOf('t')),
         )
         assertEquals(
             TextRange(text.indexOf('i'), text.indexOf('t') + 1),
-            paragraph.getWordBoundary(text.indexOf('t') + 1)
+            paragraph.getWordBoundary(text.indexOf('t') + 1),
         )
         assertEquals(
             TextRange(text.indexOf('h'), text.indexOf('e') + 1),
-            paragraph.getWordBoundary(text.indexOf('h'))
+            paragraph.getWordBoundary(text.indexOf('h')),
         )
     }
 
@@ -286,43 +278,43 @@ class SkikoParagraphTest {
 
         assertEquals(
             TextRange(text.indexOf('a'), text.indexOf('!')),
-            paragraph.getWordBoundary(text.indexOf('a'))
+            paragraph.getWordBoundary(text.indexOf('a')),
         )
         assertEquals(
             TextRange(text.indexOf('a'), text.indexOf('?') + 1),
-            paragraph.getWordBoundary(text.indexOf('!'))
+            paragraph.getWordBoundary(text.indexOf('!')),
         )
         assertEquals(
             TextRange(text.indexOf('!'), text.indexOf('?') + 1),
-            paragraph.getWordBoundary(text.indexOf('?') + 1)
+            paragraph.getWordBoundary(text.indexOf('?') + 1),
         )
         assertEquals(
             TextRange(text.indexOf('('), text.indexOf('(') + 1),
-            paragraph.getWordBoundary(text.indexOf('('))
+            paragraph.getWordBoundary(text.indexOf('(')),
         )
         assertEquals(
             TextRange(text.indexOf('(') + 2, text.indexOf('(') + 2),
-            paragraph.getWordBoundary(text.indexOf('(') + 2)
+            paragraph.getWordBoundary(text.indexOf('(') + 2),
         )
         assertEquals(
             TextRange(text.indexOf(';'), text.indexOf(')') + 1),
-            paragraph.getWordBoundary(text.indexOf(';'))
+            paragraph.getWordBoundary(text.indexOf(';')),
         )
         assertEquals(
             TextRange(text.indexOf(';'), text.indexOf(')') + 1),
-            paragraph.getWordBoundary(text.indexOf(')'))
+            paragraph.getWordBoundary(text.indexOf(')')),
         )
         assertEquals(
             TextRange(text.indexOf(';'), text.indexOf(')') + 1),
-            paragraph.getWordBoundary(text.indexOf(')') + 1)
+            paragraph.getWordBoundary(text.indexOf(')') + 1),
         )
         assertEquals(
             TextRange(text.indexOf('d'), text.length),
-            paragraph.getWordBoundary(text.indexOf('d'))
+            paragraph.getWordBoundary(text.indexOf('d')),
         )
         assertEquals(
             TextRange(text.indexOf('d'), text.length),
-            paragraph.getWordBoundary(text.length)
+            paragraph.getWordBoundary(text.length),
         )
     }
 
@@ -333,10 +325,7 @@ class SkikoParagraphTest {
         val text = "ab \uD83E\uDDD1\uD83C\uDFFF\u200D\uD83E\uDDB0 cd"
         val paragraph = simpleParagraph(text)
 
-        assertEquals(
-            TextRange(3, 10),
-            paragraph.getWordBoundary(6)
-        )
+        assertEquals(TextRange(3, 10), paragraph.getWordBoundary(6))
     }
 
     @Test
@@ -347,22 +336,27 @@ class SkikoParagraphTest {
             "ab \uD801\uDC14\uD801\uDC2F\uD801\uDC45\uD801\uDC28\uD801\uDC49\uD801\uDC2F\uD801\uDC3B cd"
         val paragraph = simpleParagraph(text)
 
-        assertEquals(
-            TextRange(3, 17),
-            paragraph.getWordBoundary(6)
-        )
+        assertEquals(TextRange(3, 17), paragraph.getWordBoundary(6))
     }
 
     @Test
     fun getHorizontalPosition_cursor_empty_textfield_ltr_start_alignment() {
-        val paragraph = simpleParagraph("", TextStyle(textAlign = TextAlign.Start, textDirection = TextDirection.Ltr))
+        val paragraph =
+            simpleParagraph(
+                "",
+                TextStyle(textAlign = TextAlign.Start, textDirection = TextDirection.Ltr),
+            )
         val cursorHorizontalPosition: Float = paragraph.getHorizontalPosition(0, false)
         assertEquals(0f, cursorHorizontalPosition)
     }
 
     @Test
     fun getHorizontalPosition_cursor_empty_textfield_ltr_end_alignment() {
-        val paragraph = simpleParagraph("", TextStyle(textAlign = TextAlign.End, textDirection = TextDirection.Ltr))
+        val paragraph =
+            simpleParagraph(
+                "",
+                TextStyle(textAlign = TextAlign.End, textDirection = TextDirection.Ltr),
+            )
         val cursorHorizontalPosition = paragraph.getHorizontalPosition(0, false)
         assertEquals(maxWidthConstraint.toFloat(), cursorHorizontalPosition)
     }
@@ -376,14 +370,22 @@ class SkikoParagraphTest {
 
     @Test
     fun getHorizontalPosition_cursor_empty_textfield_rtl_start_alignment() {
-        val paragraph = simpleParagraph("", TextStyle(textAlign = TextAlign.Start, textDirection = TextDirection.Rtl))
+        val paragraph =
+            simpleParagraph(
+                "",
+                TextStyle(textAlign = TextAlign.Start, textDirection = TextDirection.Rtl),
+            )
         val cursorHorizontalPosition: Float = paragraph.getHorizontalPosition(0, false)
         assertEquals(maxWidthConstraint.toFloat(), cursorHorizontalPosition)
     }
 
     @Test
     fun getHorizontalPosition_cursor_empty_textfield_rtl_end_alignment() {
-        val paragraph = simpleParagraph("", TextStyle(textAlign = TextAlign.End, textDirection = TextDirection.Rtl))
+        val paragraph =
+            simpleParagraph(
+                "",
+                TextStyle(textAlign = TextAlign.End, textDirection = TextDirection.Rtl),
+            )
         val cursorHorizontalPosition = paragraph.getHorizontalPosition(0, false)
         assertEquals(0f, cursorHorizontalPosition)
     }
@@ -412,7 +414,8 @@ class SkikoParagraphTest {
         val text = "abca\u030B abc" // "abc" + 'a' + U+030B (combining double acute) + " abc"
         val paragraph = simpleParagraph(text)
 
-        val complexCharStart = 3 // Index of the base 'a'; the 'a' + U+030B cluster spans indices 3..4
+        val complexCharStart =
+            3 // Index of the base 'a'; the 'a' + U+030B cluster spans indices 3..4
         val complexCharBox = paragraph.getBoundingBox(complexCharStart)
 
         // On web the default font shapes 'a' + U+030B with an inflated cluster advance (the
@@ -430,15 +433,17 @@ class SkikoParagraphTest {
         // the exact-midpoint tie resolves to the before-char side, i.e. the cluster start.
         // The caret must never land on the internal code-unit index (4).
         assertEquals(
-            3, // start of the 'a' + U+030B cluster (before-char), Android-compatible midpoint tie-break
+            3, // start of the 'a' + U+030B cluster (before-char), Android-compatible midpoint
+               // tie-break
             position,
-            message = "A midpoint click on a complex cluster should snap to the cluster start (before-char)"
+            message =
+                "A midpoint click on a complex cluster should snap to the cluster start (before-char)",
         )
     }
 
     /**
-     * Test that the caret can be placed at the end of a line when a complex character
-     * is the last character in the line.
+     * Test that the caret can be placed at the end of a line when a complex character is the last
+     * character in the line.
      */
     @Test
     fun getOffsetForPosition_endOfLineWithComplexCharacter_shouldPositionCorrectly() {
@@ -451,14 +456,8 @@ class SkikoParagraphTest {
         val afterOffset = Offset(complexCharBox.right + 5, complexCharBox.center.y)
         val position = paragraph.getOffsetForPosition(afterOffset)
 
-
-        assertEquals(
-            5,
-            position,
-            message = "The position should be at the end of the text"
-        )
+        assertEquals(5, position, message = "The position should be at the end of the text")
     }
-
 
     @Test
     fun bullet_withEmUnits_shouldNotCrash() {
@@ -467,52 +466,114 @@ class SkikoParagraphTest {
         val text = "First item"
 
         // Create a simple paragraph with textIndent using Em units (like Bullet.DefaultIndentation)
-        val paragraph = Paragraph(
-            text = text,
-            style = TextStyle(
-                textIndent = TextIndent(1.em, 1.em)
-            ),
-            constraints = Constraints(maxWidth = maxWidthConstraint),
-            density = defaultDensity,
-            fontFamilyResolver = fontFamilyResolver
-        )
+        val paragraph =
+            Paragraph(
+                text = text,
+                style = TextStyle(textIndent = TextIndent(1.em, 1.em)),
+                constraints = Constraints(maxWidth = maxWidthConstraint),
+                density = defaultDensity,
+                fontFamilyResolver = fontFamilyResolver,
+            )
 
         // Verify paragraph was created successfully without crashing
         assertEquals(1, paragraph.lineCount)
     }
 
+    @Test
+    fun maxIntrinsicWidth_includesFirstLineIndent() {
+        val text = "Bullet list item"
+        val textStyle = TextStyle(fontSize = 20.sp)
+
+        val plain = simpleIntrinsics(text, textStyle)
+        val indented =
+            simpleIntrinsics(
+                text = text,
+                textStyle = textStyle.copy(textIndent = TextIndent(firstLine = 20.sp)),
+            )
+
+        assertEquals(plain.maxIntrinsicWidth + 20f, indented.maxIntrinsicWidth)
+    }
+
+    @Test
+    fun paragraphAtItsMaxIntrinsicWidth_doesNotWrap_spIndent() {
+        assertSingleLineAtMaxIntrinsicWidth(TextIndent(firstLine = 20.sp), expectedIndentPx = 20f)
+    }
+
+    @Test
+    fun paragraphAtItsMaxIntrinsicWidth_doesNotWrap_emIndent() {
+        // The unit a bullet list uses, see Bullet.DefaultIndentation.
+        assertSingleLineAtMaxIntrinsicWidth(TextIndent(firstLine = 1.em), expectedIndentPx = 20f)
+    }
+
+    /** Expects the text laid out at its own intrinsic width to fit into a single line. */
+    private fun assertSingleLineAtMaxIntrinsicWidth(
+        textIndent: TextIndent,
+        expectedIndentPx: Float,
+    ) {
+        val intrinsics =
+            simpleIntrinsics(
+                // Skia drops the indentation when a single unbreakable run does not fit into what
+                // is
+                // left of the width, so the text needs several words.
+                text = "Bullet list item",
+                textStyle = TextStyle(fontSize = 20.sp, textIndent = textIndent),
+            )
+
+        val paragraph =
+            Paragraph(
+                paragraphIntrinsics = intrinsics,
+                constraints = Constraints(maxWidth = ceil(intrinsics.maxIntrinsicWidth).toInt()),
+                overflow = TextOverflow.Clip,
+            )
+
+        assertEquals(1, paragraph.lineCount)
+        assertEquals(expectedIndentPx, paragraph.getLineLeft(0))
+    }
+
     // Regression test for https://youtrack.jetbrains.com/issue/CMP-10034
     @Test
     fun getCursorRect_doesNotCrash_inRtlParagraphsWithNewlinesAndSpecialCharacters() {
-        val problemTexts = listOf(
-            // Arabic with diacritics across a newline: "اّ\nبَ"
-            "\u0627\u0651\n\u0628\u064E",
-            // Hebrew followed by newline and emoji: "אב\n😀"
-            "\u05D0\u05D1\n\uD83D\uDE00",
-            // RTL with multiple newlines and combining marks: "א\nבְ\nג"
-            "\u05D0\n\u05D1\u05B0\n\u05D2",
-            // Newline at start: "\nאב"
-            "\n\u05D0\u05D1",
-            // Newline followed by combining mark: "א\nְב"
-            "\u05D0\n\u05B0\u05D1",
-        )
+        val problemTexts =
+            listOf(
+                // Arabic with diacritics across a newline: "اّ\nبَ"
+                "\u0627\u0651\n\u0628\u064E",
+                // Hebrew followed by newline and emoji: "אב\n😀"
+                "\u05D0\u05D1\n\uD83D\uDE00",
+                // RTL with multiple newlines and combining marks: "א\nבְ\nג"
+                "\u05D0\n\u05D1\u05B0\n\u05D2",
+                // Newline at start: "\nאב"
+                "\n\u05D0\u05D1",
+                // Newline followed by combining mark: "א\nְב"
+                "\u05D0\n\u05B0\u05D1",
+            )
 
         for (text in problemTexts) {
-            val paragraph = simpleParagraph(
-                text = text,
-                textStyle = TextStyle(textDirection = TextDirection.Rtl, fontSize = 20.sp)
-            )
+            val paragraph =
+                simpleParagraph(
+                    text = text,
+                    textStyle = TextStyle(textDirection = TextDirection.Rtl, fontSize = 20.sp),
+                )
             for (offset in 0..text.length) {
                 paragraph.getCursorRect(offset)
             }
         }
     }
 
-    private fun simpleParagraph(text: String, textStyle: TextStyle = TextStyle()) = Paragraph(
-        text = text,
-        style = textStyle,
-        constraints = Constraints(maxWidth = maxWidthConstraint),
-        density = defaultDensity,
-        fontFamilyResolver = fontFamilyResolver
-    )
+    private fun simpleIntrinsics(text: String, textStyle: TextStyle) =
+        ParagraphIntrinsics(
+            text = text,
+            style = textStyle,
+            annotations = emptyList(),
+            density = defaultDensity,
+            fontFamilyResolver = fontFamilyResolver,
+        )
+
+    private fun simpleParagraph(text: String, textStyle: TextStyle = TextStyle()) =
+        Paragraph(
+            text = text,
+            style = textStyle,
+            constraints = Constraints(maxWidth = maxWidthConstraint),
+            density = defaultDensity,
+            fontFamilyResolver = fontFamilyResolver,
+        )
 }

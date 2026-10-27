@@ -18,6 +18,7 @@ package androidx.compose.ui.test
 
 import androidx.compose.ui.platform.accessibility.CMPAccessibilityTraitIsEditing
 import androidx.compose.ui.platform.accessibility.CMPAccessibilityTraitTextView
+import androidx.compose.ui.platform.accessibility.CMPAccessibilityTraitToggle
 import androidx.compose.ui.test.utils.DpRectZero
 import androidx.compose.ui.test.utils.intersect
 import androidx.compose.ui.unit.DpRect
@@ -86,18 +87,22 @@ import platform.darwin.NSObject
 /**
  * Constructs an accessibility tree representation of the UI hierarchy starting from the window.
  *
- * This function traverses the accessibility elements and their children to build a structured
- * node tree with information about accessibility properties, allowing for analysis and testing
- * of the accessibility features of the UI.
+ * This function traverses the accessibility elements and their children to build a structured node
+ * tree with information about accessibility properties, allowing for analysis and testing of the
+ * accessibility features of the UI.
  *
- * @return The root node of the accessibility tree representing the current UI hierarchy,
- * or null if the tree cannot be constructed.
+ * @return The root node of the accessibility tree representing the current UI hierarchy, or null if
+ *   the tree cannot be constructed.
  */
 @OptIn(ExperimentalForeignApi::class)
 internal fun UIKitInstrumentedTest.getAccessibilityTree(): AccessibilityTestNode {
-    fun buildNode(element: NSObject, isAccessibilityElementContent: Boolean): AccessibilityTestNode {
+    fun buildNode(
+        element: NSObject,
+        isAccessibilityElementContent: Boolean,
+    ): AccessibilityTestNode {
         val children = mutableListOf<AccessibilityTestNode>()
-        val accessibilityElementContent = isAccessibilityElementContent || element.isAccessibilityElement
+        val accessibilityElementContent =
+            isAccessibilityElementContent || element.isAccessibilityElement
 
         if (element.accessibilityElements() != null) {
             element.accessibilityElements()?.forEach {
@@ -107,8 +112,9 @@ internal fun UIKitInstrumentedTest.getAccessibilityTree(): AccessibilityTestNode
             element.subviews.forEach {
                 children.add(buildNode(it as UIView, accessibilityElementContent))
             }
-        } else if (available(OS.Ios to OSVersion(major = 17)) &&
-            (element.automationElements?.isNotEmpty() ?: false)
+        } else if (
+            available(OS.Ios to OSVersion(major = 17)) &&
+                (element.automationElements?.isNotEmpty() ?: false)
         ) {
             // iOS Automation uses `automationElements` to build the semantics tree inside the
             // accessibility element.
@@ -128,9 +134,11 @@ internal fun UIKitInstrumentedTest.getAccessibilityTree(): AccessibilityTestNode
                     }
 
                     is UIWindowScene -> {
-                        element.windows.filter { !(it as UIWindow).isHidden() }.forEach {
-                            children.add(buildNode(it as UIWindow, accessibilityElementContent))
-                        }
+                        element.windows
+                            .filter { !(it as UIWindow).isHidden() }
+                            .forEach {
+                                children.add(buildNode(it as UIWindow, accessibilityElementContent))
+                            }
                     }
                 }
             } else if (count > 0) {
@@ -143,75 +151,82 @@ internal fun UIKitInstrumentedTest.getAccessibilityTree(): AccessibilityTestNode
                     children.add(buildNode(it as UIView, accessibilityElementContent))
                 }
             } else if (element is UIWindowScene) {
-                element.windows.filter { !(it as UIWindow).isHidden() }.forEach {
-                    children.add(buildNode(it as UIWindow, accessibilityElementContent))
-                }
+                element.windows
+                    .filter { !(it as UIWindow).isHidden() }
+                    .forEach {
+                        children.add(buildNode(it as UIWindow, accessibilityElementContent))
+                    }
             }
         }
 
         return AccessibilityTestNode(
-            isAccessibilityElement = element.isAccessibilityElement,
-            identifier = (element as? UIAccessibilityElement)?.accessibilityIdentifier,
-            label = element.accessibilityLabel,
-            accessibilityLabel = element.accessibilityAttributedLabel,
-            value = element.accessibilityValue,
-            accessibilityValue = element.accessibilityAttributedValue,
-            frame = element.accessibilityFrame.toDpRect(),
-            containerType = element.accessibilityContainerType,
-            children = children,
-            traits = allAccessibilityTraits.keys.filter {
-                element.accessibilityTraits and it != 0.toULong()
-            },
-            element = element
-        ).also { node ->
-            children.forEach { it.parent = node }
-        }
+                isAccessibilityElement = element.isAccessibilityElement,
+                identifier = (element as? UIAccessibilityElement)?.accessibilityIdentifier,
+                label = element.accessibilityLabel,
+                accessibilityLabel = element.accessibilityAttributedLabel,
+                value = element.accessibilityValue,
+                accessibilityValue = element.accessibilityAttributedValue,
+                frame = element.accessibilityFrame.toDpRect(),
+                containerType = element.accessibilityContainerType,
+                children = children,
+                traits =
+                    allAccessibilityTraits.keys.filter {
+                        element.accessibilityTraits and it != 0.toULong()
+                    },
+                element = element,
+            )
+            .also { node -> children.forEach { it.parent = node } }
     }
 
     return buildNode(appDelegate.window!!.windowScene!!, isAccessibilityElementContent = false)
 }
 
-private val allAccessibilityTraits = mutableMapOf(
-    UIAccessibilityTraitNone to "UIAccessibilityTraitNone",
-    UIAccessibilityTraitButton to "UIAccessibilityTraitButton",
-    UIAccessibilityTraitLink to "UIAccessibilityTraitLink",
-    UIAccessibilityTraitHeader to "UIAccessibilityTraitHeader",
-    UIAccessibilityTraitSearchField to "UIAccessibilityTraitSearchField",
-    UIAccessibilityTraitImage to "UIAccessibilityTraitImage",
-    UIAccessibilityTraitSelected to "UIAccessibilityTraitSelected",
-    UIAccessibilityTraitPlaysSound to "UIAccessibilityTraitPlaysSound",
-    UIAccessibilityTraitKeyboardKey to "UIAccessibilityTraitKeyboardKey",
-    UIAccessibilityTraitStaticText to "UIAccessibilityTraitStaticText",
-    UIAccessibilityTraitSummaryElement to "UIAccessibilityTraitSummaryElement",
-    UIAccessibilityTraitNotEnabled to "UIAccessibilityTraitNotEnabled",
-    UIAccessibilityTraitUpdatesFrequently to "UIAccessibilityTraitUpdatesFrequently",
-    UIAccessibilityTraitStartsMediaSession to "UIAccessibilityTraitStartsMediaSession",
-    UIAccessibilityTraitAdjustable to "UIAccessibilityTraitAdjustable",
-    UIAccessibilityTraitAllowsDirectInteraction to "UIAccessibilityTraitAllowsDirectInteraction",
-    UIAccessibilityTraitCausesPageTurn to "UIAccessibilityTraitCausesPageTurn",
-    UIAccessibilityTraitTabBar to "UIAccessibilityTraitTabBar",
-    CMPAccessibilityTraitTextView to "CMPAccessibilityTraitTextView",
-    CMPAccessibilityTraitIsEditing to "CMPAccessibilityTraitIsEditing",
-).let {
-    if (available(OS.Ios to OSVersion(major = 17))) {
-        it[UIAccessibilityTraitToggleButton] = "UIAccessibilityTraitToggleButton"
-        it[UIAccessibilityTraitSupportsZoom] = "UIAccessibilityTraitSupportsZoom"
-    }
-    it as Map<UIAccessibilityTraits, String>
-}
+private val allAccessibilityTraits =
+    mutableMapOf(
+            UIAccessibilityTraitNone to "UIAccessibilityTraitNone",
+            UIAccessibilityTraitButton to "UIAccessibilityTraitButton",
+            UIAccessibilityTraitLink to "UIAccessibilityTraitLink",
+            UIAccessibilityTraitHeader to "UIAccessibilityTraitHeader",
+            UIAccessibilityTraitSearchField to "UIAccessibilityTraitSearchField",
+            UIAccessibilityTraitImage to "UIAccessibilityTraitImage",
+            UIAccessibilityTraitSelected to "UIAccessibilityTraitSelected",
+            UIAccessibilityTraitPlaysSound to "UIAccessibilityTraitPlaysSound",
+            UIAccessibilityTraitKeyboardKey to "UIAccessibilityTraitKeyboardKey",
+            UIAccessibilityTraitStaticText to "UIAccessibilityTraitStaticText",
+            UIAccessibilityTraitSummaryElement to "UIAccessibilityTraitSummaryElement",
+            UIAccessibilityTraitNotEnabled to "UIAccessibilityTraitNotEnabled",
+            UIAccessibilityTraitUpdatesFrequently to "UIAccessibilityTraitUpdatesFrequently",
+            UIAccessibilityTraitStartsMediaSession to "UIAccessibilityTraitStartsMediaSession",
+            UIAccessibilityTraitAdjustable to "UIAccessibilityTraitAdjustable",
+            UIAccessibilityTraitAllowsDirectInteraction to
+                "UIAccessibilityTraitAllowsDirectInteraction",
+            UIAccessibilityTraitCausesPageTurn to "UIAccessibilityTraitCausesPageTurn",
+            UIAccessibilityTraitTabBar to "UIAccessibilityTraitTabBar",
+            CMPAccessibilityTraitTextView to "CMPAccessibilityTraitTextView",
+            CMPAccessibilityTraitIsEditing to "CMPAccessibilityTraitIsEditing",
+            CMPAccessibilityTraitToggle to "CMPAccessibilityTraitToggle",
+        )
+        .let {
+            if (available(OS.Ios to OSVersion(major = 17))) {
+                it[UIAccessibilityTraitToggleButton] = "UIAccessibilityTraitToggleButton"
+                it[UIAccessibilityTraitSupportsZoom] = "UIAccessibilityTraitSupportsZoom"
+            }
+            it as Map<UIAccessibilityTraits, String>
+        }
 
-private val allContainerTypes = mapOf(
-    UIAccessibilityContainerTypeNone to "UIAccessibilityContainerTypeNone",
-    UIAccessibilityContainerTypeDataTable to "UIAccessibilityContainerTypeDataTable",
-    UIAccessibilityContainerTypeList to "UIAccessibilityContainerTypeList",
-    UIAccessibilityContainerTypeLandmark to "UIAccessibilityContainerTypeLandmark",
-    UIAccessibilityContainerTypeSemanticGroup to "UIAccessibilityContainerTypeSemanticGroup",
-)
+private val allContainerTypes =
+    mapOf(
+        UIAccessibilityContainerTypeNone to "UIAccessibilityContainerTypeNone",
+        UIAccessibilityContainerTypeDataTable to "UIAccessibilityContainerTypeDataTable",
+        UIAccessibilityContainerTypeList to "UIAccessibilityContainerTypeList",
+        UIAccessibilityContainerTypeLandmark to "UIAccessibilityContainerTypeLandmark",
+        UIAccessibilityContainerTypeSemanticGroup to "UIAccessibilityContainerTypeSemanticGroup",
+    )
 
 /**
  * Represents a node in an accessibility tree, which is used for testing accessibility features
- * within a UI hierarchy. This class captures various accessibility properties of UI components
- * and structures them into a tree.
+ * within a UI hierarchy. This class captures various accessibility properties of UI components and
+ * structures them into a tree.
  */
 internal class AccessibilityTestNode(
     var isAccessibilityElement: Boolean? = null,
@@ -227,19 +242,21 @@ internal class AccessibilityTestNode(
     var element: NSObject? = null,
     var parent: AccessibilityTestNode? = null,
 ) {
-    fun copyWith(children: List<AccessibilityTestNode>?) = AccessibilityTestNode(
-        isAccessibilityElement = isAccessibilityElement,
-        identifier = identifier,
-        label = label,
-        accessibilityLabel = accessibilityLabel,
-        value = value,
-        accessibilityValue = accessibilityValue,
-        frame = frame,
-        containerType = containerType,
-        children = children,
-        traits = traits,
-        element = element,
-    ).also { copy -> children?.forEach { it.parent = copy } }
+    fun copyWith(children: List<AccessibilityTestNode>?) =
+        AccessibilityTestNode(
+                isAccessibilityElement = isAccessibilityElement,
+                identifier = identifier,
+                label = label,
+                accessibilityLabel = accessibilityLabel,
+                value = value,
+                accessibilityValue = accessibilityValue,
+                frame = frame,
+                containerType = containerType,
+                children = children,
+                traits = traits,
+                element = element,
+            )
+            .also { copy -> children?.forEach { it.parent = copy } }
 
     fun node(builder: AccessibilityTestNode.() -> Unit) {
         children = (children ?: emptyList()) + AccessibilityTestNode().apply(builder)
@@ -248,16 +265,16 @@ internal class AccessibilityTestNode(
     /** Adds a group of nodes in traversal order for [layoutDirection]. */
     fun node(
         layoutDirection: UITraitEnvironmentLayoutDirection,
-        builder: AccessibilityTestNode.() -> Unit
+        builder: AccessibilityTestNode.() -> Unit,
     ) {
         val nodes = AccessibilityTestNode().apply(builder).children.orEmpty()
-        children = (children ?: emptyList()) + if (
-            layoutDirection == UITraitEnvironmentLayoutDirectionRightToLeft
-        ) {
-            nodes.reversed()
-        } else {
-            nodes
-        }
+        children =
+            (children ?: emptyList()) +
+                if (layoutDirection == UITraitEnvironmentLayoutDirectionRightToLeft) {
+                    nodes.reversed()
+                } else {
+                    nodes
+                }
     }
 
     fun traits(vararg trait: UIAccessibilityTraits) {
@@ -265,35 +282,27 @@ internal class AccessibilityTestNode(
     }
 
     fun validate(actualNode: AccessibilityTestNode?) {
-        isAccessibilityElement?.let {
-            assertEquals(it, actualNode?.isAccessibilityElement)
-        }
-        identifier?.let {
-            assertEquals(it, actualNode?.identifier)
-        }
-        label?.let {
-            assertEquals(it, actualNode?.label)
-        }
+        isAccessibilityElement?.let { assertEquals(it, actualNode?.isAccessibilityElement) }
+        identifier?.let { assertEquals(it, actualNode?.identifier) }
+        label?.let { assertEquals(it, actualNode?.label) }
         accessibilityLabel?.let {
             assertNotNull(actualNode?.accessibilityLabel, "Accessibility label should not be null")
-            assertTrue(it.isEqual(actualNode.accessibilityLabel), "Accessibility label should be equal")
+            assertTrue(
+                it.isEqual(actualNode.accessibilityLabel),
+                "Accessibility label should be equal",
+            )
         }
-        value?.let {
-            assertEquals(it, actualNode?.value)
-        }
+        value?.let { assertEquals(it, actualNode?.value) }
         accessibilityValue?.let {
             assertNotNull(actualNode?.accessibilityValue, "Accessibility value should not be null")
-            assertTrue(it.isEqual(actualNode.accessibilityValue), "Accessibility value should be equal")
+            assertTrue(
+                it.isEqual(actualNode.accessibilityValue),
+                "Accessibility value should be equal",
+            )
         }
-        frame?.let {
-            assertEquals(it, actualNode?.frame)
-        }
-        traits?.let {
-            assertEquals(it.toSet(), actualNode?.traits?.toSet())
-        }
-        containerType?.let {
-            assertEquals(it, actualNode?.containerType)
-        }
+        frame?.let { assertEquals(it, actualNode?.frame) }
+        traits?.let { assertEquals(it.toSet(), actualNode?.traits?.toSet()) }
+        containerType?.let { assertEquals(it, actualNode?.containerType) }
         children?.let {
             assertEquals(it.count(), actualNode?.children?.count())
             it.zip(actualNode?.children ?: emptyList()) { validator, child ->
@@ -302,11 +311,12 @@ internal class AccessibilityTestNode(
         }
     }
 
-    val hasAccessibilityComponents: Boolean = identifier != null ||
-        isAccessibilityElement == true ||
-        label != null ||
-        value != null ||
-        traits?.isNotEmpty() == true
+    val hasAccessibilityComponents: Boolean =
+        identifier != null ||
+            isAccessibilityElement == true ||
+            label != null ||
+            value != null ||
+            traits?.isNotEmpty() == true
 
     fun printTree(): String {
         val builder = StringBuilder()
@@ -316,18 +326,14 @@ internal class AccessibilityTestNode(
             builder.append(indent)
             builder.append(node.label ?: node.identifier ?: "other")
             builder.append(" - ${node.frame}")
-            node.element?.let {
-                builder.append(" - <${it::class}>")
-            }
+            node.element?.let { builder.append(" - <${it::class}>") }
             builder.appendLine()
 
             val fieldIndent = "$indent |"
             if (node.isAccessibilityElement == true) {
                 builder.appendLine("$fieldIndent isAccessibilityElement: true")
             }
-            node.identifier?.let {
-                builder.appendLine("$fieldIndent accessibilityIdentifier: $it")
-            }
+            node.identifier?.let { builder.appendLine("$fieldIndent accessibilityIdentifier: $it") }
             node.label?.let { builder.appendLine("$fieldIndent accessibilityLabel: $it") }
             if (node.traits?.isNotEmpty() == true) {
                 builder.appendLine("$fieldIndent accessibilityTraits:")
@@ -335,14 +341,17 @@ internal class AccessibilityTestNode(
                     builder.appendLine("$fieldIndent  - ${allAccessibilityTraits.getValue(it)}")
                 }
             }
-            node.containerType?.takeIf { it != UIAccessibilityContainerTypeNone }?.let {
-                val typeString = allContainerTypes[it] ?: "Unknown: $it"
-                builder.appendLine("$fieldIndent accessibilityContainerType: $typeString")
-            }
+            node.containerType
+                ?.takeIf { it != UIAccessibilityContainerTypeNone }
+                ?.let {
+                    val typeString = allContainerTypes[it] ?: "Unknown: $it"
+                    builder.appendLine("$fieldIndent accessibilityContainerType: $typeString")
+                }
             node.value?.let { builder.appendLine("$fieldIndent accessibilityValue: $it") }
-            node.element?.accessibilityCustomActions?.takeIf { it.isNotEmpty() }?.let {
-                builder.appendLine("$fieldIndent accessibilityCustomActions: $it")
-            }
+            node.element
+                ?.accessibilityCustomActions
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { builder.appendLine("$fieldIndent accessibilityCustomActions: $it") }
 
             node.children?.forEach { print(it, level + 1) }
         }
@@ -372,19 +381,20 @@ internal class AccessibilityTestNode(
 }
 
 /**
- * Normalizes the accessibility nodes tree by analyzing its properties and children.
- * Removes all element that are not accessibility elements or does not work as elements containers.
+ * Normalizes the accessibility nodes tree by analyzing its properties and children. Removes all
+ * element that are not accessibility elements or does not work as elements containers.
  */
 internal fun AccessibilityTestNode.normalized(): AccessibilityTestNode? {
-    val normalizedChildren = children?.flatMap { child ->
-        child.normalized()?.let {
-            if (it.hasAccessibilityComponents || (it.children?.count() ?: 0) > 1) {
-                listOf(it)
-            } else {
-                it.children
-            }
+    val normalizedChildren =
+        children?.flatMap { child ->
+            child.normalized()?.let {
+                if (it.hasAccessibilityComponents || (it.children?.count() ?: 0) > 1) {
+                    listOf(it)
+                } else {
+                    it.children
+                }
+            } ?: emptyList()
         } ?: emptyList()
-    } ?: emptyList()
 
     return if (hasAccessibilityComponents || normalizedChildren.count() > 1) {
         this.copyWith(children = normalizedChildren)
@@ -395,32 +405,33 @@ internal fun AccessibilityTestNode.normalized(): AccessibilityTestNode? {
     }
 }
 
-internal val AccessibilityTestNode.isVisibleInContainer: Boolean get() {
-    var frame = this.frame ?: DpRectZero()
-    var iterator = parent
-    while (iterator != null && iterator.element !is UIWindow) {
-        frame = frame.intersect(iterator.frame ?: DpRectZero())
-        iterator = iterator.parent
-    }
+internal val AccessibilityTestNode.isVisibleInContainer: Boolean
+    get() {
+        var frame = this.frame ?: DpRectZero()
+        var iterator = parent
+        while (iterator != null && iterator.element !is UIWindow) {
+            frame = frame.intersect(iterator.frame ?: DpRectZero())
+            iterator = iterator.parent
+        }
 
-    return frame.width >= 1.dp && frame.height >= 1.dp
-}
+        return frame.width >= 1.dp && frame.height >= 1.dp
+    }
 
 internal fun AccessibilityTestNode.assertVisibleInContainer() {
     assertTrue(
         isVisibleInContainer,
-        "Element with frame ${this.frame} ($frame) is not visible or has very small size"
+        "Element with frame ${this.frame} ($frame) is not visible or has very small size",
     )
 }
 
 /**
  * Asserts that the current accessibility tree matches the expected structure defined in the
  * provided lambda. The expected structure is defined by configuring an `AccessibilityTestNode`,
- * which is then validated against the actual normalized accessibility tree. This function waits
- * for the UI to be idle before performing the validation.
+ * which is then validated against the actual normalized accessibility tree. This function waits for
+ * the UI to be idle before performing the validation.
  *
  * @param expected A lambda that allows the caller to specify the expected structure and properties
- * of the accessibility tree.
+ *   of the accessibility tree.
  */
 internal fun UIKitInstrumentedTest.assertAccessibilityTree(
     expected: AccessibilityTestNode.() -> Unit
@@ -430,23 +441,25 @@ internal fun UIKitInstrumentedTest.assertAccessibilityTree(
     assertAccessibilityTree(validator)
 }
 
-internal fun UIKitInstrumentedTest.findNodeWithTag(tag: String) = findNodeWithTagOrNull(tag)
-    ?: run {
-        println("Actual accessibility tree:")
-        println(getAccessibilityTree().printTree())
-        fail("Unable to find node with identifier: $tag")
-    }
+internal fun UIKitInstrumentedTest.findNodeWithTag(tag: String) =
+    findNodeWithTagOrNull(tag)
+        ?: run {
+            println("Actual accessibility tree:")
+            println(getAccessibilityTree().printTree())
+            fail("Unable to find node with identifier: $tag")
+        }
 
 internal fun UIKitInstrumentedTest.findNodeWithTagOrNull(tag: String) = firstNodeOrNull {
     it.identifier == tag
 }
 
-internal fun UIKitInstrumentedTest.findNodeWithLabel(label: String) = findNodeWithLabelOrNull(label)
-    ?: run {
-        println("Actual accessibility tree:")
-        println(getAccessibilityTree().printTree())
-        fail("Unable to find node with label: $label")
-    }
+internal fun UIKitInstrumentedTest.findNodeWithLabel(label: String) =
+    findNodeWithLabelOrNull(label)
+        ?: run {
+            println("Actual accessibility tree:")
+            println(getAccessibilityTree().printTree())
+            fail("Unable to find node with label: $label")
+        }
 
 internal fun UIKitInstrumentedTest.findNodeWithLabelOrNull(label: String) = firstNodeOrNull {
     it.label == label
@@ -466,9 +479,7 @@ internal fun UIKitInstrumentedTest.findAllNodes(
         if (isValid(node)) {
             yield(node)
         }
-        node.children?.forEach { child ->
-            yieldAll(getAllNodes(child))
-        }
+        node.children?.forEach { child -> yieldAll(getAllNodes(child)) }
     }
     return getAllNodes(actualTreeRoot)
 }
@@ -476,11 +487,11 @@ internal fun UIKitInstrumentedTest.findAllNodes(
 /**
  * Asserts that the current accessibility tree matches the expected structure defined in the
  * provided lambda. The expected structure is defined by configuring an `AccessibilityTestNode`,
- * which is then validated against the actual normalized accessibility tree. This function waits
- * for the UI to be idle before performing the validation.
+ * which is then validated against the actual normalized accessibility tree. This function waits for
+ * the UI to be idle before performing the validation.
  *
  * @param expected The expected accessibility tree structure represented by an instance of
- * `AccessibilityTestNode`.
+ *   `AccessibilityTestNode`.
  */
 internal fun UIKitInstrumentedTest.assertAccessibilityTree(expected: AccessibilityTestNode) {
     waitForIdle()
@@ -491,10 +502,11 @@ internal fun UIKitInstrumentedTest.assertAccessibilityTree(expected: Accessibili
     try {
         expected.validate(normalizedTree)
     } catch (e: Throwable) {
-        val message = "Unable to validate accessibility tree. Expected normalized tree:\n\n" +
-            "${expected.printTree()}\n" +
-            "Normalized tree:\n\n${normalizedTree?.printTree()}\n" +
-            "Actual tree:\n\n${actualTreeRoot.printTree()}\n"
+        val message =
+            "Unable to validate accessibility tree. Expected normalized tree:\n\n" +
+                "${expected.printTree()}\n" +
+                "Normalized tree:\n\n${normalizedTree?.printTree()}\n" +
+                "Actual tree:\n\n${actualTreeRoot.printTree()}\n"
         println(message)
 
         throw e

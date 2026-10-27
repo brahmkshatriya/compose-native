@@ -48,33 +48,32 @@ import androidx.compose.ui.platform.CUPERTINO_TOUCH_SLOP
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.scene.ComposeHostingViewController
 import androidx.compose.ui.test.findNodeWithTag
 import androidx.compose.ui.test.runUIKitInstrumentedTest
 import androidx.compose.ui.test.utils.DpRectZero
+import androidx.compose.ui.test.utils.center
 import androidx.compose.ui.test.utils.dpRectInWindow
 import androidx.compose.ui.test.utils.up
+import androidx.compose.ui.test.utils.wait
+import androidx.compose.ui.test.waitForIdle
+import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
+import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.toDpOffset
 import androidx.compose.ui.unit.center
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toDpOffset
 import androidx.compose.ui.unit.toDpRect
-import androidx.compose.ui.scene.ComposeHostingViewController
-import androidx.compose.ui.test.utils.center
-import androidx.compose.ui.test.utils.wait
-import androidx.compose.ui.test.waitForIdle
-import androidx.compose.ui.uikit.ComposeUIViewControllerConfiguration
-import androidx.compose.ui.uikit.LocalUIViewController
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlin.random.Random
-import kotlinx.coroutines.Dispatchers
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -98,9 +97,9 @@ import platform.UIKit.didMoveToParentViewController
 internal class ScrollTest {
 
     /**
-     * Tests that a drag of the same value as the touch slop threshold will not trigger overscroll behavior
-     * in a vertically scrollable Column.
-     **/
+     * Tests that a drag of the same value as the touch slop threshold will not trigger overscroll
+     * behavior in a vertically scrollable Column.
+     */
     @Test
     fun testExactTouchSlopDrag() = runUIKitInstrumentedTest {
         val state = ScrollState(0)
@@ -108,16 +107,18 @@ internal class ScrollTest {
 
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Red)
-                    .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(100.dp)
+                            .background(Color.Red)
+                            .onGloballyPositioned {
+                                boxRect = it.boundsInWindow().toDpRect(density)
+                            }
                 )
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(screenSize.height)
-                    .background(Color.Blue)
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth().height(screenSize.height).background(Color.Blue)
                 )
             }
         }
@@ -125,8 +126,7 @@ internal class ScrollTest {
         val initialBoxRect = boxRect.copy()
         val dyExact = CUPERTINO_TOUCH_SLOP.dp
 
-        touchDown(screenSize.center)
-            .dragBy(dy = dyExact)
+        touchDown(screenSize.center).dragBy(dy = dyExact)
 
         waitForIdle()
 
@@ -141,28 +141,29 @@ internal class ScrollTest {
         setContent {
             CompositionLocalProvider(LocalDensity provides Density(0.5f)) {
                 Dialog(
-                    onDismissRequest = { },
-                    properties = DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        usePlatformInsets = false,
-                        useSoftwareKeyboardInset = false,
-                    )
+                    onDismissRequest = {},
+                    properties =
+                        DialogProperties(
+                            usePlatformDefaultWidth = false,
+                            usePlatformInsets = false,
+                            useSoftwareKeyboardInset = false,
+                        ),
                 ) {
                     Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(100.dp)
-                                .background(Color.Red)
-                                .onGloballyPositioned {
-                                    boxRect = it.boundsInWindow().toDpRect(density)
-                                }
+                            modifier =
+                                Modifier.fillMaxWidth()
+                                    .height(100.dp)
+                                    .background(Color.Red)
+                                    .onGloballyPositioned {
+                                        boxRect = it.boundsInWindow().toDpRect(density)
+                                    }
                         )
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(screenSize.height)
-                                .background(Color.Blue)
+                            modifier =
+                                Modifier.fillMaxWidth()
+                                    .height(screenSize.height)
+                                    .background(Color.Blue)
                         )
                     }
                 }
@@ -172,8 +173,7 @@ internal class ScrollTest {
         val initialBoxRect = boxRect.copy()
         val dyExact = CUPERTINO_TOUCH_SLOP.dp
 
-        touchDown(screenSize.center)
-            .dragBy(dy = dyExact)
+        touchDown(screenSize.center).dragBy(dy = dyExact)
 
         waitForIdle()
 
@@ -181,9 +181,9 @@ internal class ScrollTest {
     }
 
     /**
-     * Tests that a drag just over the touch slop threshold will trigger overscroll behavior
-     * in a vertically scrollable Column.
-     **/
+     * Tests that a drag just over the touch slop threshold will trigger overscroll behavior in a
+     * vertically scrollable Column.
+     */
     @Test
     fun testJustOverTouchSlopDrag() = runUIKitInstrumentedTest {
         val state = ScrollState(0)
@@ -191,24 +191,25 @@ internal class ScrollTest {
 
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Red)
-                    .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(100.dp)
+                            .background(Color.Red)
+                            .onGloballyPositioned {
+                                boxRect = it.boundsInWindow().toDpRect(density)
+                            }
                 )
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(screenSize.height)
-                    .background(Color.White)
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth().height(screenSize.height).background(Color.White)
                 )
             }
         }
 
         val dyJustOver = CUPERTINO_TOUCH_SLOP.dp + 1.dp
 
-        touchDown(screenSize.center)
-            .dragBy(dy = dyJustOver)
+        touchDown(screenSize.center).dragBy(dy = dyJustOver)
 
         waitForIdle()
 
@@ -225,28 +226,29 @@ internal class ScrollTest {
         setContent {
             CompositionLocalProvider(LocalDensity provides Density(0.5f)) {
                 Dialog(
-                    onDismissRequest = { },
-                    properties = DialogProperties(
-                        usePlatformDefaultWidth = false,
-                        usePlatformInsets = false,
-                        useSoftwareKeyboardInset = false,
-                    )
+                    onDismissRequest = {},
+                    properties =
+                        DialogProperties(
+                            usePlatformDefaultWidth = false,
+                            usePlatformInsets = false,
+                            useSoftwareKeyboardInset = false,
+                        ),
                 ) {
                     Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(100.dp)
-                                .background(Color.Red)
-                                .onGloballyPositioned {
-                                    boxRect = it.boundsInWindow().toDpRect(density)
-                                }
+                            modifier =
+                                Modifier.fillMaxWidth()
+                                    .height(100.dp)
+                                    .background(Color.Red)
+                                    .onGloballyPositioned {
+                                        boxRect = it.boundsInWindow().toDpRect(density)
+                                    }
                         )
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(screenSize.height)
-                                .background(Color.White)
+                            modifier =
+                                Modifier.fillMaxWidth()
+                                    .height(screenSize.height)
+                                    .background(Color.White)
                         )
                     }
                 }
@@ -255,8 +257,7 @@ internal class ScrollTest {
 
         val dyJustOver = CUPERTINO_TOUCH_SLOP.dp + 1.dp
 
-        touchDown(screenSize.center)
-            .dragBy(dy = dyJustOver)
+        touchDown(screenSize.center).dragBy(dy = dyJustOver)
 
         waitForIdle()
 
@@ -272,18 +273,20 @@ internal class ScrollTest {
 
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Red)
-                    .onGloballyPositioned {
-                        boxRect = it.boundsInWindow().toDpRect(density)
-                    }
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(100.dp)
+                            .background(Color.Red)
+                            .onGloballyPositioned {
+                                boxRect = it.boundsInWindow().toDpRect(density)
+                            }
                 )
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(screenSize.height.times(2))
-                    .background(Color.White)
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(screenSize.height.times(2))
+                            .background(Color.White)
                 )
             }
         }
@@ -299,7 +302,8 @@ internal class ScrollTest {
             val currentBoxTop = boxRect.top
             val currentDiff = (currentBoxTop - previousBoxTop).value
 
-            // skip the first two iterations as we don't want to take into account the first drag position
+            // skip the first two iterations as we don't want to take into account the first drag
+            // position
             if (i > 1) {
                 try {
                     assertEquals(currentDiff, previousDiff, 5e-5f)
@@ -327,18 +331,20 @@ internal class ScrollTest {
 
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(screenSize.height - boxHeight + 1.dp)
-                    .background(Color.White)
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(screenSize.height - boxHeight + 1.dp)
+                            .background(Color.White)
                 )
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(boxHeight)
-                    .background(Color.Red)
-                    .onGloballyPositioned {
-                        boxRect = it.boundsInWindow().toDpRect(density)
-                    }
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(boxHeight)
+                            .background(Color.Red)
+                            .onGloballyPositioned {
+                                boxRect = it.boundsInWindow().toDpRect(density)
+                            }
                 )
             }
         }
@@ -355,7 +361,8 @@ internal class ScrollTest {
             val currentBoxTop = boxRect.top
             val currentDiff = (currentBoxTop - previousBoxTop).value
 
-            // skip the first two iterations as we don't want to take into account the first drag position
+            // skip the first two iterations as we don't want to take into account the first drag
+            // position
             if (i > 1) {
                 try {
                     assertEquals(currentDiff, previousDiff, 5e-5f)
@@ -372,11 +379,12 @@ internal class ScrollTest {
         touch.up()
         waitForIdle()
         assertEquals(
-            expected = DpRect(
-                origin = DpOffset(x = 0.dp, y = screenSize.height - boxHeight),
-                size = DpSize(width = screenSize.width, height = boxHeight)
-            ),
-            actual = boxRect
+            expected =
+                DpRect(
+                    origin = DpOffset(x = 0.dp, y = screenSize.height - boxHeight),
+                    size = DpSize(width = screenSize.width, height = boxHeight),
+                ),
+            actual = boxRect,
         )
     }
 
@@ -390,27 +398,26 @@ internal class ScrollTest {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
                 repeat(20) { index ->
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(boxHeight.dp)
-                            .background(if (index % 2 == 0) Color.Blue else Color.Red)
-                            .then(
-                                if (index == 0) {
-                                    Modifier.onGloballyPositioned {
-                                        boxRect = it.boundsInWindow().toDpRect(density)
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .height(boxHeight.dp)
+                                .background(if (index % 2 == 0) Color.Blue else Color.Red)
+                                .then(
+                                    if (index == 0) {
+                                        Modifier.onGloballyPositioned {
+                                            boxRect = it.boundsInWindow().toDpRect(density)
+                                        }
+                                    } else {
+                                        Modifier
                                     }
-                                } else {
-                                    Modifier
-                                }
-                            )
+                                )
                     )
                 }
             }
         }
 
         // overscroll
-        val touch = touchDown(screenSize.center)
-            .dragBy(dy = boxHeight.dp)
+        val touch = touchDown(screenSize.center).dragBy(dy = boxHeight.dp)
 
         // rubber band effect is applied
         assertTrue(0.dp < boxRect.top && boxRect.top < boxHeight.dp)
@@ -418,9 +425,7 @@ internal class ScrollTest {
         assertEquals(0 * density.density, state.value.toFloat())
 
         // fling up
-        touch
-            .dragBy(dy = -(boxHeight + 50).dp, duration = 100.milliseconds)
-            .up()
+        touch.dragBy(dy = -(boxHeight + 50).dp, duration = 100.milliseconds).up()
 
         waitForIdle()
 
@@ -431,8 +436,8 @@ internal class ScrollTest {
     }
 
     /**
-     * Verifies that drag gestures smaller than the touch slop threshold
-     * don't trigger scrolling behavior in a vertically scrollable Column.
+     * Verifies that drag gestures smaller than the touch slop threshold don't trigger scrolling
+     * behavior in a vertically scrollable Column.
      */
     @Test
     fun testNotScrollingForSmallDrag() = runUIKitInstrumentedTest {
@@ -441,27 +446,27 @@ internal class ScrollTest {
 
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Red)
-                    .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(100.dp)
+                            .background(Color.Red)
+                            .onGloballyPositioned {
+                                boxRect = it.boundsInWindow().toDpRect(density)
+                            }
                 )
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(screenSize.height)
-                    .background(Color.White)
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth().height(screenSize.height).background(Color.White)
                 )
             }
         }
-
 
         val dySmall = 5.dp
         assertTrue(dySmall.value < CUPERTINO_TOUCH_SLOP)
 
         // downward drag - overscroll
-        touchDown(screenSize.center)
-            .dragBy(dy = dySmall)
+        touchDown(screenSize.center).dragBy(dy = dySmall)
         waitForIdle()
 
         val initialBoxRect = DpRect(DpOffset.Zero, DpSize(screenSize.width, 100.dp))
@@ -471,8 +476,7 @@ internal class ScrollTest {
         assertEquals(initialBoxRect, boxRect)
 
         // upward drag - scroll
-        touchDown(screenSize.center)
-            .dragBy(dy = -dySmall)
+        touchDown(screenSize.center).dragBy(dy = -dySmall)
         waitForIdle()
 
         // expect no changes
@@ -487,26 +491,25 @@ internal class ScrollTest {
 
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Green)
-                )
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Red)
-                    .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                Box(modifier = Modifier.fillMaxWidth().height(100.dp).background(Color.Green))
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(100.dp)
+                            .background(Color.Red)
+                            .onGloballyPositioned {
+                                boxRect = it.boundsInWindow().toDpRect(density)
+                            }
                 )
             }
         }
 
-        val initialBoxRect = DpRect(DpOffset(x = 0.dp, y = 100.dp), DpSize(screenSize.width, 100.dp))
+        val initialBoxRect =
+            DpRect(DpOffset(x = 0.dp, y = 100.dp), DpSize(screenSize.width, 100.dp))
 
         assertEquals(initialBoxRect, boxRect)
 
-        touchDown(DpOffset(screenSize.center.x, 50.dp))
-            .dragBy(dy = 50.dp)
+        touchDown(DpOffset(screenSize.center.x, 50.dp)).dragBy(dy = 50.dp)
 
         waitForIdle()
         assertEquals(initialBoxRect, boxRect)
@@ -519,11 +522,14 @@ internal class ScrollTest {
 
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(screenSize.height)
-                    .background(Color.Green)
-                    .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(screenSize.height)
+                            .background(Color.Green)
+                            .onGloballyPositioned {
+                                boxRect = it.boundsInWindow().toDpRect(density)
+                            }
                 )
             }
         }
@@ -532,8 +538,7 @@ internal class ScrollTest {
 
         assertEquals(initialBoxRect, boxRect)
 
-        touchDown(DpOffset(screenSize.center.x, 50.dp))
-            .dragBy(dy = 50.dp)
+        touchDown(DpOffset(screenSize.center.x, 50.dp)).dragBy(dy = 50.dp)
 
         waitForIdle()
         assertEquals(initialBoxRect, boxRect)
@@ -543,13 +548,16 @@ internal class ScrollTest {
     fun testHorizontalScrollWithRTL() = runUIKitInstrumentedTest {
         val itemSize = 150
         val lazyRowState = LazyListState()
-        val totalScrollOffset = { lazyRowState.firstVisibleItemIndex * itemSize + lazyRowState.firstVisibleItemScrollOffset }
+        val totalScrollOffset = {
+            lazyRowState.firstVisibleItemIndex * itemSize +
+                lazyRowState.firstVisibleItemScrollOffset
+        }
 
         setContent {
             HorizontalScrollContent(
                 itemSize = itemSize.dp,
                 lazyRowState = lazyRowState,
-                layoutDirection = LayoutDirection.Rtl
+                layoutDirection = LayoutDirection.Rtl,
             )
         }
 
@@ -567,13 +575,16 @@ internal class ScrollTest {
     fun testHorizontalScrollWithLTR() = runUIKitInstrumentedTest {
         val itemSize = 150
         val lazyRowState = LazyListState()
-        val totalScrollOffset = { lazyRowState.firstVisibleItemIndex * itemSize + lazyRowState.firstVisibleItemScrollOffset }
+        val totalScrollOffset = {
+            lazyRowState.firstVisibleItemIndex * itemSize +
+                lazyRowState.firstVisibleItemScrollOffset
+        }
 
         setContent {
             HorizontalScrollContent(
                 itemSize = itemSize.dp,
                 lazyRowState = lazyRowState,
-                layoutDirection = LayoutDirection.Ltr
+                layoutDirection = LayoutDirection.Ltr,
             )
         }
 
@@ -592,7 +603,10 @@ internal class ScrollTest {
         val itemSize = 150
         val itemCount = 20
         val lazyRowState = LazyListState()
-        val totalScrollOffset = { lazyRowState.firstVisibleItemIndex * itemSize + lazyRowState.firstVisibleItemScrollOffset }
+        val totalScrollOffset = {
+            lazyRowState.firstVisibleItemIndex * itemSize +
+                lazyRowState.firstVisibleItemScrollOffset
+        }
         var firstBoxRect = DpRectZero()
 
         setContent {
@@ -601,12 +615,15 @@ internal class ScrollTest {
                 itemCount = itemCount,
                 lazyRowState = lazyRowState,
                 layoutDirection = LayoutDirection.Rtl,
-                onFirstBoxGloballyPositioned = { firstBoxRect = it.boundsInWindow().toDpRect(density) }
+                onFirstBoxGloballyPositioned = {
+                    firstBoxRect = it.boundsInWindow().toDpRect(density)
+                },
             )
         }
 
-        val touch = touchDown(DpOffset(screenSize.center.x, 50.dp))
-            .dragBy(dx = -(50 + CUPERTINO_TOUCH_SLOP).dp)
+        val touch =
+            touchDown(DpOffset(screenSize.center.x, 50.dp))
+                .dragBy(dx = -(50 + CUPERTINO_TOUCH_SLOP).dp)
 
         assertTrue(firstBoxRect.right < screenSize.width)
         assertTrue(firstBoxRect.right > screenSize.width - 50.dp)
@@ -623,7 +640,10 @@ internal class ScrollTest {
     fun testHorizontalOverscrollWithLTR() = runUIKitInstrumentedTest {
         val itemSize = 150
         val lazyRowState = LazyListState()
-        val totalScrollOffset = { lazyRowState.firstVisibleItemIndex * itemSize + lazyRowState.firstVisibleItemScrollOffset }
+        val totalScrollOffset = {
+            lazyRowState.firstVisibleItemIndex * itemSize +
+                lazyRowState.firstVisibleItemScrollOffset
+        }
         var firstBoxRect = DpRectZero()
 
         setContent {
@@ -631,12 +651,15 @@ internal class ScrollTest {
                 itemSize = itemSize.dp,
                 lazyRowState = lazyRowState,
                 layoutDirection = LayoutDirection.Ltr,
-                onFirstBoxGloballyPositioned = { firstBoxRect = it.boundsInWindow().toDpRect(density) }
+                onFirstBoxGloballyPositioned = {
+                    firstBoxRect = it.boundsInWindow().toDpRect(density)
+                },
             )
         }
 
-        val touch = touchDown(DpOffset(screenSize.center.x, 50.dp))
-            .dragBy(dx = (50 + CUPERTINO_TOUCH_SLOP).dp)
+        val touch =
+            touchDown(DpOffset(screenSize.center.x, 50.dp))
+                .dragBy(dx = (50 + CUPERTINO_TOUCH_SLOP).dp)
 
         assertTrue(firstBoxRect.left > 0.dp)
         assertTrue(firstBoxRect.left < 50.dp)
@@ -651,186 +674,211 @@ internal class ScrollTest {
 
     @OptIn(ExperimentalForeignApi::class)
     @Test
-    fun testDragWithTouchStartInUIKitViewAndComposeView() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val state = ScrollState(0)
-        var boxRect = DpRectZero()
-        var labelRect = DpRectZero()
+    fun testDragWithTouchStartInUIKitViewAndComposeView() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            val state = ScrollState(0)
+            var boxRect = DpRectZero()
+            var labelRect = DpRectZero()
 
-        setContent {
-            Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Blue)
-                )
+            setContent {
+                Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
+                    Box(modifier = Modifier.fillMaxWidth().height(100.dp).background(Color.Blue))
 
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Red)
-                    .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
-                    .testTag("Red Box")
-                )
+                    Box(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .height(100.dp)
+                                .background(Color.Red)
+                                .onGloballyPositioned {
+                                    boxRect = it.boundsInWindow().toDpRect(density)
+                                }
+                                .testTag("Red Box")
+                    )
 
-                UIKitView(
-                    factory = {
-                        val label = UILabel(frame = CGRectZero.readValue())
-                        label.text = "UIKit.UILabel"
-                        label.textColor = UIColor.blackColor
-                        label.backgroundColor = UIColor.redColor
-                        label
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .onGloballyPositioned { labelRect = it.boundsInWindow().toDpRect(density) }
-                        .testTag("UIKit.UILabel"),
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
-                )
+                    UIKitView(
+                        factory = {
+                            val label = UILabel(frame = CGRectZero.readValue())
+                            label.text = "UIKit.UILabel"
+                            label.textColor = UIColor.blackColor
+                            label.backgroundColor = UIColor.redColor
+                            label
+                        },
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .height(200.dp)
+                                .onGloballyPositioned {
+                                    labelRect = it.boundsInWindow().toDpRect(density)
+                                }
+                                .testTag("UIKit.UILabel"),
+                        properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                    )
 
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(screenSize.height)
-                    .background(Color.White)
-                )
-            }
-        }
-
-        val initialBoxRect = boxRect.copy()
-        val initialLabelRect = labelRect.copy()
-
-        findNodeWithTag("UIKit.UILabel")
-            .touchDown()
-            .dragBy(dy = -(100 + CUPERTINO_TOUCH_SLOP).dp)
-            .also { delay(500) }
-            .up()
-
-        waitForIdle()
-
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 0.dp), DpSize(screenSize.width, 100.dp)), boxRect)
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 100.dp), DpSize(screenSize.width, 200.dp)), labelRect)
-
-        findNodeWithTag("Red Box")
-            .touchDown()
-            .dragBy(dy = (100 + CUPERTINO_TOUCH_SLOP).dp)
-            .also { delay(500) }
-            .up()
-
-        waitForIdle()
-
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 100.dp), DpSize(screenSize.width, 100.dp)), initialBoxRect)
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 200.dp), DpSize(screenSize.width, 200.dp)), initialLabelRect)
-    }
-
-    @Test
-    fun testUIKitScrollViewInsideComposeScrollView_DragFromUIKitScrollView() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val state = ScrollState(0)
-        var uiScrollViewRect: () -> DpRect = { DpRectZero() }
-        var contentOffset: () -> DpOffset = { DpOffset.Zero }
-
-        setContent {
-            VerticalUIKitScrollInsideVerticalScroll(
-                placeUIKitViewAsOverlay = overlay,
-                state = state,
-                screenSize = screenSize,
-                density = density,
-                topContentHeight = 400.dp,
-                uiKitScrollViewHeight = 400.dp,
-                uiKitScrollViewRectInWindow = { uiScrollViewRect = it },
-                uiKitContentOffset = { contentOffset = it }
-            )
-        }
-
-        val initialUIScrollViewRect = uiScrollViewRect()
-
-        findNodeWithTag("UIKit.UIScrollView")
-            .touchDown()
-            .also {
-                // There is an issue on iOS < 15 where the simulated drag is not applied immediately.
-                if (!available(OS.Ios to OSVersion(16))) {
-                    delay(100)
+                    Box(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .height(screenSize.height)
+                                .background(Color.White)
+                    )
                 }
             }
-            .dragBy(dy = -(250 + CUPERTINO_TOUCH_SLOP).dp)
-            .also { delay(500) }
-            .up()
 
-        waitForIdle()
+            val initialBoxRect = boxRect.copy()
+            val initialLabelRect = labelRect.copy()
 
-        assertEquals(initialUIScrollViewRect, uiScrollViewRect())
-        assertEquals(DpOffset(x = 0.dp, y = 250.dp), contentOffset())
-    }
+            findNodeWithTag("UIKit.UILabel")
+                .touchDown()
+                .dragBy(dy = -(100 + CUPERTINO_TOUCH_SLOP).dp)
+                .also { delay(500) }
+                .up()
 
-    @OptIn(ExperimentalForeignApi::class)
-    @Test
-    fun testUIKitScrollViewInsideComposeScrollView_DragFromCompose() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val state = ScrollState(0)
-        var uiScrollViewRect: () -> DpRect = { DpRectZero() }
-        var contentOffset: () -> DpOffset = { DpOffset.Zero }
+            waitForIdle()
 
-        setContent {
-            VerticalUIKitScrollInsideVerticalScroll(
-                placeUIKitViewAsOverlay = overlay,
-                state = state,
-                screenSize = screenSize,
-                density = density,
-                topContentHeight = 400.dp,
-                uiKitScrollViewHeight = 400.dp,
-                uiKitScrollViewRectInWindow = { uiScrollViewRect = it },
-                uiKitContentOffset = { contentOffset = it }
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 0.dp), DpSize(screenSize.width, 100.dp)),
+                boxRect,
+            )
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 100.dp), DpSize(screenSize.width, 200.dp)),
+                labelRect,
+            )
+
+            findNodeWithTag("Red Box")
+                .touchDown()
+                .dragBy(dy = (100 + CUPERTINO_TOUCH_SLOP).dp)
+                .also { delay(500) }
+                .up()
+
+            waitForIdle()
+
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 100.dp), DpSize(screenSize.width, 100.dp)),
+                initialBoxRect,
+            )
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 200.dp), DpSize(screenSize.width, 200.dp)),
+                initialLabelRect,
             )
         }
 
-        findNodeWithTag("Top Box")
-            .touchDown()
-            .dragBy(dy = -(100 + CUPERTINO_TOUCH_SLOP).dp)
-            .also { delay(500) }
-            .up()
-
-        waitForIdle()
-
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 300.dp), DpSize(screenSize.width, 400.dp)), uiScrollViewRect())
-        assertEquals(DpOffset.Zero, contentOffset())
-    }
-
     @Test
-    fun testOverscrollForUIKitHorizontalScrollViewAtTop() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val state = ScrollState(0)
-        var uiKitViewRect: () -> DpRect = { DpRectZero() }
-        var contentOffset: () -> DpOffset = { DpOffset.Zero }
+    fun testUIKitScrollViewInsideComposeScrollView_DragFromUIKitScrollView() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            val state = ScrollState(0)
+            var uiScrollViewRect: () -> DpRect = { DpRectZero() }
+            var contentOffset: () -> DpOffset = { DpOffset.Zero }
 
-        setContent {
-            VerticalScrollWithHorizontalUIKitScroll(
-                placeUIKitViewAsOverlay = overlay,
-                state = state,
-                screenSize = screenSize,
-                topContentHeight = 0.dp,
-                uiKitScrollViewHeight = 200.dp,
-                uiKitScrollViewRectInWindow = { uiKitViewRect = it },
-                uiKitContentOffset = { contentOffset = it }
-            )
+            setContent {
+                VerticalUIKitScrollInsideVerticalScroll(
+                    placeUIKitViewAsOverlay = overlay,
+                    state = state,
+                    screenSize = screenSize,
+                    density = density,
+                    topContentHeight = 400.dp,
+                    uiKitScrollViewHeight = 400.dp,
+                    uiKitScrollViewRectInWindow = { uiScrollViewRect = it },
+                    uiKitContentOffset = { contentOffset = it },
+                )
+            }
+
+            val initialUIScrollViewRect = uiScrollViewRect()
+
+            findNodeWithTag("UIKit.UIScrollView")
+                .touchDown()
+                .also {
+                    // There is an issue on iOS < 15 where the simulated drag is not applied
+                    // immediately.
+                    if (!available(OS.Ios to OSVersion(16))) {
+                        delay(100)
+                    }
+                }
+                .dragBy(dy = -(250 + CUPERTINO_TOUCH_SLOP).dp)
+                .also { delay(500) }
+                .up()
+
+            waitForIdle()
+
+            assertEquals(initialUIScrollViewRect, uiScrollViewRect())
+            assertEquals(DpOffset(x = 0.dp, y = 250.dp), contentOffset())
         }
 
-        val initialUIKitViewRect = uiKitViewRect().copy()
+    @Test
+    fun testUIKitScrollViewInsideComposeScrollView_DragFromCompose() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            val state = ScrollState(0)
+            var uiScrollViewRect: () -> DpRect = { DpRectZero() }
+            var contentOffset: () -> DpOffset = { DpOffset.Zero }
 
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 0.dp), DpSize(screenSize.width, 200.dp)), initialUIKitViewRect)
+            setContent {
+                VerticalUIKitScrollInsideVerticalScroll(
+                    placeUIKitViewAsOverlay = overlay,
+                    state = state,
+                    screenSize = screenSize,
+                    density = density,
+                    topContentHeight = 400.dp,
+                    uiKitScrollViewHeight = 400.dp,
+                    uiKitScrollViewRectInWindow = { uiScrollViewRect = it },
+                    uiKitContentOffset = { contentOffset = it },
+                )
+            }
 
-        val touch = touchDown(DpOffset(screenSize.center.x, 100.dp))
-            .dragBy(dy = (50 + CUPERTINO_TOUCH_SLOP).dp)
+            findNodeWithTag("Top Box")
+                .touchDown()
+                .dragBy(dy = -(100 + CUPERTINO_TOUCH_SLOP).dp)
+                .also { delay(500) }
+                .up()
 
-        waitForIdle()
+            waitForIdle()
 
-        assertTrue(uiKitViewRect().top > 0.dp)
-        assertTrue(uiKitViewRect().top < (50 + CUPERTINO_TOUCH_SLOP).dp)
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 300.dp), DpSize(screenSize.width, 400.dp)),
+                uiScrollViewRect(),
+            )
+            assertEquals(DpOffset.Zero, contentOffset())
+        }
 
-        assertEquals(DpOffset(x = 0.dp, y = 0.dp), contentOffset())
+    @Test
+    fun testOverscrollForUIKitHorizontalScrollViewAtTop() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            val state = ScrollState(0)
+            var uiKitViewRect: () -> DpRect = { DpRectZero() }
+            var contentOffset: () -> DpOffset = { DpOffset.Zero }
 
-        touch.up()
-        waitForIdle()
+            setContent {
+                VerticalScrollWithHorizontalUIKitScroll(
+                    placeUIKitViewAsOverlay = overlay,
+                    state = state,
+                    screenSize = screenSize,
+                    topContentHeight = 0.dp,
+                    uiKitScrollViewHeight = 200.dp,
+                    uiKitScrollViewRectInWindow = { uiKitViewRect = it },
+                    uiKitContentOffset = { contentOffset = it },
+                )
+            }
 
-        assertEquals(initialUIKitViewRect, uiKitViewRect())
-        assertEquals(0 * density.density, state.value.toFloat())
-    }
+            val initialUIKitViewRect = uiKitViewRect().copy()
+
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 0.dp), DpSize(screenSize.width, 200.dp)),
+                initialUIKitViewRect,
+            )
+
+            val touch =
+                touchDown(DpOffset(screenSize.center.x, 100.dp))
+                    .dragBy(dy = (50 + CUPERTINO_TOUCH_SLOP).dp)
+
+            waitForIdle()
+
+            assertTrue(uiKitViewRect().top > 0.dp)
+            assertTrue(uiKitViewRect().top < (50 + CUPERTINO_TOUCH_SLOP).dp)
+
+            assertEquals(DpOffset(x = 0.dp, y = 0.dp), contentOffset())
+
+            touch.up()
+            waitForIdle()
+
+            assertEquals(initialUIKitViewRect, uiKitViewRect())
+            assertEquals(0 * density.density, state.value.toFloat())
+        }
 
     /**
      * Tests horizontal UIScrollView scrolling behavior when:
@@ -838,37 +886,38 @@ internal class ScrollTest {
      * - Drag gesture continues horizontally
      */
     @Test
-    fun testHorizontalUIScrollViewInComposeScroll_HorizontalDrag() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val state = ScrollState(0)
-        var uiKitViewRect: () -> DpRect = { DpRectZero() }
-        var contentOffset: () -> DpOffset = { DpOffset.Zero }
+    fun testHorizontalUIScrollViewInComposeScroll_HorizontalDrag() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            val state = ScrollState(0)
+            var uiKitViewRect: () -> DpRect = { DpRectZero() }
+            var contentOffset: () -> DpOffset = { DpOffset.Zero }
 
-        setContent {
-            VerticalScrollWithHorizontalUIKitScroll(
-                placeUIKitViewAsOverlay = overlay,
-                state = state,
-                screenSize = screenSize,
-                topContentHeight = 200.dp,
-                uiKitScrollViewHeight = 200.dp,
-                uiKitScrollViewRectInWindow = { uiKitViewRect = it },
-                uiKitContentOffset = { contentOffset = it }
-            )
+            setContent {
+                VerticalScrollWithHorizontalUIKitScroll(
+                    placeUIKitViewAsOverlay = overlay,
+                    state = state,
+                    screenSize = screenSize,
+                    topContentHeight = 200.dp,
+                    uiKitScrollViewHeight = 200.dp,
+                    uiKitScrollViewRectInWindow = { uiKitViewRect = it },
+                    uiKitContentOffset = { contentOffset = it },
+                )
+            }
+
+            val initialUIKitViewRect = uiKitViewRect().copy()
+
+            findNodeWithTag("UIKit.UIScrollView")
+                .touchDown()
+                .dragBy(dx = -(50 + CUPERTINO_TOUCH_SLOP).dp)
+                .also { delay(500) }
+                .up()
+
+            waitForIdle()
+
+            assertEquals(0 * density.density, state.value.toFloat())
+            assertEquals(initialUIKitViewRect, uiKitViewRect())
+            assertEquals(DpOffset(x = 50.dp, y = 0.dp), contentOffset())
         }
-
-        val initialUIKitViewRect = uiKitViewRect().copy()
-
-        findNodeWithTag("UIKit.UIScrollView")
-            .touchDown()
-            .dragBy(dx = -(50 + CUPERTINO_TOUCH_SLOP).dp)
-            .also { delay(500) }
-            .up()
-
-        waitForIdle()
-
-        assertEquals(0 * density.density, state.value.toFloat())
-        assertEquals(initialUIKitViewRect, uiKitViewRect())
-        assertEquals(DpOffset(x = 50.dp, y = 0.dp), contentOffset())
-    }
 
     /**
      * Tests horizontal UIScrollView scrolling behavior when:
@@ -876,116 +925,129 @@ internal class ScrollTest {
      * - Drag gesture continues vertically
      */
     @Test
-    fun testHorizontalUIScrollViewInComposeVerticalScroll_VerticalDrag() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val state = ScrollState(0)
-        var uiKitViewRect: () -> DpRect = { DpRectZero() }
-        var contentOffset: () -> DpOffset = { DpOffset.Zero }
+    fun testHorizontalUIScrollViewInComposeVerticalScroll_VerticalDrag() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            val state = ScrollState(0)
+            var uiKitViewRect: () -> DpRect = { DpRectZero() }
+            var contentOffset: () -> DpOffset = { DpOffset.Zero }
 
-        setContent {
-            VerticalScrollWithHorizontalUIKitScroll(
-                placeUIKitViewAsOverlay = overlay,
-                state = state,
-                screenSize = screenSize,
-                topContentHeight = 200.dp,
-                uiKitScrollViewHeight = 200.dp,
-                uiKitScrollViewRectInWindow = { uiKitViewRect = it },
-                uiKitContentOffset = { contentOffset = it }
+            setContent {
+                VerticalScrollWithHorizontalUIKitScroll(
+                    placeUIKitViewAsOverlay = overlay,
+                    state = state,
+                    screenSize = screenSize,
+                    topContentHeight = 200.dp,
+                    uiKitScrollViewHeight = 200.dp,
+                    uiKitScrollViewRectInWindow = { uiKitViewRect = it },
+                    uiKitContentOffset = { contentOffset = it },
+                )
+            }
+
+            findNodeWithTag("UIKit.UIScrollView")
+                .touchDown()
+                .dragBy(dy = -(50 + CUPERTINO_TOUCH_SLOP).dp)
+                .also { delay(500) }
+                .up()
+
+            waitForIdle()
+
+            assertEquals(50 * density.density, state.value.toFloat())
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 150.dp), DpSize(screenSize.width, 200.dp)),
+                uiKitViewRect(),
             )
+            assertEquals(DpOffset.Zero, contentOffset())
         }
 
-        findNodeWithTag("UIKit.UIScrollView")
-            .touchDown()
-            .dragBy(dy = -(50 + CUPERTINO_TOUCH_SLOP).dp)
-            .also { delay(500) }
-            .up()
-
-        waitForIdle()
-
-        assertEquals(50 * density.density, state.value.toFloat())
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 150.dp), DpSize(screenSize.width, 200.dp)), uiKitViewRect())
-        assertEquals(DpOffset.Zero, contentOffset())
-    }
-
     /**
-     * Tests drag gestures that include both horizontal and vertical
-     * components when interacting with a horizontal UIKit scroll view embedded in a vertical
-     * Compose scroll container. Verifies proper gesture disambiguation and handling when:
+     * Tests drag gestures that include both horizontal and vertical components when interacting
+     * with a horizontal UIKit scroll view embedded in a vertical Compose scroll container. Verifies
+     * proper gesture disambiguation and handling when:
      * 1. Drag gestures change direction mid-interaction
      * 2. Mixed horizontal and vertical movements occur simultaneously
      * 3. Drag gestures extend beyond the bounds of the UIKit view
      */
     @Test
-    fun testHorizontalUIScrollViewInComposeVerticalScroll_MixedDrag() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val state = ScrollState(0)
-        var uiKitViewRect: () -> DpRect = { DpRectZero() }
-        var contentOffset: () -> DpOffset = { DpOffset.Zero }
+    fun testHorizontalUIScrollViewInComposeVerticalScroll_MixedDrag() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            val state = ScrollState(0)
+            var uiKitViewRect: () -> DpRect = { DpRectZero() }
+            var contentOffset: () -> DpOffset = { DpOffset.Zero }
 
-        setContent {
-            VerticalScrollWithHorizontalUIKitScroll(
-                placeUIKitViewAsOverlay = overlay,
-                state = state,
-                screenSize = screenSize,
-                topContentHeight = 200.dp,
-                uiKitScrollViewHeight = 200.dp,
-                uiKitScrollViewRectInWindow = { uiKitViewRect = it },
-                uiKitContentOffset = { contentOffset = it }
+            setContent {
+                VerticalScrollWithHorizontalUIKitScroll(
+                    placeUIKitViewAsOverlay = overlay,
+                    state = state,
+                    screenSize = screenSize,
+                    topContentHeight = 200.dp,
+                    uiKitScrollViewHeight = 200.dp,
+                    uiKitScrollViewRectInWindow = { uiKitViewRect = it },
+                    uiKitContentOffset = { contentOffset = it },
+                )
+            }
+
+            touchDown(DpOffset(screenSize.center.x, 250.dp))
+                .dragBy(dx = -(50 + CUPERTINO_TOUCH_SLOP).dp, dy = (-50).dp)
+                .dragBy(dx = 20.dp, dy = (-50).dp)
+                .dragBy(dx = (-70).dp, dy = 50.dp)
+                .dragBy(dy = (-150).dp)
+                .also { delay(500) }
+                .up()
+
+            waitForIdle()
+
+            assertEquals(0 * density.density, state.value.toFloat())
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 200.dp), DpSize(screenSize.width, 200.dp)),
+                uiKitViewRect(),
             )
+            assertEquals(DpOffset(x = 100.dp, y = 0.dp), contentOffset())
         }
 
-        touchDown(DpOffset(screenSize.center.x, 250.dp))
-            .dragBy(dx = -(50 + CUPERTINO_TOUCH_SLOP).dp, dy = -50.dp)
-            .dragBy(dx = 20.dp, dy = -50.dp)
-            .dragBy(dx = -70.dp, dy = 50.dp)
-            .dragBy(dy = -150.dp)
-            .also { delay(500) }
-            .up()
-
-        waitForIdle()
-
-        assertEquals(0 * density.density, state.value.toFloat())
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 200.dp), DpSize(screenSize.width, 200.dp)), uiKitViewRect())
-        assertEquals(DpOffset(x = 100.dp, y = 0.dp), contentOffset())
-    }
-
     /**
-     * Tests the resolution of ambiguous drag gestures between a horizontal UIKit scroll view
-     * and a vertical Compose scroll container. Specifically:
+     * Tests the resolution of ambiguous drag gestures between a horizontal UIKit scroll view and a
+     * vertical Compose scroll container. Specifically:
      * 1. When drag starts with primarily vertical movement, Compose scroll takes precedence
      * 2. Small horizontal movements during a primarily vertical drag don't trigger UIKit scroll
      * 3. Direction disambiguation happens early in the gesture
      */
     @Test
-    fun testHorizontalUIScrollViewInComposeVerticalScroll_VerticalAndSmallHorizontalDrag() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val state = ScrollState(0)
-        var uiKitViewRect: () -> DpRect = { DpRectZero() }
-        var contentOffset: () -> DpOffset = { DpOffset.Zero }
+    fun testHorizontalUIScrollViewInComposeVerticalScroll_VerticalAndSmallHorizontalDrag() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            val state = ScrollState(0)
+            var uiKitViewRect: () -> DpRect = { DpRectZero() }
+            var contentOffset: () -> DpOffset = { DpOffset.Zero }
 
-        setContent {
-            VerticalScrollWithHorizontalUIKitScroll(
-                placeUIKitViewAsOverlay = overlay,
-                state = state,
-                screenSize = screenSize,
-                topContentHeight = 200.dp,
-                uiKitScrollViewHeight = 200.dp,
-                uiKitScrollViewRectInWindow = { uiKitViewRect = it },
-                uiKitContentOffset = { contentOffset = it }
+            setContent {
+                VerticalScrollWithHorizontalUIKitScroll(
+                    placeUIKitViewAsOverlay = overlay,
+                    state = state,
+                    screenSize = screenSize,
+                    topContentHeight = 200.dp,
+                    uiKitScrollViewHeight = 200.dp,
+                    uiKitScrollViewRectInWindow = { uiKitViewRect = it },
+                    uiKitContentOffset = { contentOffset = it },
+                )
+            }
+
+            findNodeWithTag("UIKit.UIScrollView")
+                .touchDown()
+                .dragBy(dx = -(5 + CUPERTINO_TOUCH_SLOP).dp, dy = -(50 + CUPERTINO_TOUCH_SLOP).dp)
+                .dragBy(dx = (-50).dp, dy = (-50).dp)
+                .also { delay(500) }
+                .up()
+
+            waitForIdle()
+
+            // verify that only Compose scroll state changed but UIScrollView content offset stayed
+            // the same
+            assertEquals(100 * density.density, state.value.toFloat())
+            assertEquals(
+                DpRect(DpOffset(x = 0.dp, y = 100.dp), DpSize(screenSize.width, 200.dp)),
+                uiKitViewRect(),
             )
+            assertEquals(DpOffset.Zero, contentOffset())
         }
-
-        findNodeWithTag("UIKit.UIScrollView")
-            .touchDown()
-            .dragBy(dx = -(5 + CUPERTINO_TOUCH_SLOP).dp, dy = -(50 + CUPERTINO_TOUCH_SLOP).dp)
-            .dragBy(dx = -50.dp, dy = -50.dp)
-            .also { delay(500) }
-            .up()
-
-        waitForIdle()
-
-        // verify that only Compose scroll state changed but UIScrollView content offset stayed the same
-        assertEquals(100 * density.density, state.value.toFloat())
-        assertEquals(DpRect(DpOffset(x = 0.dp, y = 100.dp), DpSize(screenSize.width, 200.dp)), uiKitViewRect())
-        assertEquals(DpOffset.Zero, contentOffset())
-    }
 
     @Test
     fun testMultiTouchScroll() = runUIKitInstrumentedTest {
@@ -994,14 +1056,10 @@ internal class ScrollTest {
         setContent {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(modifier = Modifier.testTag("Row 1").horizontalScroll(state1)) {
-                    repeat(20) {
-                        Box(modifier = Modifier.size(200.dp))
-                    }
+                    repeat(20) { Box(modifier = Modifier.size(200.dp)) }
                 }
                 Row(modifier = Modifier.testTag("Row 2").horizontalScroll(state2)) {
-                    repeat(20) {
-                        Box(modifier = Modifier.size(200.dp))
-                    }
+                    repeat(20) { Box(modifier = Modifier.size(200.dp)) }
                 }
             }
         }
@@ -1030,44 +1088,38 @@ internal class ScrollTest {
     fun testScrollInModalViewController() = runUIKitInstrumentedTest {
         val scrollState = ScrollState(0)
 
-        setContent {
-            Box(modifier = Modifier.fillMaxSize().background(Color.White))
-        }
+        setContent { Box(modifier = Modifier.fillMaxSize().background(Color.White)) }
 
-        val modalVC = ComposeHostingViewController(
-            configuration = ComposeUIViewControllerConfiguration().apply {
-                enforceStrictPlistSanityCheck = false
-            },
-            content = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(scrollState)
-                ) {
-                    repeat(20) { index ->
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
-                                .background(if (index % 2 == 0) Color.Red else Color.Blue)
-                        )
+        val modalVC =
+            ComposeHostingViewController(
+                configuration =
+                    ComposeUIViewControllerConfiguration().apply {
+                        enforceStrictPlistSanityCheck = false
+                    },
+                content = {
+                    Column(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
+                        repeat(20) { index ->
+                            Box(
+                                modifier =
+                                    Modifier.fillMaxWidth()
+                                        .height(200.dp)
+                                        .background(if (index % 2 == 0) Color.Red else Color.Blue)
+                            )
+                        }
                     }
-                }
-            },
-        )
+                },
+            )
 
         var presented = false
 
-        viewController.presentViewController(modalVC, animated = false) {
-            presented = true
-        }
+        viewController.presentViewController(modalVC, animated = false) { presented = true }
 
         waitUntil("Modal view controller should be presented") { presented }
         modalVC.waitForIdle()
 
         // Perform 3 separate scroll gestures — each touchDown consumes slop independently
         val scrollAmount = 150.dp
-        repeat(3) { attempt ->
+        repeat(3) {
             touchDown(screenSize.center)
                 .dragBy(dy = -scrollAmount, duration = 100.milliseconds)
                 .wait(100.milliseconds)
@@ -1096,21 +1148,23 @@ internal class ScrollTest {
                     val scrollView = UIScrollView()
                     scrollView.setContentSize(CGSizeMake(10000.0, 100.0))
 
-                    val composeVC = ComposeHostingViewController(
-                        configuration = ComposeUIViewControllerConfiguration().apply {
-                            enforceStrictPlistSanityCheck = false
-                        },
-                        content = {
-                            Box(modifier = Modifier.fillMaxSize().background(Color.LightGray)) {
-                                Button(
-                                    onClick = { buttonClicked = true },
-                                    modifier = Modifier.align(Alignment.Center)
-                                ) {
-                                    Text("Button")
+                    val composeVC =
+                        ComposeHostingViewController(
+                            configuration =
+                                ComposeUIViewControllerConfiguration().apply {
+                                    enforceStrictPlistSanityCheck = false
+                                },
+                            content = {
+                                Box(modifier = Modifier.fillMaxSize().background(Color.LightGray)) {
+                                    Button(
+                                        onClick = { buttonClicked = true },
+                                        modifier = Modifier.align(Alignment.Center),
+                                    ) {
+                                        Text("Button")
+                                    }
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
                     parent.addChildViewController(composeVC)
                     scrollView.addSubview(composeVC.view)
                     composeVC.view.setFrame(CGRectMake(0.0, 0.0, 300.0, 100.0))
@@ -1136,7 +1190,7 @@ internal class ScrollTest {
 
         assertTrue(
             scrollView.contentOffset.toDpOffset().x > 0.dp,
-            "UIScrollView should scroll horizontally on swipe"
+            "UIScrollView should scroll horizontally on swipe",
         )
         assertFalse(buttonClicked, "Button should NOT be clicked when swiping over it")
     }
@@ -1151,52 +1205,41 @@ private fun VerticalUIKitScrollInsideVerticalScroll(
     topContentHeight: Dp,
     uiKitScrollViewHeight: Dp,
     uiKitScrollViewRectInWindow: (() -> DpRect) -> Unit = {},
-    uiKitContentOffset: (() -> DpOffset) -> Unit = { },
+    uiKitContentOffset: (() -> DpOffset) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(topContentHeight)
-                .background(Color.Red)
-                .testTag("Top Box")
+            modifier =
+                Modifier.fillMaxWidth()
+                    .height(topContentHeight)
+                    .background(Color.Red)
+                    .testTag("Top Box")
         )
 
         var scrollViewSize by mutableStateOf(DpSize.Zero)
         UIKitView(
             factory = {
                 val scrollView = UIScrollView()
-                scrollView.setContentSize(
-                    CGSizeMake(scrollViewSize.width.value.toDouble(), 1000.0)
-                )
+                scrollView.setContentSize(CGSizeMake(scrollViewSize.width.value.toDouble(), 1000.0))
                 scrollView.backgroundColor = UIColor.lightGrayColor
-                uiKitScrollViewRectInWindow({ scrollView.dpRectInWindow() })
-                uiKitContentOffset({ scrollView.contentOffset.toDpOffset() })
+                uiKitScrollViewRectInWindow { scrollView.dpRectInWindow() }
+                uiKitContentOffset { scrollView.contentOffset.toDpOffset() }
                 scrollView
             },
             update = { scrollView ->
-                scrollView.setContentSize(
-                    CGSizeMake(scrollViewSize.width.value.toDouble(), 1000.0)
-                )
+                scrollView.setContentSize(CGSizeMake(scrollViewSize.width.value.toDouble(), 1000.0))
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("UIKit.UIScrollView")
-                .height(uiKitScrollViewHeight)
-                .onSizeChanged {
-                scrollViewSize = with(density) {
-                    DpSize(it.width.toDp(), it.height.toDp())
-                }
-            },
-            properties = UIKitInteropProperties(placedAsOverlay = placeUIKitViewAsOverlay)
+            modifier =
+                Modifier.fillMaxWidth()
+                    .testTag("UIKit.UIScrollView")
+                    .height(uiKitScrollViewHeight)
+                    .onSizeChanged {
+                        scrollViewSize = with(density) { DpSize(it.width.toDp(), it.height.toDp()) }
+                    },
+            properties = UIKitInteropProperties(placedAsOverlay = placeUIKitViewAsOverlay),
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(screenSize.height)
-                .background(Color.White)
-        )
+        Box(modifier = Modifier.fillMaxWidth().height(screenSize.height).background(Color.White))
     }
 }
 
@@ -1210,41 +1253,31 @@ private fun VerticalScrollWithHorizontalUIKitScroll(
     uiKitScrollViewHeight: Dp,
     uiKitScrollViewContentWidth: Double = 5000.0,
     uiKitScrollViewRectInWindow: (() -> DpRect) -> Unit = {},
-    uiKitContentOffset: (() -> DpOffset) -> Unit = { },
+    uiKitContentOffset: (() -> DpOffset) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
         if (topContentHeight > 0.dp) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(topContentHeight)
-                    .background(Color.Red)
-            )
+            Box(modifier = Modifier.fillMaxWidth().height(topContentHeight).background(Color.Red))
         }
 
         UIKitView(
             factory = {
                 val scrollView = UIScrollView()
-                scrollView.setContentSize(CGSizeMake(uiKitScrollViewContentWidth, uiKitScrollViewHeight.value.toDouble()))
+                scrollView.setContentSize(
+                    CGSizeMake(uiKitScrollViewContentWidth, uiKitScrollViewHeight.value.toDouble())
+                )
                 scrollView.backgroundColor = UIColor.lightGrayColor
-                uiKitScrollViewRectInWindow({ scrollView.dpRectInWindow() })
-                uiKitContentOffset({ scrollView.contentOffset.toDpOffset() })
+                uiKitScrollViewRectInWindow { scrollView.dpRectInWindow() }
+                uiKitContentOffset { scrollView.contentOffset.toDpOffset() }
                 scrollView
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(uiKitScrollViewHeight)
-                .testTag("UIKit.UIScrollView"),
+            modifier =
+                Modifier.fillMaxWidth().height(uiKitScrollViewHeight).testTag("UIKit.UIScrollView"),
             update = {},
-            properties = UIKitInteropProperties(placedAsOverlay = placeUIKitViewAsOverlay)
+            properties = UIKitInteropProperties(placedAsOverlay = placeUIKitViewAsOverlay),
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(screenSize.height)
-                .background(Color.White)
-        )
+        Box(modifier = Modifier.fillMaxWidth().height(screenSize.height).background(Color.White))
     }
 }
 
@@ -1254,24 +1287,25 @@ private fun HorizontalScrollContent(
     itemCount: Int = 20,
     lazyRowState: LazyListState,
     layoutDirection: LayoutDirection,
-    onFirstBoxGloballyPositioned: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit = {}
+    onFirstBoxGloballyPositioned: (androidx.compose.ui.layout.LayoutCoordinates) -> Unit = {},
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
         Column(
             modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             LazyRow(modifier = Modifier.height(itemSize), state = lazyRowState) {
                 items(itemCount) {
                     Box(
-                        Modifier
-                            .size(itemSize, itemSize)
+                        Modifier.size(itemSize, itemSize)
                             .background(remember { Color(Random.nextInt()) })
                             .then(
-                                if (it == 0) Modifier.onGloballyPositioned(onFirstBoxGloballyPositioned) else Modifier
+                                if (it == 0)
+                                    Modifier.onGloballyPositioned(onFirstBoxGloballyPositioned)
+                                else Modifier
                             )
                     ) {
-                        Text("Text ${it}")
+                        Text("Text $it")
                     }
                 }
             }

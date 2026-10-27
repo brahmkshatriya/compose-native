@@ -20,7 +20,6 @@ import androidx.compose.runtime.TestOnly
 import androidx.compose.ui.input.key.toComposeEvent
 import androidx.compose.ui.text.input.BackspaceCommand
 import androidx.compose.ui.text.input.CommitTextCommand
-import androidx.compose.ui.text.input.DeleteSurroundingTextCommand
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
@@ -34,13 +33,12 @@ import org.w3c.dom.events.KeyboardEvent
 import org.w3c.dom.events.UIEvent
 
 /**
- * Processes native input events and handles their translation to commands
- * for Compose-based input handling and text editing. This class aggregates
- * events such as keyboard, composition, and input events, managing their
- * scheduling and execution in defined checkpoints.
+ * Processes native input events and handles their translation to commands for Compose-based input
+ * handling and text editing. This class aggregates events such as keyboard, composition, and input
+ * events, managing their scheduling and execution in defined checkpoints.
  *
- * @param composeSender The communicator responsible for transmitting edit
- * commands and keyboard events to the Compose system.
+ * @param composeSender The communicator responsible for transmitting edit commands and keyboard
+ *   events to the Compose system.
  */
 internal abstract class NativeInputEventsProcessor(
     private val composeSender: ComposeCommandCommunicator
@@ -48,11 +46,10 @@ internal abstract class NativeInputEventsProcessor(
 
     private val collectedEvents = mutableListOf<UIEvent>()
 
-    @get:TestOnly
-    @set:TestOnly
-    internal var isCheckpointScheduled = false
+    @get:TestOnly @set:TestOnly internal var isCheckpointScheduled = false
 
-    internal var lastCompositionEndTimestamp = 0.0 // Double because of k/wasm where Number.toLong() leads to a compilation error
+    internal var lastCompositionEndTimestamp =
+        0.0 // Double because of k/wasm where Number.toLong() leads to a compilation error
 
     /**
      * Schedules a checkpoint for processing input events.
@@ -76,11 +73,12 @@ internal abstract class NativeInputEventsProcessor(
 
         collectedEvents.sortBy { it.timeStamp.toInt() }
 
-        val isInIMEComposition = collectedEvents.fastAny {
-                it.type == "compositionend"
-                || it.type == "keydown" && (it as KeyboardEvent).isComposing
-                || it.type == "beforeinput" && (it as InputEvent).isComposing
-        }
+        val isInIMEComposition =
+            collectedEvents.fastAny {
+                it.type == "compositionend" ||
+                    it.type == "keydown" && (it as KeyboardEvent).isComposing ||
+                    it.type == "beforeinput" && (it as InputEvent).isComposing
+            }
 
         collectedEvents.fastForEach { evt ->
             val timestamp = evt.timeStamp.toDouble()
@@ -97,11 +95,15 @@ internal abstract class NativeInputEventsProcessor(
 
                     val isFromLastComposition = timestamp < lastCompositionEndTimestamp
 
-                    // see https://youtrack.jetbrains.com/issue/CMP-8745/Web-Mobile.-iOS.-Composite-input.-Characters-arent-deleted
-                    // on mobile iOS we cannot rely on the timestamp of the "keydown" event, it's always zero
-                    // it might seem strange that we are ignoring the isFromLastComposition safeguard
+                    // see
+                    // https://youtrack.jetbrains.com/issue/CMP-8745/Web-Mobile.-iOS.-Composite-input.-Characters-arent-deleted
+                    // on mobile iOS we cannot rely on the timestamp of the "keydown" event, it's
+                    // always zero
+                    // it might seem strange that we are ignoring the isFromLastComposition
+                    // safeguard
                     // which was historically introduced exactly to resolve issues in Safari -
-                    // but isFromLastComposition is needed so that we won't type a number digit if it was pressed during composition mode
+                    // but isFromLastComposition is needed so that we won't type a number digit if
+                    // it was pressed during composition mode
                     // this is something that is not supposed to happen on mobile devices
                     val shouldBeProcessed = timestamp == 0.0 || !isFromLastComposition
 
@@ -112,7 +114,9 @@ internal abstract class NativeInputEventsProcessor(
 
                 "compositionend" -> {
                     lastCompositionEndTimestamp = timestamp
-                    composeSender.sendEditCommand(CommitTextCommand((evt as CompositionEvent).data, 1))
+                    composeSender.sendEditCommand(
+                        CommitTextCommand((evt as CompositionEvent).data, 1)
+                    )
                 }
 
                 "beforeinput" -> {
@@ -125,46 +129,54 @@ internal abstract class NativeInputEventsProcessor(
     }
 
     private fun InputEventExt.process() {
-        val editCommands = when (inputType) {
-            "deleteContentBackward" -> buildList {
-                resolveSelection()?.let {
-                    add(it)
-                    add(BackspaceCommand())
-                }
+        val editCommands =
+            when (inputType) {
+                "deleteContentBackward" ->
+                    buildList {
+                        resolveSelection()?.let {
+                            add(it)
+                            add(BackspaceCommand())
+                        }
+                    }
+
+                "deleteWordBackward" ->
+                    buildList {
+                        resolveSelection()?.let {
+                            add(it)
+                            add(BackspaceCommand())
+                        }
+                    }
+
+                "insertReplacementText" ->
+                    buildList {
+                        if (data == null) return@buildList
+                        resolveSelection()?.let { add(it) }
+
+                        add(CommitTextCommand(data, 1))
+                    }
+
+                "insertText" ->
+                    buildList {
+                        if (data == null) return@buildList
+
+                        resolveSelection()?.let { add(it) }
+
+                        add(CommitTextCommand(data, 1))
+                    }
+
+                "insertCompositionText" ->
+                    buildList {
+                        if (data == null) return@buildList
+                        resolveSelection()?.let { add(it) }
+                        add(SetComposingTextCommand(data, 1))
+                    }
+
+                // "insertFromComposition", "deleteCompositionText" are triggered in Safari just
+                // before the 'compositionEnd' event.
+                // They're ignored because Safari also sends 'insertCompositionText' which we handle
+                // (alongside 'compositionEnd')
+                else -> emptyList()
             }
-
-            "deleteWordBackward" -> buildList {
-                resolveSelection()?.let {
-                    add(it)
-                    add(BackspaceCommand())
-                }
-            }
-
-            "insertReplacementText" -> buildList {
-                if (data == null) return@buildList
-                resolveSelection()?.let { add(it) }
-
-                add(CommitTextCommand(data, 1))
-            }
-
-            "insertText" -> buildList {
-                if (data == null) return@buildList
-
-                resolveSelection()?.let { add(it) }
-
-                add(CommitTextCommand(data, 1))
-            }
-
-            "insertCompositionText" -> buildList {
-                if (data == null) return@buildList
-                resolveSelection()?.let { add(it) }
-                add(SetComposingTextCommand(data, 1))
-            }
-
-            // "insertFromComposition", "deleteCompositionText" are triggered in Safari just before the 'compositionEnd' event.
-            // They're ignored because Safari also sends 'insertCompositionText' which we handle (alongside 'compositionEnd')
-            else -> emptyList()
-        }
 
         if (editCommands.isNotEmpty()) {
             composeSender.sendEditCommand(editCommands)
@@ -176,16 +188,15 @@ internal abstract class NativeInputEventsProcessor(
         internalScheduleCheckpoint()
     }
 
-    @TestOnly
-    internal fun getCollectedEvents() = collectedEvents
+    @TestOnly internal fun getCollectedEvents() = collectedEvents
 }
 
-private fun InputEventExt.resolveSelection(): SetSelectionCommand? {
-    firstRange?.let { targetRange ->
-        if (!targetRange.collapsed) {
-            return SetSelectionCommand(targetRange.startOffset, targetRange.endOffset)
-        }
-    }
-
-    return null
-}
+/**
+ * The target range reported by the browser is authoritative positional information: it states where
+ * exactly the edit has to be applied.
+ *
+ * A collapsed range is meaningful too - it pins the insertion point and makes the command immune to
+ * a caret drift on the Compose side (see https://youtrack.jetbrains.com/issue/CMP-10753).
+ */
+private fun InputEventExt.resolveSelection(): SetSelectionCommand? =
+    firstRange?.let { SetSelectionCommand(it.startOffset, it.endOffset) }

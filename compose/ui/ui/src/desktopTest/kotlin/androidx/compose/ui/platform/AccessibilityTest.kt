@@ -40,9 +40,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.isEqualTo
 import androidx.compose.ui.platform.a11y.AccessibleFocusHelper
-import androidx.compose.ui.platform.a11y.SemanticsOwnerAccessibility
 import androidx.compose.ui.platform.a11y.ComposeAccessible
 import androidx.compose.ui.platform.a11y.ComposeSceneAccessibility
+import androidx.compose.ui.platform.a11y.SemanticsOwnerAccessibility
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.awtRole
@@ -86,14 +86,11 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
-
 @OptIn(ExperimentalTestApi::class)
 class AccessibilityTest {
     @Test
     fun accessibleText() = runDesktopA11yTest {
-        setContent {
-            Text("Hello world. Hi world.", modifier = Modifier.testTag("text"))
-        }
+        setContent { Text("Hello world. Hi world.", modifier = Modifier.testTag("text")) }
 
         val accessibleContext = onNodeWithTag("text").fetchAccessibleContext()
         val accessibleText = accessibleContext.accessibleText!!
@@ -112,7 +109,10 @@ class AccessibilityTest {
         assertEquals("Hi world", accessibleText.getBeforeIndex(AccessibleText.SENTENCE, 21))
 
         assertEquals(0, accessibleText.getIndexAtPoint(Point(0, 0)))
-        assertEquals("Hello world. Hi world.".length, accessibleText.getIndexAtPoint(Point(10000, 10000)))
+        assertEquals(
+            "Hello world. Hi world.".length,
+            accessibleText.getIndexAtPoint(Point(10000, 10000)),
+        )
     }
 
     @Test
@@ -121,9 +121,9 @@ class AccessibilityTest {
             TabRow(selectedTabIndex = 0) {
                 Tab(
                     selected = true,
-                    onClick = { },
+                    onClick = {},
                     modifier = Modifier.testTag("tab"),
-                    text = { Text("Tab") }
+                    text = { Text("Tab") },
                 )
             }
         }
@@ -135,10 +135,8 @@ class AccessibilityTest {
     fun dropDownListRoleTranslatesToComboBoxAccessibleRole() = runDesktopA11yTest {
         setContent {
             Button(
-                modifier = Modifier
-                    .semantics { role = Role.DropdownList }
-                    .testTag("button"),
-                onClick = { }
+                modifier = Modifier.semantics { role = Role.DropdownList }.testTag("button"),
+                onClick = {},
             ) {
                 Text("Button")
             }
@@ -150,15 +148,11 @@ class AccessibilityTest {
     @Test
     fun progressBarHasCorrectRoleAndValues() = runDesktopA11yTest {
         setContent {
-            LinearProgressIndicator(
-                progress = 0.2f,
-                modifier = Modifier.testTag("progressbar")
-            )
+            LinearProgressIndicator(progress = 0.2f, modifier = Modifier.testTag("progressbar"))
         }
 
         onNodeWithTag("progressbar").fetchAccessibleContext().apply {
-            val value = accessibleValue
-                ?: fail("No accessibleValue on LinearProgressIndicator")
+            val value = accessibleValue ?: fail("No accessibleValue on LinearProgressIndicator")
 
             assertThat(accessibleRole).isEqualTo(AccessibleRole.PROGRESS_BAR)
             assertThat(value.minimumAccessibleValue).isEqualTo(0f)
@@ -168,10 +162,8 @@ class AccessibilityTest {
     }
 
     @Test
-    fun boxHasUnknownRole() = runDesktopA11yTest{
-        setContent {
-            Box(Modifier.testTag("box"))
-        }
+    fun boxHasUnknownRole() = runDesktopA11yTest {
+        setContent { Box(Modifier.testTag("box")) }
 
         onNodeWithTag("box").assertHasAccessibleRole(AccessibleRole.UNKNOWN)
     }
@@ -179,22 +171,14 @@ class AccessibilityTest {
     @Suppress("DEPRECATION")
     @Test
     fun containerHasGroupRole() = runDesktopA11yTest {
-        setContent {
-            Box(Modifier.testTag("box").semantics {
-                isContainer = true
-            })
-        }
+        setContent { Box(Modifier.testTag("box").semantics { isContainer = true }) }
 
         onNodeWithTag("box").assertHasAccessibleRole(AccessibleRole.GROUP_BOX)
     }
 
     @Test
     fun traversalGroupHasGroupRole() = runDesktopA11yTest {
-        setContent {
-            Box(Modifier.testTag("box").semantics {
-                isTraversalGroup = true
-            })
-        }
+        setContent { Box(Modifier.testTag("box").semantics { isTraversalGroup = true }) }
 
         onNodeWithTag("box").assertHasAccessibleRole(AccessibleRole.GROUP_BOX)
     }
@@ -204,10 +188,7 @@ class AccessibilityTest {
         setContent {
             Text(
                 text = "Hello",
-                modifier = Modifier.testTag("text")
-                    .semantics {
-                        hideFromAccessibility()
-                    }
+                modifier = Modifier.testTag("text").semantics { hideFromAccessibility() },
             )
         }
 
@@ -223,15 +204,13 @@ class AccessibilityTest {
             Column {
                 androidx.compose.material.RadioButton(
                     selected = selected,
-                    onClick = { },
-                    modifier = Modifier
-                        .testTag("radioButton")
+                    onClick = {},
+                    modifier = Modifier.testTag("radioButton"),
                 )
                 androidx.compose.material3.RadioButton(
                     selected = selected,
-                    onClick = { },
-                    modifier = Modifier
-                        .testTag("radioButton3")
+                    onClick = {},
+                    modifier = Modifier.testTag("radioButton3"),
                 )
             }
         }
@@ -262,15 +241,13 @@ class AccessibilityTest {
             Column {
                 androidx.compose.material.Checkbox(
                     checked = checked,
-                    onCheckedChange = { },
-                    modifier = Modifier
-                        .testTag("checkBox")
+                    onCheckedChange = {},
+                    modifier = Modifier.testTag("checkBox"),
                 )
                 androidx.compose.material3.Checkbox(
                     checked = checked,
-                    onCheckedChange = { },
-                    modifier = Modifier
-                        .testTag("checkBox3")
+                    onCheckedChange = {},
+                    modifier = Modifier.testTag("checkBox3"),
                 )
             }
         }
@@ -299,12 +276,7 @@ class AccessibilityTest {
         var size by mutableStateOf(DpSize(100.dp, 110.dp))
         var position by mutableStateOf(DpOffset(10.dp, 20.dp))
         test.setContent {
-            Box(
-                modifier = Modifier
-                    .testTag("box")
-                    .size(size)
-                    .offset(position.x, position.y)
-            )
+            Box(modifier = Modifier.testTag("box").size(size).offset(position.x, position.y))
         }
 
         onNodeWithTag("box").fetchAccessibleComponent().let {
@@ -323,11 +295,7 @@ class AccessibilityTest {
     @Test
     fun mergeDescendantsMergesText() = runDesktopA11yTest {
         test.setContent {
-            Row(
-                Modifier
-                    .testTag("text")
-                    .semantics(mergeDescendants = true) {}
-            ) {
+            Row(Modifier.testTag("text").semantics(mergeDescendants = true) {}) {
                 Text("Hello")
                 Text("World")
             }
@@ -392,13 +360,14 @@ class AccessibilityTest {
         }
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun verifyTextField1A11y() = runDesktopA11yTest {
         test.setContent {
             BasicTextField(
                 value = "Hello world",
-                onValueChange = { },
-                modifier = Modifier.testTag("textField")
+                onValueChange = {},
+                modifier = Modifier.testTag("textField"),
             )
         }
 
@@ -410,7 +379,7 @@ class AccessibilityTest {
         test.setContent {
             BasicTextField(
                 state = rememberTextFieldState("Hello world"),
-                modifier = Modifier.testTag("textField")
+                modifier = Modifier.testTag("textField"),
             )
         }
 
@@ -420,35 +389,30 @@ class AccessibilityTest {
     @Test
     fun traversalIndexIsRespected() = runDesktopA11yTest {
         test.setContent {
-            Column(Modifier
-                .testTag("container")
-                .semantics {
-                    isTraversalGroup = true
-                }
-            ) {
-                Text("Item 1",
-                    Modifier
-                        .semantics {
+            Column(Modifier.testTag("container").semantics { isTraversalGroup = true }) {
+                Text(
+                    "Item 1",
+                    Modifier.semantics {
                             traversalIndex = 0f
                             contentDescription = "Item 1"
                         }
-                        .testTag("item1")
+                        .testTag("item1"),
                 )
-                Text("Item 2",
-                    Modifier
-                        .semantics {
+                Text(
+                    "Item 2",
+                    Modifier.semantics {
                             traversalIndex = 2f
                             contentDescription = "Item 2"
                         }
-                        .testTag("item2")
+                        .testTag("item2"),
                 )
-                Text("Item 3",
-                    Modifier
-                        .semantics {
+                Text(
+                    "Item 3",
+                    Modifier.semantics {
                             traversalIndex = 1f
                             contentDescription = "Item 3"
                         }
-                        .testTag("item3")
+                        .testTag("item3"),
                 )
             }
         }
@@ -457,7 +421,9 @@ class AccessibilityTest {
             assertNotNull(context)
 
             fun assertDescriptionAtIndexIs(index: Int, expectedDescription: String) {
-                assertThat(context.getAccessibleChild(index).accessibleContext.accessibleDescription)
+                assertThat(
+                        context.getAccessibleChild(index).accessibleContext.accessibleDescription
+                    )
                     .isEqualTo(expectedDescription)
             }
 
@@ -468,7 +434,9 @@ class AccessibilityTest {
         }
 
         fun assertNodeWithTagIndexInParentIs(tag: String, expectedIndex: Int) {
-            assertThat(onNodeWithTag(tag).fetchAccessible().accessibleContext?.accessibleIndexInParent)
+            assertThat(
+                    onNodeWithTag(tag).fetchAccessible().accessibleContext?.accessibleIndexInParent
+                )
                 .isEqualTo(expectedIndex)
         }
         assertNodeWithTagIndexInParentIs("item1", 0)
@@ -480,12 +448,9 @@ class AccessibilityTest {
     fun awtRoleIsCorrect() = runDesktopA11yTest {
         test.setContent {
             Box(
-                Modifier
-                    .testTag("button")
-                    .size(100.dp)
-                    .semantics {
-                        awtRole = AccessibleRole.PUSH_BUTTON
-                    }
+                Modifier.testTag("button").size(100.dp).semantics {
+                    awtRole = AccessibleRole.PUSH_BUTTON
+                }
             )
         }
 
@@ -493,17 +458,17 @@ class AccessibilityTest {
             .isEqualTo(AccessibleRole.PUSH_BUTTON)
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun textFieldAccessibleNameUsesContentDescription() = runDesktopA11yTest {
         test.setContent {
             BasicTextField(
                 value = "typed text",
-                onValueChange = { },
-                modifier = Modifier
-                    .testTag("textFieldWithLabel")
-                    .semantics {
+                onValueChange = {},
+                modifier =
+                    Modifier.testTag("textFieldWithLabel").semantics {
                         contentDescription = "Email"
-                    }
+                    },
             )
         }
 
@@ -512,13 +477,14 @@ class AccessibilityTest {
         assertThat(context?.accessibleDescription).isEqualTo("Email")
     }
 
+    @Suppress("DEPRECATION")
     @Test
     fun textFieldAccessibleNameIsNullWithoutContentDescription() = runDesktopA11yTest {
         test.setContent {
             BasicTextField(
                 value = "typed text",
-                onValueChange = { },
-                modifier = Modifier.testTag("textFieldNoLabel")
+                onValueChange = {},
+                modifier = Modifier.testTag("textFieldNoLabel"),
             )
         }
 
@@ -530,81 +496,77 @@ class AccessibilityTest {
 
     // https://youtrack.jetbrains.com/issue/CMP-9826
     @Test
-    fun removingFocusableElementDoesNotCrashCAccessiblePropertyChangeListener() = runDesktopA11yTest {
-        SemanticsOwnerAccessibility.AccessibilityUsage.notifyInUse()
+    fun removingFocusableElementDoesNotCrashCAccessiblePropertyChangeListener() =
+        runDesktopA11yTest {
+            SemanticsOwnerAccessibility.AccessibilityUsage.notifyInUse()
 
-        var showTextField by mutableStateOf(true)
-        setContent {
-            Column {
-                BasicTextField(rememberTextFieldState())
-                if (showTextField) {
-                    val focusRequester = remember { FocusRequester() }
-                    BasicTextField(
-                        rememberTextFieldState(),
-                        Modifier
-                            .focusRequester(focusRequester)
-                            .testTag("textField")
-                    )
-                    LaunchedEffect(Unit) {
-                        focusRequester.requestFocus()
+            var showTextField by mutableStateOf(true)
+            setContent {
+                Column {
+                    BasicTextField(rememberTextFieldState())
+                    if (showTextField) {
+                        val focusRequester = remember { FocusRequester() }
+                        BasicTextField(
+                            rememberTextFieldState(),
+                            Modifier.focusRequester(focusRequester).testTag("textField"),
+                        )
+                        LaunchedEffect(Unit) { focusRequester.requestFocus() }
                     }
                 }
             }
-        }
 
-        suspend fun removeTextFieldAndTest(withDelay: Boolean) {
-            val textFieldAccessible = onNodeWithTag("textField").fetchAccessible()
-            var propertyChangeCalled = false
-            textFieldAccessible.accessibleContext!!.addPropertyChangeListener { evt ->
-                if (evt.propertyName == AccessibleContext.ACCESSIBLE_STATE_PROPERTY) {
-                    // Replicate (partially) what happens in CAccessible.AXChangeNotifier.propertyChange
-                    val accessibleContext = textFieldAccessible.accessibleContext!!
-                    accessibleContext.accessibleRole
-                    val parent = accessibleContext.accessibleParent
-                    if (parent != null) {
-                        parent.accessibleContext!!.accessibleRole
+            suspend fun removeTextFieldAndTest(withDelay: Boolean) {
+                val textFieldAccessible = onNodeWithTag("textField").fetchAccessible()
+                var propertyChangeCalled = false
+                textFieldAccessible.accessibleContext!!.addPropertyChangeListener { evt ->
+                    if (evt.propertyName == AccessibleContext.ACCESSIBLE_STATE_PROPERTY) {
+                        // Replicate (partially) what happens in
+                        // CAccessible.AXChangeNotifier.propertyChange
+                        val accessibleContext = textFieldAccessible.accessibleContext!!
+                        accessibleContext.accessibleRole
+                        val parent = accessibleContext.accessibleParent
+                        if (parent != null) {
+                            parent.accessibleContext!!.accessibleRole
+                        }
+
+                        propertyChangeCalled = true
                     }
-
-                    propertyChangeCalled = true
                 }
-            }
 
-            showTextField = false
-            waitForIdle()
-            if (withDelay) {
-                // Test after waiting out RESET_FOCUS_ACCESSIBLE_DELAY to validate the scenario
-                // when ComposeSceneAccessibility.accessibleParentOverride is not active
-                delay(AccessibleFocusHelper.RESET_FOCUS_ACCESSIBLE_DELAY + 100.milliseconds)
+                showTextField = false
+                waitForIdle()
+                if (withDelay) {
+                    // Test after waiting out RESET_FOCUS_ACCESSIBLE_DELAY to validate the scenario
+                    // when ComposeSceneAccessibility.accessibleParentOverride is not active
+                    delay(AccessibleFocusHelper.RESET_FOCUS_ACCESSIBLE_DELAY + 100.milliseconds)
+                    waitForIdle()
+                }
+                assertTrue(
+                    propertyChangeCalled,
+                    "Property change listener not called with `ACCESSIBLE_STATE_PROPERTY`",
+                )
+
+                // Reset the state
+                showTextField = true
                 waitForIdle()
             }
-            assertTrue(
-                propertyChangeCalled,
-                "Property change listener not called with `ACCESSIBLE_STATE_PROPERTY`"
-            )
 
-            // Reset the state
-            showTextField = true
-            waitForIdle()
+            removeTextFieldAndTest(withDelay = false)
+            removeTextFieldAndTest(withDelay = true)
         }
-
-        removeTextFieldAndTest(withDelay = false)
-        removeTextFieldAndTest(withDelay = true)
-    }
 }
 
-
-/**
- * Runs a test of accessibility.
- */
+/** Runs a test of accessibility. */
 @OptIn(ExperimentalTestApi::class, InternalTestApi::class)
 private fun runDesktopA11yTest(block: suspend ComposeA11yTestScope.() -> Unit) {
 
     lateinit var sceneAccessibility: ComposeSceneAccessibility
 
-    val sceneComponent = object: JPanel() {
-        override fun getAccessibleContext() =
-            sceneAccessibility.accessibleContextProvider?.invoke(this)
-    }
+    val sceneComponent =
+        object : JPanel() {
+            override fun getAccessibleContext() =
+                sceneAccessibility.accessibleContextProvider?.invoke(this)
+        }
 
     // sceneRoot needs to have an Accessible parent for some functionality
     val sceneParent = JPanel()
@@ -612,35 +574,29 @@ private fun runDesktopA11yTest(block: suspend ComposeA11yTestScope.() -> Unit) {
 
     val testDispatcher = StandardTestDispatcher()
 
-    sceneAccessibility = ComposeSceneAccessibility(
-        platformComponent = PlatformComponent.Empty,
-        coroutineContext = testDispatcher,
-        sceneRoot = { sceneComponent },
-    )
+    sceneAccessibility =
+        ComposeSceneAccessibility(
+            platformComponent = PlatformComponent.Empty,
+            coroutineContext = testDispatcher,
+            sceneRoot = { sceneComponent },
+        )
 
     // Reset the a11y usage to avoid having one test affect the next
     SemanticsOwnerAccessibility.AccessibilityUsage.reset()
 
     runInternalSkikoComposeUiTest(
         semanticsOwnerListener = sceneAccessibility,
-        effectContext = testDispatcher
+        effectContext = testDispatcher,
     ) {
-        block(
-            ComposeA11yTestScope(
-                test = this,
-                sceneAccessibility = sceneAccessibility
-            )
-        )
+        block(ComposeA11yTestScope(test = this, sceneAccessibility = sceneAccessibility))
     }
 }
 
-/**
- * The scope for running accessibility tests.
- */
+/** The scope for running accessibility tests. */
 @OptIn(ExperimentalTestApi::class)
 internal class ComposeA11yTestScope(
     val test: SkikoComposeUiTest,
-    val sceneAccessibility: ComposeSceneAccessibility
+    val sceneAccessibility: ComposeSceneAccessibility,
 ) : SemanticsNodeInteractionsProvider by test {
 
     fun setContent(composable: @Composable () -> Unit) {
@@ -720,9 +676,7 @@ internal class ComposeA11yTestScope(
         )
     }
 
-    /**
-     * Asserts that the text of the accessible
-     */
+    /** Asserts that the text of the accessible */
     fun SemanticsNodeInteraction.assertTextContains(value: String) {
         val text = fetchAccessible().composeAccessibleContext.text
         assertNotNull(text, "Text is null")

@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.UIKitInstrumentedTest
 import androidx.compose.ui.test.findNodeWithLabel
 import androidx.compose.ui.test.findNodeWithTag
 import androidx.compose.ui.unit.dp
@@ -53,194 +54,187 @@ import platform.UIKit.UIMenu
 internal class InteropUIMenuTest {
 
     @Test
-    fun testUIMenuDismissByTapOnComposeView() = runUIKitInstrumentedTestWithInterop(
-        ignoreIf = !available(OS.Ios to OSVersion(16)),
-        ignoreNotes = "The test does not receive touches on iOS < 15 when the context menu opened"
-    ) { overlay ->
-        var isMenuOpen: () -> Boolean = { false }
+    fun testUIMenuDismissByTapOnComposeView() =
+        runUIKitInstrumentedTestWithInterop(
+            ignoreIf = !available(OS.Ios to OSVersion(16)),
+            ignoreNotes =
+                "The test does not receive touches on iOS < 15 when the context menu opened",
+        ) { overlay ->
+            var isMenuOpen: () -> Boolean = { false }
 
-        setContent {
-            Column {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(400.dp)
-                        .background(Color.Green)
-                        .testTag("Box")
-                )
-                UIKitView(
-                    factory = {
-                        val button = ContextMenuButton()
-                        isMenuOpen = { button.isMenuOpen }
-                        button
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp)
-                        .testTag("MenuButton"),
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
-                )
-            }
-        }
-
-        findNodeWithTag("MenuButton")
-            .tap()
-
-        delay(800)
-
-        assertTrue(isMenuOpen())
-
-        findNodeWithTag("Box")
-            .tap()
-
-        delay(800)
-
-        assertFalse(isMenuOpen())
-    }
-
-    @Test
-    fun testUIMenuEmbeddedInComposeViewDismissByTapOnOtherComposeView() = runUIKitInstrumentedTestWithInterop(
-        ignoreIf = !available(OS.Ios to OSVersion(16)),
-        ignoreNotes = "The test does not receive touches on iOS < 15 when the context menu opened"
-    ) { overlay ->
-        var isMenuOpen: () -> Boolean = { false }
-
-        setContent {
-            Column {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(400.dp)
-                        .background(Color.Green)
-                        .testTag("Box")
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
+            setContent {
+                Column {
+                    Box(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .height(400.dp)
+                                .background(Color.Green)
+                                .testTag("Box")
+                    )
                     UIKitView(
                         factory = {
                             val button = ContextMenuButton()
                             isMenuOpen = { button.isMenuOpen }
                             button
                         },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(40.dp)
-                            .testTag("MenuButton"),
-                        properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                        modifier = Modifier.fillMaxWidth().height(40.dp).testTag("MenuButton"),
+                        properties = UIKitInteropProperties(placedAsOverlay = overlay),
                     )
                 }
             }
+
+            findNodeWithTag("MenuButton").tap()
+
+            waitForMenuToOpen(isMenuOpen)
+
+            assertTrue(isMenuOpen())
+
+            findNodeWithTag("Box").tap()
+
+            waitForMenuToClose(isMenuOpen)
+
+            assertFalse(isMenuOpen())
         }
 
-        findNodeWithTag("MenuButton")
-            .tap()
+    @Test
+    fun testUIMenuEmbeddedInComposeViewDismissByTapOnOtherComposeView() =
+        runUIKitInstrumentedTestWithInterop(
+            ignoreIf = !available(OS.Ios to OSVersion(16)),
+            ignoreNotes =
+                "The test does not receive touches on iOS < 15 when the context menu opened",
+        ) { overlay ->
+            var isMenuOpen: () -> Boolean = { false }
 
-        delay(800)
+            setContent {
+                Column {
+                    Box(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                                .height(400.dp)
+                                .background(Color.Green)
+                                .testTag("Box")
+                    )
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        UIKitView(
+                            factory = {
+                                val button = ContextMenuButton()
+                                isMenuOpen = { button.isMenuOpen }
+                                button
+                            },
+                            modifier = Modifier.fillMaxWidth().height(40.dp).testTag("MenuButton"),
+                            properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                        )
+                    }
+                }
+            }
 
-        assertTrue(isMenuOpen())
+            findNodeWithTag("MenuButton").tap()
 
-        findNodeWithTag("Box")
-            .tap()
+            waitForMenuToOpen(isMenuOpen)
 
-        delay(800)
+            assertTrue(isMenuOpen())
 
-        assertFalse(isMenuOpen())
-    }
+            findNodeWithTag("Box").tap()
+
+            waitForMenuToClose(isMenuOpen)
+
+            assertFalse(isMenuOpen())
+        }
 
     @Test
-    fun testUIMenuDismissByTapOnUIButton() = runUIKitInstrumentedTestWithInterop(
-        ignoreIf = !available(OS.Ios to OSVersion(16)),
-        ignoreNotes = "The test does not receive touches on iOS < 15 when the context menu opened"
-    ) { overlay ->
-        var isMenuOpen: () -> Boolean = { false }
+    fun testUIMenuDismissByTapOnUIButton() =
+        runUIKitInstrumentedTestWithInterop(
+            ignoreIf = !available(OS.Ios to OSVersion(16)),
+            ignoreNotes =
+                "The test does not receive touches on iOS < 15 when the context menu opened",
+        ) { overlay ->
+            var isMenuOpen: () -> Boolean = { false }
 
-        setContent {
-            Column {
-                UIKitView(
-                    factory = {
-                        val button = UIButton()
-                        button.backgroundColor = UIColor.yellowColor
-                        button
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(400.dp)
-                        .testTag("UIButton"),
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
-                )
+            setContent {
+                Column {
+                    UIKitView(
+                        factory = {
+                            val button = UIButton()
+                            button.backgroundColor = UIColor.yellowColor
+                            button
+                        },
+                        modifier = Modifier.fillMaxWidth().height(400.dp).testTag("UIButton"),
+                        properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                    )
+                    UIKitView(
+                        factory = {
+                            val button = ContextMenuButton()
+                            isMenuOpen = { button.isMenuOpen }
+                            button
+                        },
+                        modifier = Modifier.fillMaxWidth().height(40.dp).testTag("MenuButton"),
+                        properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                    )
+                }
+            }
+
+            findNodeWithTag("MenuButton").tap()
+
+            waitForMenuToOpen(isMenuOpen)
+
+            assertTrue(isMenuOpen())
+
+            findNodeWithTag("UIButton").tap()
+
+            waitForMenuToClose(isMenuOpen)
+
+            assertFalse(isMenuOpen())
+        }
+
+    @Test
+    fun testUIMenuDismissByTapOnUIAction() =
+        runUIKitInstrumentedTestWithInterop(
+            ignoreIf = !available(OS.Ios to OSVersion(16)),
+            ignoreNotes =
+                "The test does not receive touches on iOS < 15 when the context menu opened",
+        ) { overlay ->
+            var isMenuOpen: () -> Boolean = { false }
+
+            setContent {
                 UIKitView(
                     factory = {
                         val button = ContextMenuButton()
                         isMenuOpen = { button.isMenuOpen }
                         button
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp)
-                        .testTag("MenuButton"),
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier = Modifier.fillMaxWidth().height(400.dp).testTag("MenuButton"),
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
+
+            findNodeWithTag("MenuButton").tap()
+
+            waitForMenuToOpen(isMenuOpen)
+
+            assertTrue(isMenuOpen())
+
+            findNodeWithLabel("MenuItem2").tap()
+
+            waitForMenuToClose(isMenuOpen)
+
+            assertFalse(isMenuOpen())
         }
 
-        findNodeWithTag("MenuButton")
-            .tap()
-
-        delay(800)
-
-        assertTrue(isMenuOpen())
-
-        findNodeWithTag("UIButton")
-            .tap()
-
-        delay(800)
-
-        assertFalse(isMenuOpen())
+    private fun UIKitInstrumentedTest.waitForMenuToOpen(isMenuOpen: () -> Boolean) {
+        waitUntil("UIKit menu should open", condition = isMenuOpen)
     }
 
-    @Test
-    fun testUIMenuDismissByTapOnUIAction() = runUIKitInstrumentedTestWithInterop(
-        ignoreIf = !available(OS.Ios to OSVersion(16)),
-        ignoreNotes = "The test does not receive touches on iOS < 15 when the context menu opened"
-    ) { overlay ->
-        var isMenuOpen: () -> Boolean = { false }
-
-        setContent {
-            UIKitView(
-                factory = {
-                    val button = ContextMenuButton()
-                    isMenuOpen = { button.isMenuOpen }
-                    button
-                },
-                modifier = Modifier.fillMaxWidth().height(400.dp).testTag("MenuButton"),
-                properties = UIKitInteropProperties(placedAsOverlay = overlay)
-            )
-        }
-
-        findNodeWithTag("MenuButton")
-            .tap()
-
-        delay(800)
-
-        assertTrue(isMenuOpen())
-
-        findNodeWithLabel("MenuItem2")
-            .tap()
-
-        delay(800)
-
-        assertFalse(isMenuOpen())
+    private fun UIKitInstrumentedTest.waitForMenuToClose(isMenuOpen: () -> Boolean) {
+        waitUntil("UIKit menu should close") { !isMenuOpen() }
     }
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private class ContextMenuButton(
-    var isMenuOpen: Boolean = false,
-): UIButton(frame = CGRectZero.readValue()), UIContextMenuInteractionDelegateProtocol {
+private class ContextMenuButton(var isMenuOpen: Boolean = false) :
+    UIButton(frame = CGRectZero.readValue()), UIContextMenuInteractionDelegateProtocol {
     init {
         backgroundColor = UIColor.redColor
         showsMenuAsPrimaryAction = true
@@ -249,7 +243,7 @@ private class ContextMenuButton(
 
     override fun contextMenuInteraction(
         interaction: UIContextMenuInteraction,
-        configurationForMenuAtLocation: CValue<CGPoint>
+        configurationForMenuAtLocation: CValue<CGPoint>,
     ): UIContextMenuConfiguration {
         isMenuOpen = true
         return UIContextMenuConfiguration.configurationWithIdentifier(
@@ -263,14 +257,14 @@ private class ContextMenuButton(
                         UIAction.actionWithTitle("MenuItem3", null, null) {},
                     )
                 )
-            }
+            },
         )
     }
 
     override fun contextMenuInteraction(
         interaction: UIContextMenuInteraction,
         willEndForConfiguration: UIContextMenuConfiguration,
-        animator: UIContextMenuInteractionAnimatingProtocol?
+        animator: UIContextMenuInteractionAnimatingProtocol?,
     ) {
         isMenuOpen = false
     }

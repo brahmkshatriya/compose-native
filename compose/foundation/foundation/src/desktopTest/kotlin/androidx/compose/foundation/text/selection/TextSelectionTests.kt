@@ -49,12 +49,9 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 
-
 class TextSelectionTests {
 
-    @Suppress("DEPRECATION")
-    @get:Rule
-    val rule = createComposeRule()
+    @Suppress("DEPRECATION") @get:Rule val rule = createComposeRule()
 
     @After
     fun restoreRealDesktopPlatform() {
@@ -73,22 +70,26 @@ class TextSelectionTests {
 
     private fun DesktopPlatform.textFieldSemanticInteraction(
         initialValue: String = "",
-        semanticNodeContext: SemanticsNodeInteraction.(state: MutableState<TextFieldValue>) -> SemanticsNodeInteraction
+        semanticNodeContext:
+            SemanticsNodeInteraction.(
+                state: MutableState<TextFieldValue>
+            ) -> SemanticsNodeInteraction,
     ) {
-        setPlatformDefaultKeyMapping(createPlatformDefaultKeyMapping(this@textFieldSemanticInteraction))
+        setPlatformDefaultKeyMapping(
+            createPlatformDefaultKeyMapping(this@textFieldSemanticInteraction)
+        )
         val state = mutableStateOf(TextFieldValue(initialValue))
 
         rule.setContent {
+            @Suppress("DEPRECATION")
             BasicTextField(
                 value = state.value,
                 onValueChange = { state.value = it },
-                modifier = Modifier.testTag("textField")
+                modifier = Modifier.testTag("textField"),
             )
         }
         val textField = rule.onNodeWithTag("textField")
-        textField.performMouseInput {
-            click(Offset(0f, 0f))
-        }
+        textField.performMouseInput { click(Offset(0f, 0f)) }
         rule.waitForIdle()
         textField.assertIsFocused()
 
@@ -97,59 +98,52 @@ class TextSelectionTests {
         semanticNodeContext.invoke(textField, state)
     }
 
-
     private fun DesktopPlatform.selectLineStart(keyboardInteraction: KeyInjectionScope.() -> Unit) {
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { state ->
             performKeyInput {
-                pressKey(Key.DirectionRight)
-                pressKey(Key.DirectionDown)
-            }
-                .waitAndCheck {
-                    Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 8))
+                    pressKey(Key.DirectionRight)
+                    pressKey(Key.DirectionDown)
                 }
+                .waitAndCheck { Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 8)) }
                 .performKeyInput(keyboardInteraction)
-                .waitAndCheck {
-                    Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 7))
-                }
+                .waitAndCheck { Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 7)) }
         }
     }
 
     private fun DesktopPlatform.selectTextStart(keyboardInteraction: KeyInjectionScope.() -> Unit) {
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { state ->
             performKeyInput {
-                pressKey(Key.DirectionRight)
-                pressKey(Key.DirectionDown)
-            }.waitAndCheck {
-                Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 8))
+                    pressKey(Key.DirectionRight)
+                    pressKey(Key.DirectionDown)
+                }
+                .waitAndCheck { Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 8)) }
+            performKeyInput(keyboardInteraction).waitAndCheck {
+                Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 0))
             }
-            performKeyInput(keyboardInteraction)
-                .waitAndCheck { Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 0)) }
         }
     }
 
     private fun DesktopPlatform.selectTextEnd(keyboardInteraction: KeyInjectionScope.() -> Unit) {
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { state ->
             performKeyInput {
-                pressKey(Key.DirectionRight)
-                pressKey(Key.DirectionDown)
-            }
-                .waitAndCheck {
-                    Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 8))
+                    pressKey(Key.DirectionRight)
+                    pressKey(Key.DirectionDown)
                 }
+                .waitAndCheck { Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 8)) }
                 .performKeyInput(keyboardInteraction)
                 .waitAndCheck {
                     Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 34))
                 }
         }
     }
+
     private fun DesktopPlatform.selectLineEnd(keyboardInteraction: KeyInjectionScope.() -> Unit) {
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { state ->
             performKeyInput {
-                pressKey(Key.DirectionRight)
-                pressKey(Key.DirectionDown)
-            }.waitAndCheck {
-                Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 8))
-            }
+                    pressKey(Key.DirectionRight)
+                    pressKey(Key.DirectionDown)
+                }
+                .waitAndCheck { Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 8)) }
                 .performKeyInput(keyboardInteraction)
                 .waitAndCheck {
                     Truth.assertThat(state.value.selection).isEqualTo(TextRange(8, 13))
@@ -197,7 +191,6 @@ class TextSelectionTests {
         }
     }
 
-
     @Test
     fun `Select till line start with DesktopPlatform-MacOs`() {
         DesktopPlatform.MacOS.selectLineStart {
@@ -239,13 +232,15 @@ class TextSelectionTests {
     }
 
     private fun DesktopPlatform.deleteAllFromKeyBoard(
-        initialText: String, deleteAllInteraction: KeyInjectionScope.() -> Unit
+        initialText: String,
+        deleteAllInteraction: KeyInjectionScope.() -> Unit,
     ) {
         textFieldSemanticInteraction(initialText) { state ->
-            performKeyInput(deleteAllInteraction).waitAndCheck { Truth.assertThat(state.value.text).isEqualTo("") }
+            performKeyInput(deleteAllInteraction).waitAndCheck {
+                Truth.assertThat(state.value.text).isEqualTo("")
+            }
         }
     }
-
 
     @Test
     fun `Delete backwards on an empty line with DesktopPlatform-Windows`() {
@@ -303,20 +298,16 @@ class TextSelectionTests {
         val selectionState = SelectionState()
         lateinit var textLayout: TextLayoutResult
         rule.setContent {
-            SelectionContainer(
-                state = selectionState,
-                modifier = Modifier.fillMaxSize(),
-            ) {
+            SelectionContainer(state = selectionState, modifier = Modifier.fillMaxSize()) {
                 BasicText(
                     text = text,
                     onTextLayout = { textLayout = it },
-                    modifier = Modifier
-                        .padding(top = 100.dp, start = 100.dp)  // Test with padding
-                        .testTag("selectable")
+                    modifier =
+                        Modifier.padding(top = 100.dp, start = 100.dp) // Test with padding
+                            .testTag("selectable"),
                 )
             }
         }
-
 
         rule.onNodeWithTag("selectable").apply {
             // Right-click first word
@@ -328,9 +319,7 @@ class TextSelectionTests {
             assertEquals(expected = "word1", actual = selectionState.selection.selectedText(text))
 
             // Left-click to close the context menu
-            performMouseInput {
-                click(Offset.Zero)
-            }
+            performMouseInput { click(Offset.Zero) }
 
             // Right click second word
             performMouseInput {
@@ -353,15 +342,11 @@ class TextSelectionTests {
                 value = textFieldValue,
                 onValueChange = { textFieldValue = it },
                 onTextLayout = { textLayout = it },
-                decorationBox = { innerTextField ->  // Test with decoration box
-                    Box(
-                        modifier = Modifier.padding(100.dp)
-                    ) {
-                        Box(Modifier.testTag("textfield")) {
-                            innerTextField()
-                        }
+                decorationBox = { innerTextField -> // Test with decoration box
+                    Box(modifier = Modifier.padding(100.dp)) {
+                        Box(Modifier.testTag("textfield")) { innerTextField() }
                     }
-                }
+                },
             )
         }
 
@@ -374,9 +359,7 @@ class TextSelectionTests {
             assertEquals(expected = "word1", actual = textFieldValue.selectedText(text))
 
             // Left-click to close the context menu
-            performMouseInput {
-                click(Offset.Zero)
-            }
+            performMouseInput { click(Offset.Zero) }
 
             // Right-click second word
             performMouseInput {
@@ -393,20 +376,12 @@ class TextSelectionTests {
 
         val selectionState = SelectionState()
         rule.setContent {
-            SelectionContainer(
-                state = selectionState
-            ) {
-                Box(
-                    modifier = Modifier
-                        .testTag("selectable")
-                        .fillMaxSize()
-                )
+            SelectionContainer(state = selectionState) {
+                Box(modifier = Modifier.testTag("selectable").fillMaxSize())
             }
         }
 
-        rule.onNodeWithTag("selectable").performMouseInput {
-            rightClick(center)
-        }
+        rule.onNodeWithTag("selectable").performMouseInput { rightClick(center) }
         assertNull(selectionState.selection)
     }
 
@@ -417,35 +392,28 @@ class TextSelectionTests {
         val selectionState = SelectionState()
         val text = "Hello, Compose"
         rule.setContent {
-            SelectionContainer(
-                state = selectionState
-            ) {
-                Box(
-                    modifier = Modifier
-                        .testTag("selectable")
-                ) {
-                    BasicText(
-                        text = text,
-                        modifier = Modifier
-                            .padding(all = 100.dp)
-                    )
+            SelectionContainer(state = selectionState) {
+                Box(modifier = Modifier.testTag("selectable")) {
+                    BasicText(text = text, modifier = Modifier.padding(all = 100.dp))
                 }
             }
         }
 
         // All corners and edges
-        val positions = (-1..1).flatMap { x ->
-            (-1 .. 1).map { y -> Pair(x, y) }
-        }.toMutableSet().minus(Pair(0, 0))
+        val positions =
+            (-1..1)
+                .flatMap { x -> (-1..1).map { y -> Pair(x, y) } }
+                .toMutableSet()
+                .minus(Pair(0, 0))
 
         rule.onNodeWithTag("selectable").apply {
             for ((x, y) in positions) {
                 performMouseInput {
-                    click(Offset.Zero)  // Close the context menu
+                    click(Offset.Zero) // Close the context menu
                     rightClick(
                         Offset(
-                            x = width/2f + x * (width/2f - 10f),
-                            y = height/2f + y * (height/2f - 10f)
+                            x = width / 2f + x * (width / 2f - 10f),
+                            y = height / 2f + y * (height / 2f - 10f),
                         )
                     )
                 }
@@ -462,25 +430,18 @@ class TextSelectionTests {
         val selectionState = SelectionState()
         lateinit var textLayout: TextLayoutResult
         rule.setContent {
-            SelectionContainer(
-                state = selectionState,
-                modifier = Modifier.fillMaxSize(),
-            ) {
+            SelectionContainer(state = selectionState, modifier = Modifier.fillMaxSize()) {
                 BasicText(
                     text = text,
                     onTextLayout = { textLayout = it },
-                    modifier = Modifier
-                        .testTag("selectable")
+                    modifier = Modifier.testTag("selectable"),
                 )
             }
         }
 
-
         rule.onNodeWithTag("selectable").apply {
             // Triple click-to select everything
-            performMouseInput {
-                tripleClick(center)
-            }
+            performMouseInput { tripleClick(center) }
             assertEquals(expected = text, actual = selectionState.selection.selectedText(text))
 
             // Right-click first word; selection should not change
@@ -497,28 +458,23 @@ class TextSelectionTests {
         assumeTrue(DesktopPlatform.Current == DesktopPlatform.MacOS)
 
         val text = "word1 word2"
-        var textFieldValue by mutableStateOf(
-            // Pre-select everything
-            TextFieldValue(
-                text = text,
-                selection = TextRange(0, text.length),
+        var textFieldValue by
+            mutableStateOf(
+                // Pre-select everything
+                TextFieldValue(text = text, selection = TextRange(0, text.length))
             )
-        )
         lateinit var textLayout: TextLayoutResult
         rule.setContent {
+            @Suppress("DEPRECATION")
             BasicTextField(
                 value = textFieldValue,
                 onValueChange = { textFieldValue = it },
                 onTextLayout = { textLayout = it },
-                decorationBox = { innerTextField ->  // Test with decoration box
-                    Box(
-                        modifier = Modifier.padding(100.dp)
-                    ) {
-                        Box(Modifier.testTag("textfield")) {
-                            innerTextField()
-                        }
+                decorationBox = { innerTextField -> // Test with decoration box
+                    Box(modifier = Modifier.padding(100.dp)) {
+                        Box(Modifier.testTag("textfield")) { innerTextField() }
                     }
-                }
+                },
             )
         }
 
@@ -533,7 +489,6 @@ class TextSelectionTests {
             assertEquals(expected = text, actual = textFieldValue.selectedText(text))
         }
     }
-
 }
 
 private fun Selection?.selectedText(text: String): String? {

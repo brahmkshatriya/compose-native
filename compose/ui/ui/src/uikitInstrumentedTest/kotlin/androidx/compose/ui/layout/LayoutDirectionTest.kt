@@ -38,13 +38,17 @@ import kotlin.test.assertEquals
 import platform.UIKit.UITraitEnvironmentLayoutDirectionLeftToRight
 import platform.UIKit.UITraitEnvironmentLayoutDirectionRightToLeft
 
-internal class LayoutDirectionInHostingViewTest : LayoutDirectionTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
-)
+@Suppress("unused")
+internal class LayoutDirectionInHostingViewTest :
+    LayoutDirectionTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
+    )
 
-internal class LayoutDirectionInHostingViewControllerTest : LayoutDirectionTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
-)
+@Suppress("unused")
+internal class LayoutDirectionInHostingViewControllerTest :
+    LayoutDirectionTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
+    )
 
 internal abstract class LayoutDirectionTest(
     private val runUIKitInstrumentedTest: (UIKitInstrumentedTest.() -> Unit) -> Unit
@@ -58,30 +62,24 @@ internal abstract class LayoutDirectionTest(
             TestContent(
                 alignment = Alignment.TopStart,
                 markerSize = markerSize,
-                onMarkerRectChanged = { markerRect = it }
+                onMarkerRectChanged = { markerRect = it },
             )
         }
 
-        val expectedLtrRect = DpRect(
-            origin = DpOffset.Zero,
-            size = markerSize
-        )
-        waitUntil("Marker should be laid out for LTR") {
-            markerRect == expectedLtrRect
-        }
+        val expectedLtrRect = DpRect(origin = DpOffset.Zero, size = markerSize)
+        waitUntil("Marker should be laid out for LTR") { markerRect == expectedLtrRect }
         assertEquals(expectedLtrRect, markerRect)
 
         setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft)
 
-        val expectedRtlRect = DpRect(
-            left = screenSize.width - markerSize.width,
-            top = 0.dp,
-            right = screenSize.width,
-            bottom = markerSize.height
-        )
-        waitUntil("Marker should move to the right for RTL") {
-            markerRect == expectedRtlRect
-        }
+        val expectedRtlRect =
+            DpRect(
+                left = screenSize.width - markerSize.width,
+                top = 0.dp,
+                right = screenSize.width,
+                bottom = markerSize.height,
+            )
+        waitUntil("Marker should move to the right for RTL") { markerRect == expectedRtlRect }
         assertEquals(expectedRtlRect, markerRect)
     }
 
@@ -94,30 +92,24 @@ internal abstract class LayoutDirectionTest(
             TestContent(
                 alignment = Alignment.TopStart,
                 markerSize = markerSize,
-                onMarkerRectChanged = { markerRect = it }
+                onMarkerRectChanged = { markerRect = it },
             )
         }
 
-        val expectedRtlRect = DpRect(
-            left = screenSize.width - markerSize.width,
-            top = 0.dp,
-            right = screenSize.width,
-            bottom = markerSize.height
-        )
-        waitUntil("Marker should be laid out for RTL") {
-            markerRect == expectedRtlRect
-        }
+        val expectedRtlRect =
+            DpRect(
+                left = screenSize.width - markerSize.width,
+                top = 0.dp,
+                right = screenSize.width,
+                bottom = markerSize.height,
+            )
+        waitUntil("Marker should be laid out for RTL") { markerRect == expectedRtlRect }
         assertEquals(expectedRtlRect, markerRect)
 
         setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight)
 
-        val expectedLtrRect = DpRect(
-            origin = DpOffset.Zero,
-            size = markerSize
-        )
-        waitUntil("Marker should move to the left for LTR") {
-            markerRect == expectedLtrRect
-        }
+        val expectedLtrRect = DpRect(origin = DpOffset.Zero, size = markerSize)
+        waitUntil("Marker should move to the left for LTR") { markerRect == expectedLtrRect }
         assertEquals(expectedLtrRect, markerRect)
     }
 }
@@ -126,21 +118,19 @@ internal abstract class LayoutDirectionTest(
 private fun TestContent(
     alignment: Alignment = Alignment.TopStart,
     markerSize: DpSize,
-    onMarkerRectChanged: (DpRect) -> Unit
+    onMarkerRectChanged: (DpRect) -> Unit,
 ) {
     val density = LocalDensity.current
 
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
+    Box(modifier = Modifier.fillMaxSize()) {
         Box(
-            modifier = Modifier
-                .align(alignment)
-                .size(markerSize)
-                .background(Color.Red)
-                .onGloballyPositioned {
-                    onMarkerRectChanged(it.boundsInWindow().toDpRect(density))
-                }
+            modifier =
+                Modifier.align(alignment)
+                    .size(markerSize)
+                    .background(Color.Red)
+                    .onGloballyPositioned {
+                        onMarkerRectChanged(it.boundsInWindow().toDpRect(density))
+                    }
         )
     }
 }

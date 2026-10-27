@@ -46,7 +46,8 @@ import kotlin.test.assertFailsWith
 
 // TODO: move to commonTest once sample_font will be available outside of JVM
 
-// Adopted tests from androidInstrumentedTest/kotlin/androidx/compose/ui/text/ParagraphIntegrationTest.kt
+// Adopted tests from
+// androidInstrumentedTest/kotlin/androidx/compose/ui/text/ParagraphIntegrationTest.kt
 class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
 
     private val fontFamilyResolver = createFontFamilyResolver()
@@ -55,7 +56,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
             Font(
                 "font_desktop/sample_font.ttf",
                 weight = FontWeight.Normal,
-                style = FontStyle.Normal
+                style = FontStyle.Normal,
             )
         )
     private val defaultDensity = Density(density = 1f)
@@ -123,8 +124,12 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                 assertWithMessage(text).that(paragraph.width).isEqualTo(200.0f)
                 assertWithMessage(text).that(paragraph.height).isEqualTo(fontSizeInPx)
                 // defined in sample_font
-                assertWithMessage(text).that(paragraph.firstBaseline).isEqualToWithTolerance(fontSizeInPx * 0.8f)
-                assertWithMessage(text).that(paragraph.lastBaseline).isEqualToWithTolerance(fontSizeInPx * 0.8f)
+                assertWithMessage(text)
+                    .that(paragraph.firstBaseline)
+                    .isEqualToWithTolerance(fontSizeInPx * 0.8f)
+                assertWithMessage(text)
+                    .that(paragraph.lastBaseline)
+                    .isEqualToWithTolerance(fontSizeInPx * 0.8f)
                 assertWithMessage(text)
                     .that(paragraph.maxIntrinsicWidth)
                     .isEqualTo(fontSizeInPx * text.length)
@@ -155,7 +160,9 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                 // 2 lines, 1 line gap
                 assertWithMessage(text).that(paragraph.height).isEqualTo(2 * fontSizeInPx)
                 // defined in sample_font
-                assertWithMessage(text).that(paragraph.firstBaseline).isEqualToWithTolerance(fontSizeInPx * 0.8f)
+                assertWithMessage(text)
+                    .that(paragraph.firstBaseline)
+                    .isEqualToWithTolerance(fontSizeInPx * 0.8f)
                 assertWithMessage(text)
                     .that(paragraph.lastBaseline)
                     .isEqualToWithTolerance(fontSizeInPx + fontSizeInPx * 0.8f)
@@ -189,7 +196,9 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                 // 2 lines, 1 line gap
                 assertWithMessage(text).that(paragraph.height).isEqualTo(2 * fontSizeInPx)
                 // defined in sample_font
-                assertWithMessage(text).that(paragraph.firstBaseline).isEqualToWithTolerance(fontSizeInPx * 0.8f)
+                assertWithMessage(text)
+                    .that(paragraph.firstBaseline)
+                    .isEqualToWithTolerance(fontSizeInPx * 0.8f)
                 assertWithMessage(text)
                     .that(paragraph.lastBaseline)
                     .isEqualToWithTolerance(fontSizeInPx + fontSizeInPx * 0.8f)
@@ -223,7 +232,9 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                 // 4 lines, 3 line gaps
                 assertWithMessage(text).that(paragraph.height).isEqualTo(4 * fontSizeInPx)
                 // defined in sample_font
-                assertWithMessage(text).that(paragraph.firstBaseline).isEqualToWithTolerance(fontSizeInPx * 0.8f)
+                assertWithMessage(text)
+                    .that(paragraph.firstBaseline)
+                    .isEqualToWithTolerance(fontSizeInPx * 0.8f)
                 assertWithMessage(text)
                     .that(paragraph.lastBaseline)
                     .isEqualToWithTolerance(3 * fontSizeInPx + fontSizeInPx * 0.8f)
@@ -491,14 +502,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
 
         @Suppress("DEPRECATION")
         val paragraph =
-            simpleParagraph(
-                text = text,
-                style =
-                    TextStyle(
-                        fontSize = fontSize,
-                    ),
-                density = density,
-            )
+            simpleParagraph(text = text, style = TextStyle(fontSize = fontSize), density = density)
 
         assertThat(paragraph.lineCount).isEqualTo(4)
 
@@ -1112,7 +1116,9 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
 
             // Cursor before '\n'
             assertThat(paragraph.getCursorRect(3))
-                .isEqualToWithTolerance(Rect(left = 0f, top = 0f, right = 0f, bottom = fontSizeInPx))
+                .isEqualToWithTolerance(
+                    Rect(left = 0f, top = 0f, right = 0f, bottom = fontSizeInPx)
+                )
 
             // Cursor after '\n'
             assertThat(paragraph.getCursorRect(4))
@@ -1143,7 +1149,9 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
 
             // Cursor before '\n'
             assertThat(paragraph.getCursorRect(3))
-                .isEqualToWithTolerance(Rect(left = 0f, top = 0f, right = 0f, bottom = fontSizeInPx))
+                .isEqualToWithTolerance(
+                    Rect(left = 0f, top = 0f, right = 0f, bottom = fontSizeInPx)
+                )
 
             // Cursor after '\n'
             assertThat(paragraph.getCursorRect(4))
@@ -1233,8 +1241,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                     width = width,
                 )
 
-            assertThat(paragraph.getHorizontalPosition(0, true))
-                .isEqualToWithTolerance(width)
+            assertThat(paragraph.getHorizontalPosition(0, true)).isEqualToWithTolerance(width)
 
             for (i in 1 until text.length) {
                 assertThat(paragraph.getHorizontalPosition(i, true))
@@ -1321,8 +1328,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                     width = width,
                 )
 
-            assertThat(paragraph.getHorizontalPosition(0, true))
-                .isEqualToWithTolerance(width)
+            assertThat(paragraph.getHorizontalPosition(0, true)).isEqualToWithTolerance(width)
 
             for (i in 1 until ltrText.length) {
                 assertThat(paragraph.getHorizontalPosition(i, true))
@@ -1485,8 +1491,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                     width = width,
                 )
 
-            assertThat(paragraph.getHorizontalPosition(0, false))
-                .isEqualToWithTolerance(0f)
+            assertThat(paragraph.getHorizontalPosition(0, false)).isEqualToWithTolerance(0f)
 
             for (i in 1 until text.length) {
                 assertThat(paragraph.getHorizontalPosition(i, false))
@@ -1512,8 +1517,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                     width = width,
                 )
 
-            assertThat(paragraph.getHorizontalPosition(0, false))
-                .isEqualToWithTolerance(width)
+            assertThat(paragraph.getHorizontalPosition(0, false)).isEqualToWithTolerance(width)
 
             for (i in 1 until text.length) {
                 assertThat(paragraph.getHorizontalPosition(i, false))
@@ -1977,16 +1981,12 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
 
     @Test
     fun maxLines_withMaxLineEqualsZero_throwsException() {
-        assertFailsWith<IllegalArgumentException> {
-            simpleParagraph(text = "", maxLines = 0)
-        }
+        assertFailsWith<IllegalArgumentException> { simpleParagraph(text = "", maxLines = 0) }
     }
 
     @Test
     fun maxLines_withMaxLineNegative_throwsException() {
-        assertFailsWith<IllegalArgumentException> {
-            simpleParagraph(text = "", maxLines = -1)
-        }
+        assertFailsWith<IllegalArgumentException> { simpleParagraph(text = "", maxLines = -1) }
     }
 
     @Test
@@ -2342,8 +2342,10 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                     )
 
                 val textWidth = text.length * fontSizeInPx
-                assertThat(paragraph.getLineLeft(0)).isEqualToWithTolerance(layoutWidth / 2 - textWidth / 2)
-                assertThat(paragraph.getLineRight(0)).isEqualToWithTolerance(layoutWidth / 2 + textWidth / 2)
+                assertThat(paragraph.getLineLeft(0))
+                    .isEqualToWithTolerance(layoutWidth / 2 - textWidth / 2)
+                assertThat(paragraph.getLineRight(0))
+                    .isEqualToWithTolerance(layoutWidth / 2 + textWidth / 2)
             }
         }
     }
@@ -2587,7 +2589,8 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
             assertThat(paragraph.getLineBaseline(0)).isEqualToWithTolerance(fontSizeInPx * 0.8f)
             assertThat(paragraph.getLineBaseline(0)).isEqualToWithTolerance(paragraph.firstBaseline)
             // 2nd
-            assertThat(paragraph.getLineBaseline(1)).isEqualToWithTolerance(fontSizeInPx + fontSizeInPx * 0.8f)
+            assertThat(paragraph.getLineBaseline(1))
+                .isEqualToWithTolerance(fontSizeInPx + fontSizeInPx * 0.8f)
             // last
             assertThat(paragraph.getLineBaseline(2))
                 .isEqualToWithTolerance(fontSizeInPx * 2 + fontSizeInPx * 0.8f)
@@ -2736,7 +2739,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
     }
 
     @Test
-    @Ignore // FIXME: Figure out why skia reports wrong indexes
+    @Ignore // TODO: CMP-10924
     fun getLineEnd_newline() {
         val text = "aaa\nbbb"
 
@@ -2761,7 +2764,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
     }
 
     @Test
-    @Ignore // TODO: isLineEllipsized is not implemented
+    @Ignore // TODO: CMP-10924
     fun getLineEllipsisOffset() {
         val text = "aaa\nbbb\nccc"
 
@@ -2784,7 +2787,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
     }
 
     @Test
-    @Ignore // TODO: isLineEllipsized is not implemented
+    @Ignore // TODO: CMP-10924
     fun getLineEllipsisCount() {
         val text = "aaaaabbbbbccccc"
         val paragraph =
@@ -2813,7 +2816,8 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
     }
 
     @Test
-    @Ignore // TODO(https://youtrack.jetbrains.com/issue/CMP-6716): Properly support Middle/Start ellipsis
+    @Ignore // TODO(https://youtrack.jetbrains.com/issue/CMP-6716): Properly support Middle/Start
+            // ellipsis
     fun getLineStartEllipsisCount() {
         val text = "aaaaabbbbbccccc"
         val paragraph =
@@ -2833,7 +2837,8 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
     }
 
     @Test
-    @Ignore // TODO(https://youtrack.jetbrains.com/issue/CMP-6716): Properly support Middle/Start ellipsis
+    @Ignore // TODO(https://youtrack.jetbrains.com/issue/CMP-6716): Properly support Middle/Start
+            // ellipsis
     fun getLineMiddleEllipsisCount() {
         val text = "aaaaabbbbbccccc"
         val paragraph =
@@ -2873,7 +2878,9 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
             val actualHeight = paragraph.getLineHeight(i)
             // In the sample_font_fork.ttf, the height of the line should be
             // fontSize + 0.2f * fontSize(line gap)
-            assertWithMessage("line number $i").that(actualHeight).isEqualToWithTolerance(lineHeight)
+            assertWithMessage("line number $i")
+                .that(actualHeight)
+                .isEqualToWithTolerance(lineHeight)
         }
     }
 
@@ -2898,7 +2905,9 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
             val actualHeight = paragraph.getLineHeight(i)
             // In the sample_font_fork.ttf, the height of the line should be
             // fontSize + 0.2f * fontSize(line gap)
-            assertWithMessage("line number $i").that(actualHeight).isEqualToWithTolerance(lineHeight * fontSize)
+            assertWithMessage("line number $i")
+                .that(actualHeight)
+                .isEqualToWithTolerance(lineHeight * fontSize)
         }
     }
 
@@ -3058,7 +3067,8 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                     style = TextStyle(fontSize = paragraphFontSize),
                 )
 
-            assertThat(paragraph.getLineRight(0)).isEqualToWithTolerance(text.length * fontSizeInPx * em.value)
+            assertThat(paragraph.getLineRight(0))
+                .isEqualToWithTolerance(text.length * fontSizeInPx * em.value)
         }
     }
 
@@ -3118,7 +3128,8 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                     style = TextStyle(fontSize = paragraphFontSize),
                 )
 
-            assertThat(paragraph.getLineRight(0)).isEqualToWithTolerance(text.length * fontSizeInPx * em2.value)
+            assertThat(paragraph.getLineRight(0))
+                .isEqualToWithTolerance(text.length * fontSizeInPx * em2.value)
         }
     }
 
@@ -3576,8 +3587,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
             )
 
         assertThat(paragraph.lineCount).isEqualTo(2)
-        assertThat(paragraph.getHorizontalPosition(0, true))
-            .isEqualToWithTolerance(indent)
+        assertThat(paragraph.getHorizontalPosition(0, true)).isEqualToWithTolerance(indent)
     }
 
     @Test
@@ -3601,8 +3611,7 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
             )
 
         // check the position of the first character in second line: "d" should be indented
-        assertThat(paragraph.getHorizontalPosition(3, true))
-            .isEqualToWithTolerance(indent)
+        assertThat(paragraph.getHorizontalPosition(3, true)).isEqualToWithTolerance(indent)
     }
 
     @Test
@@ -4194,7 +4203,8 @@ class DesktopParagraphIntegrationTest : SkikoComposeTestBase() {
                     overflow = TextOverflow.Clip,
                 )
 
-            assertThat(paragraph.maxIntrinsicWidth).isEqualToWithTolerance(paragraphIntrinsics.maxIntrinsicWidth)
+            assertThat(paragraph.maxIntrinsicWidth)
+                .isEqualToWithTolerance(paragraphIntrinsics.maxIntrinsicWidth)
             assertThat(paragraph.width).isEqualToWithTolerance(fontSizeInPx * text.length)
         }
     }

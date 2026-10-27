@@ -53,31 +53,31 @@ import androidx.compose.ui.util.fastForEachReversed
 import androidx.compose.ui.util.fastLastOrNull
 import androidx.compose.ui.viewinterop.InteropView
 import androidx.compose.ui.window.getDialogScrimBlendMode
+import kotlin.collections.mutableListOf
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.max
 
 /**
  * Constructs a multi-layer [ComposeScene] using the specified parameters. Unlike
- * [PlatformLayersComposeScene], this version implement [ComposeSceneContext] itself and keeps
- * track of the added layers on its own in order to render (and also divide input among them)
- * everything on a single canvas.
+ * [PlatformLayersComposeScene], this version implement [ComposeSceneContext] itself and keeps track
+ * of the added layers on its own in order to render (and also divide input among them) everything
+ * on a single canvas.
  *
- * After [ComposeScene] will no longer needed, you should call [ComposeScene.close] method, so
- * all resources and subscriptions will be properly closed. Otherwise, there can be a memory leak.
+ * After [ComposeScene] will no longer needed, you should call [ComposeScene.close] method, so all
+ * resources and subscriptions will be properly closed. Otherwise, there can be a memory leak.
  *
  * @param frameRecomposer The host-owned recomposer and frame clock that drives this scene. The
- * scene launches its content effects on [FrameRecomposer.compositionContext]'s effect context, so
- * effects and animations are performed by the host's [FrameRecomposer.performFrame].
+ *   scene launches its content effects on [FrameRecomposer.compositionContext]'s effect context, so
+ *   effects and animations are performed by the host's [FrameRecomposer.performFrame].
  * @param density Initial density of the content which will be used to convert [Dp] units.
  * @param layoutDirection Initial layout direction of the content.
  * @param size The size of the [ComposeScene]. Default value is `null`, which means the size will be
- * determined by the content.
+ *   determined by the content.
  * @param platformContext The the platform-specific context used for platform interaction.
  * @param invalidateLayout The function to be called when the content requires another
- * measure/layout pass.
+ *   measure/layout pass.
  * @param invalidateDraw The function to be called when the content requires another draw pass.
  * @return The created [ComposeScene].
- *
  * @see ComposeScene
  */
 @InternalComposeUiApi
@@ -89,15 +89,41 @@ fun CanvasLayersComposeScene(
     platformContext: PlatformContext = PlatformContext.Empty(),
     invalidateLayout: () -> Unit = {},
     invalidateDraw: () -> Unit = {},
-): ComposeScene = CanvasLayersComposeSceneImpl(
-    frameRecomposer = frameRecomposer,
-    density = density,
-    layoutDirection = layoutDirection,
-    size = size,
-    platformContext = platformContext,
-    invalidateLayout = invalidateLayout,
-    invalidateDraw = invalidateDraw,
-)
+): ComposeScene =
+    CanvasLayersComposeSceneImpl(
+        frameRecomposer = frameRecomposer,
+        density = density,
+        layoutDirection = layoutDirection,
+        size = size,
+        platformContext = platformContext,
+        invalidateLayout = invalidateLayout,
+        invalidateDraw = invalidateDraw,
+    )
+
+/**
+ * Creates an overlay above all regular layers. Overlays are stacked in creation order, with the
+ * newest on top. Intended for UI normally drawn by the platform above application content, such as
+ * text selection toolbars.
+ *
+ * The layer is initially non-focusable and passes pointer input outside
+ * [ComposeSceneLayer.boundsInWindow] to underlying layers. Set these bounds to the content's
+ * bounds.
+ */
+internal fun ComposeScene.createOverlayLayer(
+    density: Density,
+    layoutDirection: LayoutDirection,
+): ComposeSceneLayer {
+    check(this is CanvasLayersComposeSceneImpl) {
+        "Overlay layers are only supported by CanvasLayersComposeScene"
+    }
+    return createLayer(
+        density = density,
+        layoutDirection = layoutDirection,
+        focusable = false,
+        consumePointerInputOutside = false,
+        isOverlay = true,
+    )
+}
 
 private class CanvasLayersComposeSceneImpl(
     frameRecomposer: FrameRecomposer,
@@ -107,21 +133,24 @@ private class CanvasLayersComposeSceneImpl(
     override val platformContext: PlatformContext,
     invalidateLayout: () -> Unit = {},
     invalidateDraw: () -> Unit = {},
-) : BaseComposeScene(
-    frameRecomposer = frameRecomposer,
-    invalidateLayout = invalidateLayout,
-    invalidateDraw = invalidateDraw,
-), ComposeSceneContext {
-    private val mainOwner = RootNodeOwner(
-        density = density,
-        layoutDirection = layoutDirection,
-        size = size,
-        coroutineContext = frameRecomposer.compositionContext.effectCoroutineContext,
-        platformContext = composeSceneContext.platformContext,
-        inputHandler = inputHandler,
-        invalidate = ::invokeInvalidationCallbacks,
-        onChangedExecutor = frameRecomposer::runOnComposeThread,
-    )
+) :
+    BaseComposeScene(
+        frameRecomposer = frameRecomposer,
+        invalidateLayout = invalidateLayout,
+        invalidateDraw = invalidateDraw,
+    ),
+    ComposeSceneContext {
+    private val mainOwner =
+        RootNodeOwner(
+            density = density,
+            layoutDirection = layoutDirection,
+            size = size,
+            coroutineContext = frameRecomposer.compositionContext.effectCoroutineContext,
+            platformContext = composeSceneContext.platformContext,
+            inputHandler = inputHandler,
+            invalidate = ::invokeInvalidationCallbacks,
+            onChangedExecutor = frameRecomposer::runOnComposeThread,
+        )
 
     override val composeSceneContext: ComposeSceneContext
         get() = this
@@ -151,42 +180,34 @@ private class CanvasLayersComposeSceneImpl(
             forEachLayer { it.owner.size = value }
         }
 
-    override val focusManager = ComposeSceneFocusManager(
-        focusOwner = { focusedOwner.focusOwner },
-        measureAndLayout = ::doMeasureAndLayout
-    )
+    override val focusManager =
+        ComposeSceneFocusManager(
+            focusOwner = { focusedOwner.focusOwner },
+            measureAndLayout = ::doMeasureAndLayout,
+        )
 
     override val rootDragAndDropNode = ComposeSceneDragAndDropNode { focusedOwner.dragAndDropOwner }
 
     private val layers = mutableListOf<AttachedComposeSceneLayer>()
-    private val _layersCopyCache = CopiedList {
-        it.addAll(layers)
-    }
+    private val _layersCopyCache = CopiedList(layers)
     private val _ownersCopyCache = CopiedList {
         it.add(mainOwner)
-        layers.fastForEach { layer ->
-            it.add(layer.owner)
-        }
+        layers.fastForEach { layer -> it.add(layer.owner) }
     }
 
     private inline fun forEachLayer(action: (AttachedComposeSceneLayer) -> Unit) =
-        _layersCopyCache.withCopy {
-            it.fastForEach(action)
-        }
+        _layersCopyCache.withCopy { it.fastForEach(action) }
 
     private inline fun forEachLayerReversed(action: (AttachedComposeSceneLayer) -> Unit) =
-        _layersCopyCache.withCopy {
-            it.fastForEachReversed(action)
-        }
+        _layersCopyCache.withCopy { it.fastForEachReversed(action) }
 
     private inline fun forEachOwner(action: (RootNodeOwner) -> Unit) =
-        _ownersCopyCache.withCopy {
-            it.fastForEach(action)
-        }
+        _ownersCopyCache.withCopy { it.fastForEach(action) }
 
     private var focusedLayer: AttachedComposeSceneLayer? = null
     private val focusedOwner
         get() = focusedLayer?.owner ?: mainOwner
+
     private var gestureOwner: RootNodeOwner? = null
     private var lastHoverOwner: RootNodeOwner? = null
 
@@ -227,21 +248,24 @@ private class CanvasLayersComposeSceneImpl(
     }
 
     override val hasPendingMeasureOrLayout: Boolean
-        get() = hasForcedLayout || mainOwner.hasPendingMeasureOrLayout
-            || layers.fastAny { it.owner.hasPendingMeasureOrLayout }
+        get() =
+            hasForcedLayout ||
+                mainOwner.hasPendingMeasureOrLayout ||
+                layers.fastAny { it.owner.hasPendingMeasureOrLayout }
 
     override val hasPendingDraw: Boolean
-        get() = hasForcedDraw || mainOwner.hasPendingDraw
-            || layers.fastAny { it.owner.hasPendingDraw }
+        get() =
+            hasForcedDraw || mainOwner.hasPendingDraw || layers.fastAny { it.owner.hasPendingDraw }
 
     override fun createComposition(
         parentCompositionContext: CompositionContext,
         content: @Composable () -> Unit,
-    ): Composition = mainOwner.setContent(
-        parent = parentCompositionContext,
-        getCompositionLocalContext = { compositionLocalContext },
-        content = content,
-    )
+    ): Composition =
+        mainOwner.setContent(
+            parent = parentCompositionContext,
+            getCompositionLocalContext = { compositionLocalContext },
+            content = content,
+        )
 
     override fun hitTestInteropView(position: Offset): InteropView? {
         return hitTestInteropTarget(position) as? InteropView
@@ -259,23 +283,24 @@ private class CanvasLayersComposeSceneImpl(
     }
 
     override fun processPointerInputEvent(event: PointerInputEvent): PointerEventResult {
-        val result = when (event.eventType) {
-            PointerEventType.Press -> processPress(event)
-            PointerEventType.Release -> processRelease(event)
-            PointerEventType.Move -> processMove(event)
-            PointerEventType.Enter -> processMove(event)
-            PointerEventType.Exit -> processMove(event)
-            PointerEventType.Scroll -> processHoveredEvent(event)
-            PointerEventType.PanStart,
-            PointerEventType.PanMove,
-            PointerEventType.PanEnd -> processHoveredEvent(event)
-            PointerEventType.ScaleStart,
-            PointerEventType.ScaleChange,
-            PointerEventType.ScaleEnd -> processHoveredEvent(event)
-            PointerEventType.Unknown ->
-                return processUnknownEvent(event)  // We don't want any side effects from it
-            else -> PointerEventResult(anyMovementConsumed = false)
-        }
+        val result =
+            when (event.eventType) {
+                PointerEventType.Press -> processPress(event)
+                PointerEventType.Release -> processRelease(event)
+                PointerEventType.Move -> processMove(event)
+                PointerEventType.Enter -> processMove(event)
+                PointerEventType.Exit -> processMove(event)
+                PointerEventType.Scroll -> processHoveredEvent(event)
+                PointerEventType.PanStart,
+                PointerEventType.PanMove,
+                PointerEventType.PanEnd -> processHoveredEvent(event)
+                PointerEventType.ScaleStart,
+                PointerEventType.ScaleChange,
+                PointerEventType.ScaleEnd -> processHoveredEvent(event)
+                PointerEventType.Unknown ->
+                    return processUnknownEvent(event) // We don't want any side effects from it
+                else -> PointerEventResult(anyMovementConsumed = false)
+            }
 
         // Clean gestureOwner when there is no pressed pointers/buttons
         if (!event.isGestureInProgress) {
@@ -285,9 +310,7 @@ private class CanvasLayersComposeSceneImpl(
     }
 
     override fun processCancelPointerInput() {
-        forEachOwner {
-            it.onCancelPointerInput()
-        }
+        forEachOwner { it.onCancelPointerInput() }
 
         // Reset gesture owner because all ongoing gestures are cancelled
         gestureOwner = null
@@ -300,7 +323,13 @@ private class CanvasLayersComposeSceneImpl(
         focusedLayer?.onRotaryEvent(event) ?: mainOwner.onRotaryEvent(event)
 
     override fun doMeasureAndLayout() {
-        forEachOwner { it.measureAndLayout() }
+        forEachOwner {
+            // measureAndLayout on one owner could cause a following one to be disposed,
+            // See https://youtrack.jetbrains.com/issue/CMP-10884 for example
+            if (!it.isDisposed) {
+                it.measureAndLayout()
+            }
+        }
     }
 
     override fun doDraw(canvas: Canvas) {
@@ -313,17 +342,13 @@ private class CanvasLayersComposeSceneImpl(
             forEachOwner { it.owner.showLayoutBounds = value }
         }
 
-    /**
-     * Find hovered owner for position of first pointer.
-     */
+    /** Find hovered owner for position of first pointer. */
     private fun hoveredOwner(event: PointerInputEvent): RootNodeOwner {
         val position = event.pointers.first().position
         return layers.fastLastOrNull { it.contains(position) }?.owner ?: mainOwner
     }
 
-    /**
-     * Check if any layer blocks input for this owner.
-     */
+    /** Check if any layer blocks input for this owner. */
     private fun isInteractive(owner: RootNodeOwner?): Boolean {
         if (owner == null) {
             return true
@@ -338,9 +363,7 @@ private class CanvasLayersComposeSceneImpl(
         return true
     }
 
-    /**
-     * Check if there is [focusedLayer] above.
-     */
+    /** Check if there is [focusedLayer] above. */
     private fun isUnderFocusedLayer(owner: RootNodeOwner?): Boolean {
         if (owner == null || focusedLayer == null) {
             return true
@@ -410,16 +433,17 @@ private class CanvasLayersComposeSceneImpl(
     }
 
     private fun processMove(event: PointerInputEvent): PointerEventResult {
-        var owner = when {
-            // All touch events or mouse with pressed button(s)
-            event.isGestureInProgress -> gestureOwner
+        var owner =
+            when {
+                // All touch events or mouse with pressed button(s)
+                event.isGestureInProgress -> gestureOwner
 
-            // Do not generate Enter and Move
-            event.eventType == PointerEventType.Exit -> null
+                // Do not generate Enter and Move
+                event.eventType == PointerEventType.Exit -> null
 
-            // Find owner under mouse position
-            else -> hoveredOwner(event)
-        }
+                // Find owner under mouse position
+                else -> hoveredOwner(event)
+            }
 
         // Even if the owner is not interactive, hover state still need to be updated
         if (!isInteractive(owner)) {
@@ -435,12 +459,11 @@ private class CanvasLayersComposeSceneImpl(
     /**
      * Updates hover state and generates [PointerEventType.Enter] and [PointerEventType.Exit]
      * events. Returns true if [event] is consumed.
-     * @return consumed flag if the hover event has been processed.
-     * null if hover hasn't been processed.
+     *
+     * @return consumed flag if the hover event has been processed. null if hover hasn't been
+     *   processed.
      */
-    private fun processHover(
-        event: PointerInputEvent, owner: RootNodeOwner?
-    ): PointerEventResult? {
+    private fun processHover(event: PointerInputEvent, owner: RootNodeOwner?): PointerEventResult? {
         if (event.pointers.fastAny { it.type != PointerType.Mouse }) {
             // Track hover only for mouse
             return null
@@ -449,7 +472,8 @@ private class CanvasLayersComposeSceneImpl(
         // - move from outside to the window (owner != null, lastMoveOwner == null): Enter
         // - move from the window to outside (owner == null, lastMoveOwner != null): Exit
         // - move from one point of the window to another (owner == lastMoveOwner): Move
-        // - move from one popup to another (owner != lastMoveOwner): [Popup 1] Exit, [Popup 2] Enter
+        // - move from one popup to another (owner != lastMoveOwner): [Popup 1] Exit, [Popup 2]
+        // Enter
         if (owner == lastHoverOwner) {
             // Owner wasn't changed
             return null
@@ -457,8 +481,9 @@ private class CanvasLayersComposeSceneImpl(
         val lastHoverOwnerResult =
             lastHoverOwner?.onPointerInput(event.copy(eventType = PointerEventType.Exit))
                 ?: PointerEventResult(anyMovementConsumed = false)
-        val ownerResult = owner?.onPointerInput(event.copy(eventType = PointerEventType.Enter))
-            ?: PointerEventResult(anyMovementConsumed = false)
+        val ownerResult =
+            owner?.onPointerInput(event.copy(eventType = PointerEventType.Enter))
+                ?: PointerEventResult(anyMovementConsumed = false)
         lastHoverOwner = owner
 
         // Changing hovering state replaces Move event, so treat it as consumed
@@ -489,13 +514,30 @@ private class CanvasLayersComposeSceneImpl(
         layoutDirection: LayoutDirection,
         focusable: Boolean,
         consumePointerInputOutside: Boolean,
-    ): ComposeSceneLayer = AttachedComposeSceneLayer(
-        coroutineContext = frameRecomposer.compositionContext.effectCoroutineContext,
-        density = density,
-        layoutDirection = layoutDirection,
-        focusable = focusable,
-        consumePointerInputOutside = consumePointerInputOutside,
-    )
+    ): ComposeSceneLayer =
+        createLayer(
+            density = density,
+            layoutDirection = layoutDirection,
+            focusable = focusable,
+            consumePointerInputOutside = consumePointerInputOutside,
+            isOverlay = false,
+        )
+
+    fun createLayer(
+        density: Density,
+        layoutDirection: LayoutDirection,
+        focusable: Boolean,
+        consumePointerInputOutside: Boolean,
+        isOverlay: Boolean,
+    ): ComposeSceneLayer =
+        AttachedComposeSceneLayer(
+            coroutineContext = frameRecomposer.compositionContext.effectCoroutineContext,
+            density = density,
+            layoutDirection = layoutDirection,
+            focusable = focusable,
+            consumePointerInputOutside = consumePointerInputOutside,
+            isOverlay = isOverlay,
+        )
 
     private fun onOwnerAppended(owner: RootNodeOwner) {
         semanticsOwnerListener?.onSemanticsOwnerAppended(owner.semanticsOwner)
@@ -513,7 +555,12 @@ private class CanvasLayersComposeSceneImpl(
 
     private fun attachLayer(layer: AttachedComposeSceneLayer) {
         check(!isClosed) { "attachLayer called after ComposeScene is closed" }
-        layers.add(layer)
+        if (layer.isOverlay) {
+            layers.add(layer)
+        } else {
+            val index = layers.indexOfLast { !it.isOverlay } + 1
+            layers.add(index, layer)
+        }
 
         if (layer.focusable) {
             requestFocus(layer)
@@ -559,32 +606,32 @@ private class CanvasLayersComposeSceneImpl(
         layoutDirection: LayoutDirection,
         focusable: Boolean,
         override var consumePointerInputOutside: Boolean,
+        val isOverlay: Boolean = false,
     ) : ComposeSceneLayer {
-        val owner = RootNodeOwner(
-            density = density,
-            layoutDirection = layoutDirection,
-            coroutineContext = coroutineContext,
-            size = this@CanvasLayersComposeSceneImpl.size,
-            platformContext = object : PlatformContext by composeSceneContext.platformContext {
+        val owner =
+            RootNodeOwner(
+                density = density,
+                layoutDirection = layoutDirection,
+                coroutineContext = coroutineContext,
+                size = this@CanvasLayersComposeSceneImpl.size,
+                platformContext =
+                    object : PlatformContext by composeSceneContext.platformContext {
 
-                /**
-                 * Popup/Dialog shouldn't delegate focus to the parent.
-                 */
-                override val parentFocusManager: FocusManager
-                    get() = PlatformContext.EmptyFocusManager
+                        /** Popup/Dialog shouldn't delegate focus to the parent. */
+                        override val parentFocusManager: FocusManager
+                            get() = PlatformContext.EmptyFocusManager
 
-                // TODO: Figure out why real requestFocus is required
-                //  even with empty parentFocusManager
-            },
-            inputHandler = inputHandler,
-            invalidate = ::invokeInvalidationCallbacks,
-            onChangedExecutor = frameRecomposer::runOnComposeThread,
-        )
+                        // TODO: Figure out why real requestFocus is required
+                        //  even with empty parentFocusManager
+                    },
+                inputHandler = inputHandler,
+                invalidate = ::invokeInvalidationCallbacks,
+                onChangedExecutor = frameRecomposer::runOnComposeThread,
+            )
         private var composition: Composition? = null
-        private var outsidePointerCallback: ((
-            eventType: PointerEventType,
-            button: PointerButton?
-        ) -> Unit)? = null
+        private var outsidePointerCallback:
+            ((eventType: PointerEventType, button: PointerButton?) -> Unit)? =
+            null
         private var isClosed = false
 
         override var density: Density by owner::density
@@ -599,7 +646,7 @@ private class CanvasLayersComposeSceneImpl(
 
         @Deprecated(
             message = "Should not be used in this implementation",
-            level = DeprecationLevel.ERROR
+            level = DeprecationLevel.ERROR,
         )
         override var compositionLocalContext: CompositionLocalContext? = null
 
@@ -617,16 +664,18 @@ private class CanvasLayersComposeSceneImpl(
             }
 
         private val background: Modifier
-            get() = scrimColor?.let {
-                Modifier.drawBehind {
-                    drawRect(
-                        color = it,
-                        blendMode = getDialogScrimBlendMode(
-                            composeSceneContext.platformContext.isWindowTransparent
+            get() =
+                scrimColor?.let {
+                    Modifier.drawBehind {
+                        drawRect(
+                            color = it,
+                            blendMode =
+                                getDialogScrimBlendMode(
+                                    composeSceneContext.platformContext.isWindowTransparent
+                                ),
                         )
-                    )
-                }
-            } ?: Modifier
+                    }
+                } ?: Modifier
 
         private var onPreviewKeyEvent: ((KeyEvent) -> Boolean)? = null
         private var onKeyEvent: ((KeyEvent) -> Boolean)? = null
@@ -664,28 +713,32 @@ private class CanvasLayersComposeSceneImpl(
         }
 
         override fun setOutsidePointerEventListener(
-            onOutsidePointerEvent: ((eventType: PointerEventType, button: PointerButton?) -> Unit)?,
+            onOutsidePointerEvent: ((eventType: PointerEventType, button: PointerButton?) -> Unit)?
         ) {
             outsidePointerCallback = onOutsidePointerEvent
         }
 
-        override fun setContent(parentCompositionContext: CompositionContext, content: @Composable () -> Unit) {
+        override fun setContent(
+            parentCompositionContext: CompositionContext,
+            content: @Composable () -> Unit,
+        ) {
             check(!isClosed) { "AttachedComposeSceneLayer is closed" }
             composition?.dispose()
-            composition = owner.setContent(
-                parent = parentCompositionContext,
-                {
-                    /*
-                     * Do not use `compositionLocalContext` here - composition locals already
-                     * available from `compositionContext` and explicitly overriding it might cause
-                     * issues. See https://github.com/JetBrains/compose-multiplatform/issues/4558
-                     */
-                    null
+            composition =
+                owner.setContent(
+                    parent = parentCompositionContext,
+                    {
+                        /*
+                         * Do not use `compositionLocalContext` here - composition locals already
+                         * available from `compositionContext` and explicitly overriding it might cause
+                         * issues. See https://github.com/JetBrains/compose-multiplatform/issues/4558
+                         */
+                        null
+                    },
+                ) {
+                    owner.setRootModifier(background)
+                    content()
                 }
-            ) {
-                owner.setRootModifier(background)
-                content()
-            }
         }
 
         override fun calculateLocalPosition(positionInWindow: IntOffset): IntOffset =
@@ -700,19 +753,19 @@ private class CanvasLayersComposeSceneImpl(
     }
 }
 
-private val PointerInputEvent.isGestureInProgress get() = pointers.fastAny { it.down }
+private val PointerInputEvent.isGestureInProgress
+    get() = pointers.fastAny { it.down }
 
-private fun PointerInputEvent.isMouseOrSingleTouch() =
-    button != null || pointers.size == 1
+private fun PointerInputEvent.isMouseOrSingleTouch() = button != null || pointers.size == 1
 
-internal class CopiedList<T>(
-    private val populate: (MutableList<T>) -> Unit
-) : MutableList<T> by mutableListOf() {
-    inline fun withCopy(
-        block: (List<T>) -> Unit
-    ) {
+internal class CopiedList<T>(private val populate: (MutableList<T>) -> Unit) {
+    constructor(origin: List<T>) : this(populate = { it.addAll(origin) })
+
+    private val reusableList = mutableListOf<T>()
+
+    inline fun withCopy(block: (List<T>) -> Unit) {
         // In case of recursive calls, allocate new list
-        val copy = if (isEmpty()) this else mutableListOf()
+        val copy = if (reusableList.isEmpty()) reusableList else mutableListOf()
         populate(copy)
         try {
             block(copy)

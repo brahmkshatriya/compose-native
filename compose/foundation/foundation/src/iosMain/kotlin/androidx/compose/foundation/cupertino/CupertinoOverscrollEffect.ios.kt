@@ -17,9 +17,11 @@
 package androidx.compose.foundation.cupertino
 
 import androidx.compose.animation.core.AnimationState
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateTo
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.OverscrollEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -54,22 +56,28 @@ import androidx.compose.ui.unit.round
 import androidx.compose.ui.unit.toOffset
 import androidx.compose.ui.unit.toSize
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.sign
+import kotlin.math.sqrt
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 
 private enum class CupertinoScrollSource {
-    DRAG, FLING
+    DRAG,
+    FLING,
 }
 
 private enum class CupertinoOverscrollDirection {
-    UNKNOWN, VERTICAL, HORIZONTAL
+    UNKNOWN,
+    VERTICAL,
+    HORIZONTAL,
 }
 
 private enum class CupertinoSpringAnimationReason {
-    FLING_FROM_OVERSCROLL, POSSIBLE_SPRING_IN_THE_END
+    FLING_FROM_OVERSCROLL,
+    POSSIBLE_SPRING_IN_THE_END,
 }
 
 /*
@@ -82,22 +90,20 @@ private data class CupertinoOverscrollAvailableDelta(
 
     // new overscroll value for dimension in context of which calculation returning
     // instance of this type was returned
-    val newOverscrollValue: Float
+    val newOverscrollValue: Float,
 )
 
 /**
  * CupertinoOverscrollEffect
  *
- * @param density to be taken into consideration during computations;
- * Cupertino formulas use DPs, and scroll machinery uses raw values.
- *
+ * @param density to be taken into consideration during computations; Cupertino formulas use DPs,
+ *   and scroll machinery uses raw values.
  * @param applyClip Some consumers of overscroll effect apply clip by themselves and some don't,
- * thus this flag is needed to update our modifier chain and make the clipping correct in every case while avoiding redundancy
+ *   thus this flag is needed to update our modifier chain and make the clipping correct in every
+ *   case while avoiding redundancy
  */
-internal class CupertinoOverscrollEffect(
-    private val density: Float,
-    val applyClip: Boolean
-) : OverscrollEffect {
+internal class CupertinoOverscrollEffect(private val density: Float, val applyClip: Boolean) :
+    OverscrollEffect {
     /*
      * Direction of scrolling for this overscroll effect, derived from arguments during
      * [applyToScroll] calls. Technically this effect supports both dimensions, but current API requires
@@ -125,11 +131,12 @@ internal class CupertinoOverscrollEffect(
      */
     private var overscrollOffsetState = mutableStateOf(Offset.Zero)
     private var overscrollOffset: Offset
-        get () = overscrollOffsetState.value
+        get() = overscrollOffsetState.value
         set(value) {
             overscrollOffsetState.value = value
             drawCallScheduledByOffsetChange = true
         }
+
     private var drawCallScheduledByOffsetChange = true
 
     private var lastFlingUnconsumedDelta: Offset = Offset.Zero
@@ -142,13 +149,15 @@ internal class CupertinoOverscrollEffect(
             // this effect is considered to be in progress
             visibleOverscrollOffset.toOffset().getDistance() > 0.5f
 
-    private val overscrollNode = CupertinoOverscrollNode(
-        offset = { visibleOverscrollOffset },
-        onNodeRemeasured = { scrollSize = it.toSize() },
-        onDraw = ::onDraw,
-        applyClip = applyClip
-    )
-    override val node: DelegatableNode get() = overscrollNode
+    private val overscrollNode =
+        CupertinoOverscrollNode(
+            offset = { visibleOverscrollOffset },
+            onNodeRemeasured = { scrollSize = it.toSize() },
+            onDraw = ::onDraw,
+            applyClip = applyClip,
+        )
+    override val node: DelegatableNode
+        get() = overscrollNode
 
     private fun onDraw() {
         // Fix an issue where scrolling was cancelled but the overscroll effect was not completed.
@@ -174,7 +183,7 @@ internal class CupertinoOverscrollEffect(
     private fun availableDelta(
         delta: Float,
         overscroll: Float,
-        source: CupertinoScrollSource
+        source: CupertinoScrollSource,
     ): CupertinoOverscrollAvailableDelta {
         // if source is fling:
         // 1. no delta will be consumed
@@ -223,9 +232,10 @@ internal class CupertinoOverscrollEffect(
     private fun applyToScroll(
         delta: Offset,
         source: CupertinoScrollSource,
-        performScroll: (Offset) -> Offset
+        performScroll: (Offset) -> Offset,
     ): Offset {
-        // Calculate how much delta is available after being consumed by scrolling inside overscroll area
+        // Calculate how much delta is available after being consumed by scrolling inside overscroll
+        // area
         val deltaLeftForPerformScroll = availableDelta(delta, source)
 
         // Then pass remaining delta to scroll closure
@@ -236,8 +246,10 @@ internal class CupertinoOverscrollEffect(
 
         return when (source) {
             CupertinoScrollSource.DRAG -> {
-                // [unconsumedDelta] is going into overscroll again in case a user drags and hits the
-                // overscroll->content->overscroll or content->overscroll scenario within single frame
+                // [unconsumedDelta] is going into overscroll again in case a user drags and hits
+                // the
+                // overscroll->content->overscroll or content->overscroll scenario within single
+                // frame
                 overscrollOffset += unconsumedDelta
                 lastFlingUnconsumedDelta = Offset.Zero
                 delta - unconsumedDelta
@@ -255,21 +267,20 @@ internal class CupertinoOverscrollEffect(
     override fun applyToScroll(
         delta: Offset,
         source: NestedScrollSource,
-        performScroll: (Offset) -> Offset
+        performScroll: (Offset) -> Offset,
     ): Offset {
         springAnimationScope?.cancel()
         springAnimationScope = null
 
         direction = direction.combinedWith(delta.toCupertinoOverscrollDirection())
 
-        return source.toCupertinoScrollSource()?.let {
-            applyToScroll(delta, it, performScroll)
-        } ?: performScroll(delta)
+        return source.toCupertinoScrollSource()?.let { applyToScroll(delta, it, performScroll) }
+            ?: performScroll(delta)
     }
 
     override suspend fun applyToFling(
         velocity: Velocity,
-        performFling: suspend (Velocity) -> Velocity
+        performFling: suspend (Velocity) -> Velocity,
     ) {
         val availableFlingVelocity = playInitialSpringAnimationIfNeeded(velocity)
         val velocityConsumedByFling = performFling(availableFlingVelocity)
@@ -283,7 +294,7 @@ internal class CupertinoOverscrollEffect(
         playSpringAnimation(
             unconsumedDelta,
             postFlingVelocity.toFloat(),
-            CupertinoSpringAnimationReason.POSSIBLE_SPRING_IN_THE_END
+            CupertinoSpringAnimationReason.POSSIBLE_SPRING_IN_THE_END,
         )
     }
 
@@ -304,30 +315,38 @@ internal class CupertinoOverscrollEffect(
         }
     }
 
-    private fun CupertinoOverscrollDirection.combinedWith(other: CupertinoOverscrollDirection): CupertinoOverscrollDirection =
+    private fun CupertinoOverscrollDirection.combinedWith(
+        other: CupertinoOverscrollDirection
+    ): CupertinoOverscrollDirection =
         when (this) {
-            CupertinoOverscrollDirection.UNKNOWN -> when (other) {
-                CupertinoOverscrollDirection.UNKNOWN -> CupertinoOverscrollDirection.UNKNOWN
-                CupertinoOverscrollDirection.VERTICAL -> CupertinoOverscrollDirection.VERTICAL
-                CupertinoOverscrollDirection.HORIZONTAL -> CupertinoOverscrollDirection.HORIZONTAL
-            }
+            CupertinoOverscrollDirection.UNKNOWN ->
+                when (other) {
+                    CupertinoOverscrollDirection.UNKNOWN -> CupertinoOverscrollDirection.UNKNOWN
+                    CupertinoOverscrollDirection.VERTICAL -> CupertinoOverscrollDirection.VERTICAL
+                    CupertinoOverscrollDirection.HORIZONTAL ->
+                        CupertinoOverscrollDirection.HORIZONTAL
+                }
 
-            CupertinoOverscrollDirection.VERTICAL -> when (other) {
-                CupertinoOverscrollDirection.UNKNOWN, CupertinoOverscrollDirection.VERTICAL -> CupertinoOverscrollDirection.VERTICAL
-                CupertinoOverscrollDirection.HORIZONTAL -> CupertinoOverscrollDirection.HORIZONTAL
-            }
+            CupertinoOverscrollDirection.VERTICAL ->
+                when (other) {
+                    CupertinoOverscrollDirection.UNKNOWN,
+                    CupertinoOverscrollDirection.VERTICAL -> CupertinoOverscrollDirection.VERTICAL
+                    CupertinoOverscrollDirection.HORIZONTAL ->
+                        CupertinoOverscrollDirection.HORIZONTAL
+                }
 
-            CupertinoOverscrollDirection.HORIZONTAL -> when (other) {
-                CupertinoOverscrollDirection.UNKNOWN, CupertinoOverscrollDirection.HORIZONTAL -> CupertinoOverscrollDirection.HORIZONTAL
-                CupertinoOverscrollDirection.VERTICAL -> CupertinoOverscrollDirection.VERTICAL
-            }
+            CupertinoOverscrollDirection.HORIZONTAL ->
+                when (other) {
+                    CupertinoOverscrollDirection.UNKNOWN,
+                    CupertinoOverscrollDirection.HORIZONTAL ->
+                        CupertinoOverscrollDirection.HORIZONTAL
+                    CupertinoOverscrollDirection.VERTICAL -> CupertinoOverscrollDirection.VERTICAL
+                }
         }
 
-    private fun Velocity.toFloat(): Float =
-        toOffset().toFloat()
+    private fun Velocity.toFloat(): Float = toOffset().toFloat()
 
-    private fun Float.toVelocity(): Velocity =
-        toOffset().toVelocity()
+    private fun Float.toVelocity(): Velocity = toOffset().toVelocity()
 
     private fun Offset.toFloat(): Float =
         when (direction) {
@@ -349,10 +368,11 @@ internal class CupertinoOverscrollEffect(
 
         return if ((velocity <= 0f && overscroll > 0f) || (velocity >= 0f && overscroll < 0f)) {
             playSpringAnimation(
-                unconsumedDelta = 0f,
-                velocity,
-                CupertinoSpringAnimationReason.FLING_FROM_OVERSCROLL
-            ).toVelocity()
+                    unconsumedDelta = 0f,
+                    velocity,
+                    CupertinoSpringAnimationReason.FLING_FROM_OVERSCROLL,
+                )
+                .toVelocity()
         } else {
             initialVelocity
         }
@@ -363,7 +383,7 @@ internal class CupertinoOverscrollEffect(
     private suspend fun playSpringAnimation(
         unconsumedDelta: Float,
         initialVelocity: Float,
-        reason: CupertinoSpringAnimationReason
+        reason: CupertinoSpringAnimationReason,
     ): Float {
         val initialValue = overscrollOffset.toFloat() + unconsumedDelta
         val initialSign = sign(initialValue)
@@ -373,44 +393,55 @@ internal class CupertinoOverscrollEffect(
         // they operated on DPs. Callback value is then scaled back to raw pixels.
         val visibilityThreshold = 0.5f / density
 
-        val spec = when (reason) {
-            CupertinoSpringAnimationReason.FLING_FROM_OVERSCROLL -> {
-                spring(
-                    stiffness = 300f,
-                    visibilityThreshold = visibilityThreshold
-                )
-            }
+        val spec =
+            when (reason) {
+                CupertinoSpringAnimationReason.FLING_FROM_OVERSCROLL -> {
+                    val overscrollDp = abs(initialValue) / density
 
-            CupertinoSpringAnimationReason.POSSIBLE_SPRING_IN_THE_END -> {
-                spring(
-                    stiffness = 120f,
-                    visibilityThreshold = visibilityThreshold
-                )
+                    if (
+                        abs(initialVelocity) / density >=
+                            sqrt(FLING_FROM_OVERSCROLL_STIFFNESS) * overscrollDp
+                    ) {
+                        spring(
+                            stiffness = FLING_FROM_OVERSCROLL_STIFFNESS,
+                            visibilityThreshold = visibilityThreshold,
+                        )
+                    } else {
+                        tween(
+                            durationMillis = easeOutReturnDurationMillis(overscrollDp),
+                            easing =
+                                Easing { fraction ->
+                                    1f - exp(-EASE_OUT_RETURN_DECAY_RATE * fraction)
+                                },
+                        )
+                    }
+                }
+
+                CupertinoSpringAnimationReason.POSSIBLE_SPRING_IN_THE_END -> {
+                    spring(
+                        stiffness = POSSIBLE_SPRING_IN_THE_END_STIFFNESS,
+                        visibilityThreshold = visibilityThreshold,
+                    )
+                }
             }
-        }
 
         springAnimationScope?.cancel()
         springAnimationScope = CoroutineScope(currentCoroutineContext())
         springAnimationScope?.run {
-            AnimationState(
-                Float.VectorConverter,
-                initialValue / density,
-                initialVelocity / density
-            ).animateTo(
-                targetValue = 0f,
-                animationSpec = spec
-            ) {
-                overscrollOffset = (value * density).toOffset()
-                currentVelocity = velocity * density
+            AnimationState(Float.VectorConverter, initialValue / density, initialVelocity / density)
+                .animateTo(targetValue = 0f, animationSpec = spec) {
+                    overscrollOffset = (value * density).toOffset()
+                    currentVelocity = velocity * density
 
-                // If it was fling from overscroll, cancel animation and return velocity
-                if (reason == CupertinoSpringAnimationReason.FLING_FROM_OVERSCROLL &&
-                    initialSign != 0f &&
-                    sign(value) != initialSign
-                ) {
-                    this.cancelAnimation()
+                    // If it was fling from overscroll, cancel animation and return velocity
+                    if (
+                        reason == CupertinoSpringAnimationReason.FLING_FROM_OVERSCROLL &&
+                            initialSign != 0f &&
+                            sign(value) != initialSign
+                    ) {
+                        this.cancelAnimation()
+                    }
                 }
-            }
             springAnimationScope = null
         }
 
@@ -437,7 +468,7 @@ internal class CupertinoOverscrollEffect(
 
         return Offset(
             rubberBandedValue(dpOffset.x, dpSize.width, RUBBER_BAND_COEFFICIENT),
-            rubberBandedValue(dpOffset.y, dpSize.height, RUBBER_BAND_COEFFICIENT)
+            rubberBandedValue(dpOffset.y, dpSize.height, RUBBER_BAND_COEFFICIENT),
         ) * density
     }
 
@@ -448,8 +479,26 @@ internal class CupertinoOverscrollEffect(
     private fun rubberBandedValue(value: Float, dimension: Float, coefficient: Float) =
         sign(value) * (1f - (1f / (abs(value) * coefficient / dimension + 1f))) * dimension
 
+    /*
+     * Duration of the ease-out return animation for an overscroll of [overscrollDp] DPs.
+     */
+    private fun easeOutReturnDurationMillis(overscrollDp: Float): Int {
+        val fraction = (overscrollDp / EASE_OUT_RETURN_FULL_DURATION_DP).coerceIn(0f, 1f)
+
+        return (EASE_OUT_RETURN_MIN_DURATION_MILLIS +
+                fraction *
+                    (EASE_OUT_RETURN_MAX_DURATION_MILLIS - EASE_OUT_RETURN_MIN_DURATION_MILLIS))
+            .toInt()
+    }
+
     companion object Companion {
         private const val RUBBER_BAND_COEFFICIENT = 0.55f
+        private const val FLING_FROM_OVERSCROLL_STIFFNESS = 300f
+        private const val POSSIBLE_SPRING_IN_THE_END_STIFFNESS = 120f
+        private const val EASE_OUT_RETURN_FULL_DURATION_DP = 120f
+        private const val EASE_OUT_RETURN_MIN_DURATION_MILLIS = 200f
+        private const val EASE_OUT_RETURN_MAX_DURATION_MILLIS = 400f
+        private const val EASE_OUT_RETURN_DECAY_RATE = 6.625f
     }
 }
 
@@ -457,8 +506,9 @@ private class CupertinoOverscrollNode(
     val offset: Density.() -> IntOffset,
     val onNodeRemeasured: (IntSize) -> Unit,
     val onDraw: () -> Unit,
-    val applyClip: Boolean
-) : Modifier.Node(),
+    val applyClip: Boolean,
+) :
+    Modifier.Node(),
     LayoutModifierNode,
     LayoutAwareModifierNode,
     DrawModifierNode,
@@ -470,7 +520,7 @@ private class CupertinoOverscrollNode(
     override fun onPointerEvent(
         pointerEvent: PointerEvent,
         pass: PointerEventPass,
-        bounds: IntSize
+        bounds: IntSize,
     ) {
         if (pass == PointerEventPass.Initial) {
             pointerEvent.changes.forEach { change ->
@@ -493,12 +543,9 @@ private class CupertinoOverscrollNode(
         if (applyClip) {
             val bounds = Rect(-offset().toOffset(), size)
             val rect = size.toRect().intersect(bounds)
-            clipRect(
-                left = rect.left,
-                top = rect.top,
-                right = rect.right,
-                bottom = rect.bottom,
-            ) { this@draw.drawContent() }
+            clipRect(left = rect.left, top = rect.top, right = rect.right, bottom = rect.bottom) {
+                this@draw.drawContent()
+            }
         } else {
             this@draw.drawContent()
         }
@@ -506,17 +553,13 @@ private class CupertinoOverscrollNode(
 
     override fun MeasureScope.measure(
         measurable: Measurable,
-        constraints: Constraints
+        constraints: Constraints,
     ): MeasureResult {
         val placeable = measurable.measure(constraints)
-        return layout(placeable.width, placeable.height) {
-            placeable.placeWithLayer(offset())
-        }
+        return layout(placeable.width, placeable.height) { placeable.placeWithLayer(offset()) }
     }
 }
 
-private fun Velocity.toOffset(): Offset =
-    Offset(x, y)
+private fun Velocity.toOffset(): Offset = Offset(x, y)
 
-private fun Offset.toVelocity(): Velocity =
-    Velocity(x, y)
+private fun Offset.toVelocity(): Velocity = Velocity(x, y)

@@ -24,8 +24,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ExperimentalMediaQueryApi
 import androidx.compose.ui.FrameRateCategory
 import androidx.compose.ui.InternalComposeUiApi
-import androidx.compose.ui.autofill.AutofillManager
 import androidx.compose.ui.UiMediaScope
+import androidx.compose.ui.autofill.AutofillManager
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.geometry.Offset
@@ -63,39 +63,32 @@ import kotlin.reflect.KProperty
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 
-/**
- * Platform context that provides platform-specific bindings.
- */
+/** Platform context that provides platform-specific bindings. */
 @InternalComposeUiApi
 interface PlatformContext {
-    /**
-     * The value that will be provided to [LocalWindowInfo] by default.
-     */
+    /** The value that will be provided to [LocalWindowInfo] by default. */
     val windowInfo: WindowInfo
 
-    /**
-     * Provide [TaskDispatchers] for coroutines running within a Compose hierarchy.
-     */
+    /** Provide [TaskDispatchers] for coroutines running within a Compose hierarchy. */
     val taskDispatchers: TaskDispatchers
 
-    /**
-     * The value that will be provided to [LocalPlatformScreenReader] by default.
-     */
-    val screenReader: PlatformScreenReader get() = EmptyPlatformScreenReader
+    /** The value that will be provided to [LocalPlatformScreenReader] by default. */
+    val screenReader: PlatformScreenReader
+        get() = EmptyPlatformScreenReader
+
+    /** Provider of platform owners such as [LifecycleOwner] or [ViewModelStoreOwner]. */
+    val architectureComponentsOwner: PlatformArchitectureComponentsOwner
+        get() = EmptyArchitectureComponentsOwner
 
     /**
-     * Provider of platform owners such as [LifecycleOwner] or [ViewModelStoreOwner].
-     */
-    val architectureComponentsOwner: PlatformArchitectureComponentsOwner get() = EmptyArchitectureComponentsOwner
-
-    /**
-     * Indicates if the Compose view is positioned in a transparent window.
-     * This is used when rendering the scrim of a dialog - if set to true, a special blending mode
-     * will be used to take into account the existing alpha-channel values.
+     * Indicates if the Compose view is positioned in a transparent window. This is used when
+     * rendering the scrim of a dialog - if set to true, a special blending mode will be used to
+     * take into account the existing alpha-channel values.
      *
      * @see CanvasLayersComposeScene
      */
-    val isWindowTransparent: Boolean get() = false
+    val isWindowTransparent: Boolean
+        get() = false
 
     /**
      * Indicates whether the transformation between local and window/screen coordinate spaces
@@ -107,37 +100,33 @@ interface PlatformContext {
      *
      * @return `true` if the transformation includes rotation, scaling, skewing, or other
      *   non-translation components; `false` if only translation is used.
-     *
      * @see convertLocalToWindowPosition
      * @see convertWindowToLocalPosition
      */
-    val hasNonTranslationComponents: Boolean get() = false
+    val hasNonTranslationComponents: Boolean
+        get() = false
 
     /**
-     * Converts [localPosition] relative to the [ComposeScene] into an [Offset] relative to
-     * the containing window.
-     * If the [ComposeScene] is rotated, scaled, or otherwise transformed relative to the window,
-     * this will not be a simple translation.
+     * Converts [localPosition] relative to the [ComposeScene] into an [Offset] relative to the
+     * containing window. If the [ComposeScene] is rotated, scaled, or otherwise transformed
+     * relative to the window, this will not be a simple translation.
      *
      * Note: It might return [Offset.Unspecified] if it's not attached to a window.
      */
-    fun convertLocalToWindowPosition(localPosition: Offset): Offset =
-        localPosition
+    fun convertLocalToWindowPosition(localPosition: Offset): Offset = localPosition
 
     /**
-     * Converts [positionInWindow] relative to the window into an [Offset] relative to
-     * the [ComposeScene].
-     * If the [ComposeScene] is rotated, scaled, or otherwise transformed relative to the window,
-     * this will not be a simple translation.
+     * Converts [positionInWindow] relative to the window into an [Offset] relative to the
+     * [ComposeScene]. If the [ComposeScene] is rotated, scaled, or otherwise transformed relative
+     * to the window, this will not be a simple translation.
      *
      * Note: It might return [Offset.Unspecified] if it's not attached to a window.
      */
-    fun convertWindowToLocalPosition(positionInWindow: Offset): Offset =
-        positionInWindow
+    fun convertWindowToLocalPosition(positionInWindow: Offset): Offset = positionInWindow
 
     /**
-     * Converts [localPosition] relative to the [ComposeScene] into an [Offset] relative to
-     * the device's screen.
+     * Converts [localPosition] relative to the [ComposeScene] into an [Offset] relative to the
+     * device's screen.
      *
      * Note: It might return [Offset.Unspecified] if it's not attached to a window.
      */
@@ -145,8 +134,8 @@ interface PlatformContext {
         convertLocalToWindowPosition(localPosition)
 
     /**
-     * Converts [positionOnScreen] relative to the device's screen into an [Offset] relative to
-     * the [ComposeScene].
+     * Converts [positionOnScreen] relative to the device's screen into an [Offset] relative to the
+     * [ComposeScene].
      *
      * Note: It might return [Offset.Unspecified] if it's not attached to a window.
      */
@@ -154,12 +143,12 @@ interface PlatformContext {
         convertWindowToLocalPosition(positionOnScreen)
 
     /**
-     * Determines if [OwnedLayer] should measure bounds for all drawings.
-     * It's required to determine bounds of any graphics even if it was drawn out of measured
-     * layout bounds (for example, shadows). It might be used to resize platform views based on
-     * such bounds.
+     * Determines if [OwnedLayer] should measure bounds for all drawings. It's required to determine
+     * bounds of any graphics even if it was drawn out of measured layout bounds (for example,
+     * shadows). It might be used to resize platform views based on such bounds.
      */
-    val measureDrawLayerBounds: Boolean get() = false
+    val measureDrawLayerBounds: Boolean
+        get() = false
 
     /**
      * Reports a conservative root-coordinate rectangle whose rendered pixels may have changed.
@@ -178,29 +167,40 @@ interface PlatformContext {
     fun createGraphicsContext(): PlatformGraphicsContext =
         PlatformGraphicsRegistry.requireCurrent().createGraphicsContext()
 
-    val localeList: LocaleList get() = LocaleList.current
-    val viewConfiguration: ViewConfiguration get() = DefaultViewConfiguration
+    val localeList: LocaleList
+        get() = LocaleList.current
+
+    val viewConfiguration: ViewConfiguration
+        get() = DefaultViewConfiguration
+
     val inputModeManager: InputModeManager
     @Suppress("DEPRECATION") // TODO https://youtrack.jetbrains.com/issue/CMP-9858
-    val textInputService: androidx.compose.ui.text.input.PlatformTextInputService get() = EmptyPlatformTextInputService
+    val textInputService: androidx.compose.ui.text.input.PlatformTextInputService
+        get() = EmptyPlatformTextInputService
 
     suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
         awaitCancellation()
     }
 
-    val textToolbar: TextToolbar get() = EmptyTextToolbar
-    val hapticFeedback: HapticFeedback get() = NoOpHapticFeedback
+    val textToolbar: TextToolbar
+        get() = EmptyTextToolbar
+
+    val hapticFeedback: HapticFeedback
+        get() = NoOpHapticFeedback
+
     fun setPointerIcon(pointerIcon: PointerIcon) = Unit
 
-    val parentFocusManager: FocusManager get() = EmptyFocusManager
+    val parentFocusManager: FocusManager
+        get() = EmptyFocusManager
+
     fun requestFocus(): Boolean = true
 
-    val dragAndDropManager: PlatformDragAndDropManager get() = EmptyDragAndDropManager
+    val dragAndDropManager: PlatformDragAndDropManager
+        get() = EmptyDragAndDropManager
 
-    /**
-     * The value that will be provided to [LocalPlatformWindowInsets] by default.
-     */
-    val windowInsets: PlatformWindowInsets get() = EmptyPlatformWindowInsets
+    /** The value that will be provided to [LocalPlatformWindowInsets] by default. */
+    val windowInsets: PlatformWindowInsets
+        get() = EmptyPlatformWindowInsets
 
     var isKeepScreenOnEnabled: Boolean
         get() = false
@@ -210,7 +210,8 @@ interface PlatformContext {
      * Votes for a specific frame rate to be used for rendering.
      *
      * @param frameRate The explicit frame rate value requested
-     * @param frameRateCategory The frame rate category value requested as defined in [FrameRateCategory]
+     * @param frameRateCategory The frame rate category value requested as defined in
+     *   [FrameRateCategory]
      */
     fun voteFrameRate(frameRate: Float, frameRateCategory: Float) = Unit
 
@@ -219,57 +220,59 @@ interface PlatformContext {
      *
      * @see RootForTestListener
      */
-    val rootForTestListener: RootForTestListener? get() = null
+    val rootForTestListener: RootForTestListener?
+        get() = null
 
     /**
      * The listener to track [SemanticsOwner]s.
      *
      * @see SemanticsOwnerListener
      */
-    val semanticsOwnerListener: SemanticsOwnerListener? get() = null
+    val semanticsOwnerListener: SemanticsOwnerListener?
+        get() = null
 
-    /**
-     * Returns whether mouse-down on an unfocusable element clears focus.
-     */
+    /** Returns whether mouse-down on an unfocusable element clears focus. */
     val isClearFocusOnMouseDownEnabled: Boolean
         get() = ComposeUiFlags.isClearFocusOnMouseDownEnabled
 
     /**
-     * Schedules work that should be deferred out of the current
-     * composition/layout/rendering stack.
+     * Schedules work that should be deferred out of the current composition/layout/rendering stack.
      *
      * @see PlatformOutOfFrameExecutor
      * @see OutOfFrameExecutor
      */
-    val outOfFrameExecutor: PlatformOutOfFrameExecutor? get() = null
+    val outOfFrameExecutor: PlatformOutOfFrameExecutor?
+        get() = null
 
     /**
      * Schedules lazy layout prefetch work using platform-specific frame timing.
      *
      * @see PlatformPrefetchScheduler
      */
-    val prefetchScheduler: PlatformPrefetchScheduler get() = NoOpPlatformPrefetchScheduler
+    val prefetchScheduler: PlatformPrefetchScheduler
+        get() = NoOpPlatformPrefetchScheduler
 
-    val accessibilityManager: AccessibilityManager get() = NoOpAccessibilityManager
+    val accessibilityManager: AccessibilityManager
+        get() = NoOpAccessibilityManager
 
-    val clipboard : Clipboard
+    val clipboard: Clipboard
 
     // TODO https://youtrack.jetbrains.com/issue/CMP-7485
     val autofillManager: AutofillManager?
         get() = null
 
-    val uriHandler : UriHandler
+    val uriHandler: UriHandler
     /**
      * Media-related information exposed to the composition.
      *
-     * This provides platform-specific environment details such as window posture,
-     * pointer precision, keyboard type, and device capabilities. The default
-     * implementation is a no-op environment that reports neutral values so code
-     * using media state remains safe on platforms that do not provide a richer
-     * implementation.
+     * This provides platform-specific environment details such as window posture, pointer
+     * precision, keyboard type, and device capabilities. The default implementation is a no-op
+     * environment that reports neutral values so code using media state remains safe on platforms
+     * that do not provide a richer implementation.
      */
     @ExperimentalMediaQueryApi
-    val mediaScope: UiMediaScope get() = EmptyMediaScope
+    val mediaScope: UiMediaScope
+        get() = EmptyMediaScope
 
     val fontFamilyResolver: FontFamily.Resolver
 
@@ -278,35 +281,33 @@ interface PlatformContext {
 
     interface RootForTestListener {
         fun onRootForTestCreated(root: PlatformRootForTest)
+
         fun onRootForTestDisposed(root: PlatformRootForTest)
     }
 
     interface SemanticsOwnerListener {
         /**
-         * Callback method that is called when a [SemanticsOwner] is appended to tracking.
-         * A new [SemanticsOwner] is always created above existing ones.
+         * Callback method that is called when a [SemanticsOwner] is appended to tracking. A new
+         * [SemanticsOwner] is always created above existing ones.
          */
         fun onSemanticsOwnerAppended(semanticsOwner: SemanticsOwner)
 
-        /**
-         * Callback method that is called when a [SemanticsOwner] is disposed.
-         */
+        /** Callback method that is called when a [SemanticsOwner] is disposed. */
         fun onSemanticsOwnerRemoved(semanticsOwner: SemanticsOwner)
 
         /**
-         * Callback method that is called when a [SemanticsNode] is added to or deleted from
-         * the Semantics tree. It will also be called when a [SemanticsNode] in the Semantics tree
-         * has some property change.
+         * Callback method that is called when a [SemanticsNode] is added to or deleted from the
+         * Semantics tree. It will also be called when a [SemanticsNode] in the Semantics tree has
+         * some property change.
          *
          * @param semanticsOwner the [SemanticsOwner] whose semantics have changed
-         *
          * @see Owner.onSemanticsChange
          */
         fun onSemanticsChange(semanticsOwner: SemanticsOwner)
 
         /**
-         * Callback method that is called when the position and/or size of the [LayoutNode] with
-         * the given semantics id changed.
+         * Callback method that is called when the position and/or size of the [LayoutNode] with the
+         * given semantics id changed.
          *
          * Note that the id, rather than the [LayoutNode] itself, is passed here because
          * [LayoutNode] is an internal type, so it can't be exposed in a public method.
@@ -316,27 +317,24 @@ interface PlatformContext {
 
     @InternalComposeUiApi
     open class Empty : PlatformContext {
-        override val windowInfo: WindowInfo = WindowInfoImpl().apply {
-            // true is a better default if the platform doesn't provide WindowInfo.
-            // otherwise UI will always be rendered in unfocused mode
-            // (hidden text field cursor, gray title bar, etc.)
-            isWindowFocused = true
-        }
+        override val windowInfo: WindowInfo =
+            WindowInfoImpl().apply {
+                // true is a better default if the platform doesn't provide WindowInfo.
+                // otherwise UI will always be rendered in unfocused mode
+                // (hidden text field cursor, gray title bar, etc.)
+                isWindowFocused = true
+            }
 
         override val taskDispatchers: TaskDispatchers = DefaultTaskDispatchers
 
-        override val inputModeManager: InputModeManager by lazy(LazyThreadSafetyMode.NONE) {
-            DefaultInputModeManager()
-        }
-        override val clipboard: Clipboard by lazy(LazyThreadSafetyMode.NONE) {
-            createPlatformClipboard()
-        }
-        override val uriHandler: UriHandler by lazy(LazyThreadSafetyMode.NONE) {
-            createPlatformUriHandler()
-        }
-        override val fontFamilyResolver: FontFamily.Resolver by lazy(LazyThreadSafetyMode.NONE) {
-            createFontFamilyResolver()
-        }
+        override val inputModeManager: InputModeManager by
+            lazy(LazyThreadSafetyMode.NONE) { DefaultInputModeManager() }
+        override val clipboard: Clipboard by
+            lazy(LazyThreadSafetyMode.NONE) { createPlatformClipboard() }
+        override val uriHandler: UriHandler by
+            lazy(LazyThreadSafetyMode.NONE) { createPlatformUriHandler() }
+        override val fontFamilyResolver: FontFamily.Resolver by
+            lazy(LazyThreadSafetyMode.NONE) { createFontFamilyResolver() }
     }
 
     // This object must be immutable because it is used as a delegate in other ViewConfiguration
@@ -354,6 +352,7 @@ interface PlatformContext {
     @InternalComposeUiApi
     object EmptyFocusManager : FocusManager {
         override fun clearFocus(force: Boolean) = Unit
+
         override fun moveFocus(focusDirection: FocusDirection) = false
     }
 }
@@ -367,9 +366,8 @@ private object NoOpAccessibilityManager : AccessibilityManager {
         originalTimeoutMillis: Long,
         containsIcons: Boolean,
         containsText: Boolean,
-        containsControls: Boolean
+        containsControls: Boolean,
     ): Long = originalTimeoutMillis
-
 }
 
 private object NoOpPlatformPrefetchScheduler : PlatformPrefetchScheduler {
@@ -378,16 +376,14 @@ private object NoOpPlatformPrefetchScheduler : PlatformPrefetchScheduler {
     override fun scheduleLowPriorityPrefetch(request: PlatformPrefetchRequest) = Unit
 }
 
-private val EmptyArchitectureComponentsOwner = DefaultArchitectureComponentsOwner(
-    enforceMainThread = false
-).apply {
-    enableSavedStateHandles()
-    setLifecycleState(Lifecycle.State.RESUMED)
-}
+private val EmptyArchitectureComponentsOwner =
+    DefaultArchitectureComponentsOwner(enforceMainThread = false).apply {
+        enableSavedStateHandles()
+        setLifecycleState(Lifecycle.State.RESUMED)
+    }
 
-internal class DefaultInputModeManager(
-    initialInputMode: InputMode = InputMode.Keyboard
-) : InputModeManager {
+internal class DefaultInputModeManager(initialInputMode: InputMode = InputMode.Keyboard) :
+    InputModeManager {
     override var inputMode: InputMode by mutableStateOf(initialInputMode)
 
     @ExperimentalComposeUiApi
@@ -401,37 +397,41 @@ internal class DefaultInputModeManager(
 }
 
 @Suppress("DEPRECATION") // TODO https://youtrack.jetbrains.com/issue/CMP-9858
-private object EmptyPlatformTextInputService : androidx.compose.ui.text.input.PlatformTextInputService {
+private object EmptyPlatformTextInputService :
+    androidx.compose.ui.text.input.PlatformTextInputService {
     override fun startInput(
         value: TextFieldValue,
         imeOptions: ImeOptions,
         onEditCommand: (List<EditCommand>) -> Unit,
-        onImeActionPerformed: (ImeAction) -> Unit
+        onImeActionPerformed: (ImeAction) -> Unit,
     ) = Unit
 
     override fun stopInput() = Unit
+
     override fun showSoftwareKeyboard() = Unit
+
     override fun hideSoftwareKeyboard() = Unit
+
     override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) = Unit
 }
 
 private object EmptyTextToolbar : TextToolbar {
     override fun hide() = Unit
+
     override val status: TextToolbarStatus = TextToolbarStatus.Hidden
+
     override fun showMenu(
         rect: Rect,
         onCopyRequested: (() -> Unit)?,
         onPasteRequested: (() -> Unit)?,
         onCutRequested: (() -> Unit)?,
-        onSelectAllRequested: (() -> Unit)?
+        onSelectAllRequested: (() -> Unit)?,
     ) = Unit
 }
 
 private object EmptyDragAndDropManager : PlatformDragAndDropManager
 
-/**
- * Helper delegate to re-send missing events to a new listener.
- */
+/** Helper delegate to re-send missing events to a new listener. */
 internal class DelegateRootForTestListener : PlatformContext.RootForTestListener {
     private val roots = mutableSetOf<PlatformRootForTest>()
     private var listener: PlatformContext.RootForTestListener? = null
@@ -449,7 +449,7 @@ internal class DelegateRootForTestListener : PlatformContext.RootForTestListener
     @Suppress("RedundantNullableReturnType")
     operator fun getValue(
         thisRef: Any?,
-        property: KProperty<*>
+        property: KProperty<*>,
     ): PlatformContext.RootForTestListener? {
         return this
     }
@@ -457,7 +457,7 @@ internal class DelegateRootForTestListener : PlatformContext.RootForTestListener
     operator fun setValue(
         thisRef: Any?,
         property: KProperty<*>,
-        value: PlatformContext.RootForTestListener?
+        value: PlatformContext.RootForTestListener?,
     ) {
         listener = value
         sendMissingEvents()
@@ -476,25 +476,30 @@ private object NoOpHapticFeedback : HapticFeedback {
 
 @ExperimentalMediaQueryApi
 private object EmptyMediaScope : UiMediaScope {
-    override val windowPosture: UiMediaScope.Posture
-        get() = UiMediaScope.Posture.Flat
+    override val windowPosture: UiMediaScope.WindowPosture = UiMediaScope.WindowPosture(emptyList())
     override val windowWidth: Dp
         get() = Dp.Unspecified
+
     override val windowHeight: Dp
         get() = Dp.Unspecified
+
     override val pointerPrecision: UiMediaScope.PointerPrecision
         get() = UiMediaScope.PointerPrecision.None
+
     override val keyboardKind: UiMediaScope.KeyboardKind
         get() = UiMediaScope.KeyboardKind.None
+
     override val hasMicrophone: Boolean
         get() = false
+
     override val hasCamera: Boolean
         get() = false
+
     override val viewingDistance: UiMediaScope.ViewingDistance
         get() = UiMediaScope.ViewingDistance.Near
 }
 
-private object DefaultTaskDispatchers: TaskDispatchers {
+private object DefaultTaskDispatchers : TaskDispatchers {
     override val Default = Dispatchers.Default
     override val IO = Dispatchers.Default
 }

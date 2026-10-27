@@ -41,10 +41,9 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.UITextInputProtocol
 
-@OptIn(ExperimentalComposeUiApi::class, ExperimentalForeignApi::class)
+@OptIn(ExperimentalComposeUiApi::class)
 class NestedComposeTextFieldFocusTest {
     @Test
     fun focusMovesToTextFieldInNestedComposeUIView() = runUIKitInstrumentedTest {
@@ -52,43 +51,31 @@ class NestedComposeTextFieldFocusTest {
         var nestedFocused = false
 
         setContent {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.White)
-                    .padding(24.dp)
-            ) {
+            Column(modifier = Modifier.fillMaxSize().background(Color.White).padding(24.dp)) {
                 UIKitView(
                     factory = {
-                        ComposeUIView(
-                            configure = { enforceStrictPlistSanityCheck = false }
-                        ) {
+                        ComposeUIView(configure = { enforceStrictPlistSanityCheck = false }) {
                             FocusReportingTextField(
                                 value = NestedFieldText,
-                                onFocusChanged = { nestedFocused = it }
+                                onFocusChanged = { nestedFocused = it },
                             )
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(80.dp)
-                        .testTag(NestedFieldHostTag),
-                    properties = UIKitInteropProperties(placedAsOverlay = true)
+                    modifier = Modifier.fillMaxWidth().height(80.dp).testTag(NestedFieldHostTag),
+                    properties = UIKitInteropProperties(placedAsOverlay = true),
                 )
 
                 FocusReportingTextField(
                     modifier = Modifier.testTag(OuterFieldTag),
                     value = OuterFieldText,
-                    onFocusChanged = { outerFocused = it }
+                    onFocusChanged = { outerFocused = it },
                 )
             }
         }
 
         findNodeWithTag(OuterFieldTag).tap()
         waitForIdle()
-        waitUntil("Outer text field should be focused after tap") {
-            outerFocused && !nestedFocused
-        }
+        waitUntil("Outer text field should be focused after tap") { outerFocused && !nestedFocused }
         assertEquals(OuterFieldText, findFocusedUITextInput()?.text)
 
         findNodeWithTag(NestedFieldHostTag).tap()
@@ -106,18 +93,20 @@ class NestedComposeTextFieldFocusTest {
     private fun FocusReportingTextField(
         modifier: Modifier = Modifier,
         value: String,
-        onFocusChanged: (Boolean) -> Unit
+        onFocusChanged: (Boolean) -> Unit,
     ) {
+        @Suppress("DEPRECATION")
         BasicTextField(
             value = value,
             onValueChange = {},
-            modifier = modifier
-                .fillMaxWidth()
-                .height(64.dp)
-                .padding(8.dp)
-                .border(1.dp, Color.Black)
-                .padding(8.dp)
-                .onFocusChanged { onFocusChanged(it.isFocused) }
+            modifier =
+                modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .padding(8.dp)
+                    .border(1.dp, Color.Black)
+                    .padding(8.dp)
+                    .onFocusChanged { onFocusChanged(it.isFocused) },
         )
     }
 
@@ -127,6 +116,7 @@ class NestedComposeTextFieldFocusTest {
             return textInRange(range)
         }
 
+    @Suppress("ConstPropertyName")
     private companion object {
         const val OuterFieldTag = "OuterField"
         const val NestedFieldHostTag = "NestedFieldHost"

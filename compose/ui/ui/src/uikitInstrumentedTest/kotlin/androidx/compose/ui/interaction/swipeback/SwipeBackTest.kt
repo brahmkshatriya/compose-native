@@ -59,13 +59,17 @@ import platform.Foundation.NSTimeInterval
 import platform.UIKit.UITraitEnvironmentLayoutDirectionLeftToRight
 import platform.UIKit.UITraitEnvironmentLayoutDirectionRightToLeft
 
-internal class SwipeBackInHostingViewTest : SwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
-)
+@Suppress("unused")
+internal class SwipeBackInHostingViewTest :
+    SwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
+    )
 
-internal class SwipeBackInHostingViewControllerTest : SwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
-)
+@Suppress("unused")
+internal class SwipeBackInHostingViewControllerTest :
+    SwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
+    )
 
 internal abstract class SwipeBackTest(
     private val runUIKitInstrumentedTest: (UIKitInstrumentedTest.() -> Unit) -> Unit
@@ -75,9 +79,7 @@ internal abstract class SwipeBackTest(
         var dragDistance = Float.NaN
 
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
-            SwipeBackTestContent(
-                onDragDistanceChanged = { dragDistance = it }
-            )
+            SwipeBackTestContent(onDragDistanceChanged = { dragDistance = it })
         }
 
         swipeFromLeftEdge().up()
@@ -85,8 +87,10 @@ internal abstract class SwipeBackTest(
         waitForIdle()
 
         assertEquals(
-            expected = 0f, actual = dragDistance,
-            message = "left edge swipe back should not dispatch horizontal drag deltas to Compose in LTR"
+            expected = 0f,
+            actual = dragDistance,
+            message =
+                "left edge swipe back should not dispatch horizontal drag deltas to Compose in LTR",
         )
     }
 
@@ -95,9 +99,7 @@ internal abstract class SwipeBackTest(
         var dragDistance = Float.NaN
 
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
-            SwipeBackTestContent(
-                onDragDistanceChanged = { dragDistance = it }
-            )
+            SwipeBackTestContent(onDragDistanceChanged = { dragDistance = it })
         }
 
         swipeFromRightEdge().up()
@@ -105,8 +107,10 @@ internal abstract class SwipeBackTest(
         waitForIdle()
 
         assertEquals(
-            expected = 0f, actual = dragDistance,
-            message = "right edge swipe back should not dispatch horizontal drag deltas to Compose in RTL"
+            expected = 0f,
+            actual = dragDistance,
+            message =
+                "right edge swipe back should not dispatch horizontal drag deltas to Compose in RTL",
         )
     }
 
@@ -118,27 +122,23 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeBack = swipeFromLeftEdge().hold()
 
-        waitUntil("back swipe should be in progress") {
-            transitionState is InProgress
-        }
+        waitUntil("back swipe should be in progress") { transitionState is InProgress }
 
         assertEquals(
             expected = NavigationEvent.EDGE_LEFT,
             actual = (transitionState as InProgress).latestEvent.swipeEdge,
-            message = "left edge swipe back should report EDGE_LEFT in LTR"
+            message = "left edge swipe back should report EDGE_LEFT in LTR",
         )
 
         swipeBack.up()
 
-        waitUntil("left edge back swipe should complete in LTR") {
-            backCompletedCount == 1
-        }
+        waitUntil("left edge back swipe should complete in LTR") { backCompletedCount == 1 }
     }
 
     @Test
@@ -156,9 +156,7 @@ internal abstract class SwipeBackTest(
         val swipeBack = touchDown(screenBounds.leftCenter(), fromEdge = true)
         swipeBack.moveToLocationOnWindow(screenBounds.leftCenter().offsetBy(dx = 16.dp))
 
-        waitUntil("back swipe should be in progress") {
-            transitionState is InProgress
-        }
+        waitUntil("back swipe should be in progress") { transitionState is InProgress }
 
         swipeBack.moveToLocationOnWindow(screenBounds.rightCenter().offsetBy(dx = 64.dp))
 
@@ -168,9 +166,7 @@ internal abstract class SwipeBackTest(
 
         swipeBack.up()
 
-        waitUntil("back swipe should complete") {
-            backCompletedCount == 1
-        }
+        waitUntil("back swipe should complete") { backCompletedCount == 1 }
     }
 
     @Test
@@ -181,25 +177,32 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeBack = swipeFromRightEdge().hold()
 
-        assertTrue(transitionState is InProgress, message = "right edge swipe back should be in progress in RTL")
+        assertTrue(
+            transitionState is InProgress,
+            message = "right edge swipe back should be in progress in RTL",
+        )
 
         assertEquals(
             expected = NavigationEvent.EDGE_RIGHT,
             actual = (transitionState as InProgress).latestEvent.swipeEdge,
-            message = "right edge swipe back should report EDGE_RIGHT in RTL"
+            message = "right edge swipe back should report EDGE_RIGHT in RTL",
         )
 
         swipeBack.up()
 
         waitForIdle()
 
-        assertEquals(1, backCompletedCount, message = "right edge swipe back should complete in RTL")
+        assertEquals(
+            1,
+            backCompletedCount,
+            message = "right edge swipe back should complete in RTL",
+        )
     }
 
     @Test
@@ -210,19 +213,26 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeBack = swipeFromRightEdge().hold()
 
-        assertFalse(transitionState is InProgress, message = "right edge swipe back should not be in progress in LTR")
+        assertFalse(
+            transitionState is InProgress,
+            message = "right edge swipe back should not be in progress in LTR",
+        )
 
         swipeBack.up()
 
         waitForIdle()
 
-        assertEquals(0, backCompletedCount, message = "right edge swipe back should not complete in LTR")
+        assertEquals(
+            0,
+            backCompletedCount,
+            message = "right edge swipe back should not complete in LTR",
+        )
     }
 
     @Test
@@ -233,19 +243,26 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeBack = swipeFromLeftEdge().hold()
 
-        assertFalse(transitionState is InProgress, message = "left edge swipe back should not be in progress in RTL")
+        assertFalse(
+            transitionState is InProgress,
+            message = "left edge swipe back should not be in progress in RTL",
+        )
 
         swipeBack.up()
 
         waitForIdle()
 
-        assertEquals(0, backCompletedCount, message = "left edge swipe back should not complete in RTL")
+        assertEquals(
+            0,
+            backCompletedCount,
+            message = "left edge swipe back should not complete in RTL",
+        )
     }
 
     @Test
@@ -253,16 +270,17 @@ internal abstract class SwipeBackTest(
         var dragDistance = Float.NaN
 
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
-            SwipeBackTestContent(
-                onDragDistanceChanged = { dragDistance = it }
-            )
+            SwipeBackTestContent(onDragDistanceChanged = { dragDistance = it })
         }
 
         swipeFromRightEdge().hold()
 
         waitForIdle()
 
-        assertTrue(dragDistance < 0f, message = "right edge swipe should dispatch horizontal drag deltas to Compose")
+        assertTrue(
+            dragDistance < 0f,
+            message = "right edge swipe should dispatch horizontal drag deltas to Compose",
+        )
     }
 
     @Test
@@ -270,16 +288,17 @@ internal abstract class SwipeBackTest(
         var dragDistance = Float.NaN
 
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
-            SwipeBackTestContent(
-                onDragDistanceChanged = { dragDistance = it }
-            )
+            SwipeBackTestContent(onDragDistanceChanged = { dragDistance = it })
         }
 
         swipeFromLeftEdge().hold()
 
         waitForIdle()
 
-        assertTrue(dragDistance > 0f, message = "left edge swipe should dispatch horizontal drag deltas to Compose")
+        assertTrue(
+            dragDistance > 0f,
+            message = "left edge swipe should dispatch horizontal drag deltas to Compose",
+        )
     }
 
     @Test
@@ -287,16 +306,17 @@ internal abstract class SwipeBackTest(
         var dragDistance = Float.NaN
 
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
-            SwipeBackTestContent(
-                onDragDistanceChanged = { dragDistance = it }
-            )
+            SwipeBackTestContent(onDragDistanceChanged = { dragDistance = it })
         }
 
         findNodeWithTag(DRAG_SURFACE).swipeLeft().up()
 
         waitForIdle()
 
-        assertTrue(dragDistance < 0f, message = "swipe left should dispatch horizontal drag deltas to Compose")
+        assertTrue(
+            dragDistance < 0f,
+            message = "swipe left should dispatch horizontal drag deltas to Compose",
+        )
     }
 
     @Test
@@ -304,16 +324,17 @@ internal abstract class SwipeBackTest(
         var dragDistance = Float.NaN
 
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
-            SwipeBackTestContent(
-                onDragDistanceChanged = { dragDistance = it }
-            )
+            SwipeBackTestContent(onDragDistanceChanged = { dragDistance = it })
         }
 
         findNodeWithTag(DRAG_SURFACE).swipeRight().up()
 
         waitForIdle()
 
-        assertTrue(dragDistance > 0f, message = "swipe right should dispatch horizontal drag deltas to Compose")
+        assertTrue(
+            dragDistance > 0f,
+            message = "swipe right should dispatch horizontal drag deltas to Compose",
+        )
     }
 
     @Test
@@ -321,16 +342,17 @@ internal abstract class SwipeBackTest(
         var dragDistance = Float.NaN
 
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
-            SwipeBackTestContent(
-                onDragDistanceChanged = { dragDistance = it }
-            )
+            SwipeBackTestContent(onDragDistanceChanged = { dragDistance = it })
         }
 
         findNodeWithTag(DRAG_SURFACE).swipeLeft().up()
 
         waitForIdle()
 
-        assertTrue(dragDistance < 0f, message = "swipe left should dispatch horizontal drag deltas to Compose")
+        assertTrue(
+            dragDistance < 0f,
+            message = "swipe left should dispatch horizontal drag deltas to Compose",
+        )
     }
 
     @Test
@@ -338,16 +360,17 @@ internal abstract class SwipeBackTest(
         var dragDistance = Float.NaN
 
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
-            SwipeBackTestContent(
-                onDragDistanceChanged = { dragDistance = it }
-            )
+            SwipeBackTestContent(onDragDistanceChanged = { dragDistance = it })
         }
 
         findNodeWithTag(DRAG_SURFACE).swipeRight().up()
 
         waitForIdle()
 
-        assertTrue(dragDistance > 0f, message = "swipe right should dispatch horizontal drag deltas to Compose")
+        assertTrue(
+            dragDistance > 0f,
+            message = "swipe right should dispatch horizontal drag deltas to Compose",
+        )
     }
 
     @Test
@@ -358,13 +381,16 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeRight = findNodeWithTag(DRAG_SURFACE).swipeRight().hold()
 
-        assertFalse(transitionState is InProgress, message = "swipe right should not be in progress in LTR")
+        assertFalse(
+            transitionState is InProgress,
+            message = "swipe right should not be in progress in LTR",
+        )
 
         swipeRight.up()
 
@@ -381,13 +407,16 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeRight = findNodeWithTag(DRAG_SURFACE).swipeRight().hold()
 
-        assertFalse(transitionState is InProgress, message = "swipe right should not be in progress in RTL")
+        assertFalse(
+            transitionState is InProgress,
+            message = "swipe right should not be in progress in RTL",
+        )
 
         swipeRight.up()
 
@@ -404,13 +433,16 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeRight = findNodeWithTag(DRAG_SURFACE).swipeLeft().hold()
 
-        assertFalse(transitionState is InProgress, message = "swipe left should not be in progress in LTR")
+        assertFalse(
+            transitionState is InProgress,
+            message = "swipe left should not be in progress in LTR",
+        )
 
         swipeRight.up()
 
@@ -427,13 +459,16 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeRight = findNodeWithTag(DRAG_SURFACE).swipeLeft().hold()
 
-        assertFalse(transitionState is InProgress, message = "swipe left should not be in progress in RTL")
+        assertFalse(
+            transitionState is InProgress,
+            message = "swipe left should not be in progress in RTL",
+        )
 
         swipeRight.up()
 
@@ -449,25 +484,30 @@ internal abstract class SwipeBackTest(
 
         setContent(
             configure = { endEdgePanGestureBehavior = EndEdgePanGestureBehavior.Back },
-            layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft
+            layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft,
         ) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeBack = swipeFromLeftEdge().hold()
 
-        assertTrue(transitionState is InProgress, message = "left edge swipe back should be in progress in RTL")
+        assertTrue(
+            transitionState is InProgress,
+            message = "left edge swipe back should be in progress in RTL",
+        )
 
         swipeBack.up()
 
         waitForIdle()
 
         assertEquals(
-            1, backCompletedCount,
-            message = "left edge swipe back should complete in RTL with EndEdgePanGestureBehavior.Back"
+            1,
+            backCompletedCount,
+            message =
+                "left edge swipe back should complete in RTL with EndEdgePanGestureBehavior.Back",
         )
     }
 
@@ -478,25 +518,30 @@ internal abstract class SwipeBackTest(
 
         setContent(
             configure = { endEdgePanGestureBehavior = EndEdgePanGestureBehavior.Back },
-            layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight
+            layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight,
         ) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
         val swipeBack = swipeFromRightEdge().hold()
 
-        assertTrue(transitionState is InProgress, message = "right edge swipe back should be in progress in LTR")
+        assertTrue(
+            transitionState is InProgress,
+            message = "right edge swipe back should be in progress in LTR",
+        )
 
         swipeBack.up()
 
         waitForIdle()
 
         assertEquals(
-            1, backCompletedCount,
-            message = "right edge swipe back should complete in LTR with EndEdgePanGestureBehavior.Back"
+            1,
+            backCompletedCount,
+            message =
+                "right edge swipe back should complete in LTR with EndEdgePanGestureBehavior.Back",
         )
     }
 
@@ -507,11 +552,11 @@ internal abstract class SwipeBackTest(
 
         setContent(
             configure = { endEdgePanGestureBehavior = EndEdgePanGestureBehavior.Back },
-            layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight
+            layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight,
         ) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
@@ -520,19 +565,26 @@ internal abstract class SwipeBackTest(
         waitForIdle()
 
         assertEquals(
-            1, backCompletedCount,
-            message = "right edge swipe back should complete in LTR with EndEdgePanGestureBehavior.Back"
+            1,
+            backCompletedCount,
+            message =
+                "right edge swipe back should complete in LTR with EndEdgePanGestureBehavior.Back",
         )
 
-        assertTrue(transitionState is NavigationEventTransitionState.Idle, message = "swipe back should be idle")
+        assertTrue(
+            transitionState is NavigationEventTransitionState.Idle,
+            message = "swipe back should be idle",
+        )
 
         swipeFromLeftEdge().up()
 
         waitForIdle()
 
         assertEquals(
-             2, backCompletedCount,
-            message = "left edge swipe back should complete in LTR with EndEdgePanGestureBehavior.Back"
+            2,
+            backCompletedCount,
+            message =
+                "left edge swipe back should complete in LTR with EndEdgePanGestureBehavior.Back",
         )
     }
 
@@ -543,11 +595,11 @@ internal abstract class SwipeBackTest(
 
         setContent(
             configure = { endEdgePanGestureBehavior = EndEdgePanGestureBehavior.Back },
-            layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft
+            layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft,
         ) {
             SwipeBackTestContent(
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
@@ -556,19 +608,26 @@ internal abstract class SwipeBackTest(
         waitForIdle()
 
         assertEquals(
-            1, backCompletedCount,
-            message = "right edge swipe back should complete in RTL with EndEdgePanGestureBehavior.Back"
+            1,
+            backCompletedCount,
+            message =
+                "right edge swipe back should complete in RTL with EndEdgePanGestureBehavior.Back",
         )
 
-        assertTrue(transitionState is NavigationEventTransitionState.Idle, message = "swipe back should be idle")
+        assertTrue(
+            transitionState is NavigationEventTransitionState.Idle,
+            message = "swipe back should be idle",
+        )
 
         swipeFromLeftEdge().up()
 
         waitForIdle()
 
         assertEquals(
-            2, backCompletedCount,
-            message = "left edge swipe back should complete in RTL with EndEdgePanGestureBehavior.Back"
+            2,
+            backCompletedCount,
+            message =
+                "left edge swipe back should complete in RTL with EndEdgePanGestureBehavior.Back",
         )
     }
 
@@ -580,23 +639,16 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
             val currentLayoutDirection = LocalLayoutDirection.current
 
-            SideEffect {
-                composeLayoutDirection = currentLayoutDirection
-            }
+            SideEffect { composeLayoutDirection = currentLayoutDirection }
 
-            SwipeBackTestContent(
-                onBackCompletedCountChanged = { backCompletedCount = it }
-            )
+            SwipeBackTestContent(onBackCompletedCountChanged = { backCompletedCount = it })
         }
 
         swipeFromLeftEdge().up()
 
         waitForIdle()
 
-        assertEquals(
-             1, backCompletedCount,
-            message = "left edge swipe back should complete in LTR"
-        )
+        assertEquals(1, backCompletedCount, message = "left edge swipe back should complete in LTR")
 
         setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft)
 
@@ -607,8 +659,9 @@ internal abstract class SwipeBackTest(
         waitForIdle()
 
         assertEquals(
-            2, backCompletedCount,
-            message = "right edge swipe back should complete in RTL"
+            2,
+            backCompletedCount,
+            message = "right edge swipe back should complete in RTL",
         )
     }
 
@@ -620,13 +673,9 @@ internal abstract class SwipeBackTest(
         setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
             val currentLayoutDirection = LocalLayoutDirection.current
 
-            SideEffect {
-                composeLayoutDirection = currentLayoutDirection
-            }
+            SideEffect { composeLayoutDirection = currentLayoutDirection }
 
-            SwipeBackTestContent(
-                onBackCompletedCountChanged = { backCompletedCount = it }
-            )
+            SwipeBackTestContent(onBackCompletedCountChanged = { backCompletedCount = it })
         }
 
         swipeFromRightEdge().up()
@@ -634,8 +683,9 @@ internal abstract class SwipeBackTest(
         waitForIdle()
 
         assertEquals(
-            1, backCompletedCount,
-            message = "right edge swipe back should complete in RTL"
+            1,
+            backCompletedCount,
+            message = "right edge swipe back should complete in RTL",
         )
 
         setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight)
@@ -646,10 +696,7 @@ internal abstract class SwipeBackTest(
 
         waitForIdle()
 
-        assertEquals(
-            2, backCompletedCount,
-            message = "left edge swipe back should complete in LTR"
-        )
+        assertEquals(2, backCompletedCount, message = "left edge swipe back should complete in LTR")
     }
 
     @Test
@@ -666,9 +713,7 @@ internal abstract class SwipeBackTest(
         try {
             val swipeBack = swipeFromLeftEdge().hold()
 
-            waitUntil("back swipe should be in progress") {
-                transitionState is InProgress
-            }
+            waitUntil("back swipe should be in progress") { transitionState is InProgress }
 
             // The touch is stationary, so nothing invalidates the content: only the activity
             // started for the ongoing gesture can keep the display link running.
@@ -687,7 +732,7 @@ internal abstract class SwipeBackTest(
             assertEquals(
                 ticksAfterGesture,
                 listener.displayLinkCount,
-                "choreographer should pause after the back gesture ends"
+                "choreographer should pause after the back gesture ends",
             )
         } finally {
             choreographer.removeListener(listener)
@@ -723,7 +768,7 @@ internal abstract class SwipeBackTest(
             assertEquals(
                 ticksAfterGestures,
                 listener.displayLinkCount,
-                "choreographer should pause after all the back gestures end"
+                "choreographer should pause after all the back gestures end",
             )
         } finally {
             choreographer.removeListener(listener)
@@ -753,19 +798,18 @@ internal fun SwipeBackTestContent(
     onDragDistanceChanged: (Float) -> Unit = {},
     onTransitionStateChanged: (NavigationEventTransitionState) -> Unit = {},
     onBackCompletedCountChanged: (Int) -> Unit = {},
-    onComposeLayoutDirectionChanged: (LayoutDirection) -> Unit = {}
+    onComposeLayoutDirectionChanged: (LayoutDirection) -> Unit = {},
 ) {
     var dragDistance by remember { mutableFloatStateOf(0f) }
     var backCompletedCount by remember { mutableIntStateOf(0) }
-    val navigationEventState = rememberNavigationEventState(
-        currentInfo = NavigationEventInfo.None,
-        backInfo = listOf<NavigationEventInfo>(NavigationEventInfo.None)
-    )
+    val navigationEventState =
+        rememberNavigationEventState(
+            currentInfo = NavigationEventInfo.None,
+            backInfo = listOf<NavigationEventInfo>(NavigationEventInfo.None),
+        )
 
     val composeLayoutDirection = LocalLayoutDirection.current
-    SideEffect {
-        onComposeLayoutDirectionChanged(composeLayoutDirection)
-    }
+    SideEffect { onComposeLayoutDirectionChanged(composeLayoutDirection) }
 
     onDragDistanceChanged(dragDistance)
     onTransitionStateChanged(navigationEventState.transitionState)
@@ -773,21 +817,17 @@ internal fun SwipeBackTestContent(
 
     NavigationBackHandler(
         state = navigationEventState,
-        onBackCompleted = {
-            backCompletedCount += 1
-        }
+        onBackCompleted = { backCompletedCount += 1 },
     )
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(DRAG_SURFACE)
-            .draggable(
-                state = rememberDraggableState { delta ->
-                    dragDistance += delta
-                },
-                orientation = Orientation.Horizontal,
-            )
+        modifier =
+            Modifier.fillMaxSize()
+                .testTag(DRAG_SURFACE)
+                .draggable(
+                    state = rememberDraggableState { delta -> dragDistance += delta },
+                    orientation = Orientation.Horizontal,
+                )
     )
 }
 

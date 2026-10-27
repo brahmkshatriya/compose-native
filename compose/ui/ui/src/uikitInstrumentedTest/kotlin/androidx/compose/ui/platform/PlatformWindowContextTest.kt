@@ -20,7 +20,6 @@ import androidx.compose.ui.test.runUIKitInstrumentedTest
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import platform.Foundation.NSNotificationCenter
@@ -39,12 +38,18 @@ class PlatformWindowContextTest {
 
         assertTrue(isWindowFocused)
 
-        NSNotificationCenter.defaultCenter.postNotificationName(UISceneWillDeactivateNotification, appDelegate.window?.windowScene)
+        NSNotificationCenter.defaultCenter.postNotificationName(
+            UISceneWillDeactivateNotification,
+            appDelegate.window?.windowScene,
+        )
         waitForIdle()
 
         assertFalse(isWindowFocused)
 
-        NSNotificationCenter.defaultCenter.postNotificationName(UISceneDidActivateNotification, appDelegate.window?.windowScene)
+        NSNotificationCenter.defaultCenter.postNotificationName(
+            UISceneDidActivateNotification,
+            appDelegate.window?.windowScene,
+        )
         waitForIdle()
 
         assertTrue(isWindowFocused)
@@ -63,12 +68,18 @@ class PlatformWindowContextTest {
 
         assertTrue(isDialogWindowFocused)
 
-        NSNotificationCenter.defaultCenter.postNotificationName(UISceneWillDeactivateNotification, appDelegate.window?.windowScene)
+        NSNotificationCenter.defaultCenter.postNotificationName(
+            UISceneWillDeactivateNotification,
+            appDelegate.window?.windowScene,
+        )
         waitForIdle()
 
         assertFalse(isDialogWindowFocused)
 
-        NSNotificationCenter.defaultCenter.postNotificationName(UISceneDidActivateNotification, appDelegate.window?.windowScene)
+        NSNotificationCenter.defaultCenter.postNotificationName(
+            UISceneDidActivateNotification,
+            appDelegate.window?.windowScene,
+        )
         waitForIdle()
 
         assertTrue(isDialogWindowFocused)
@@ -77,9 +88,7 @@ class PlatformWindowContextTest {
     @Test
     fun testWindowContainerSizeIsSet() = runUIKitInstrumentedTest {
         lateinit var windowInfo: WindowInfo
-        setContent {
-            windowInfo = LocalWindowInfo.current
-        }
+        setContent { windowInfo = LocalWindowInfo.current }
 
         val containerSize = windowInfo.containerSize
         assertTrue(containerSize.width > 0)

@@ -63,8 +63,8 @@ import kotlin.test.assertTrue
 
 class SwingPanelTest {
     /**
-     * Test the positioning of a [SwingPanel] with offset.
-     * See https://github.com/JetBrains/compose-multiplatform/issues/4005
+     * Test the positioning of a [SwingPanel] with offset. See
+     * https://github.com/JetBrains/compose-multiplatform/issues/4005
      */
     @Test
     fun swingPanelWithOffset() = runApplicationTest {
@@ -73,7 +73,7 @@ class SwingPanelTest {
             Window(onCloseRequest = {}) {
                 SwingPanel(
                     modifier = Modifier.size(100.dp).offset(50.dp, 50.dp),
-                    factory = { panel }
+                    factory = { panel },
                 )
             }
         }
@@ -87,17 +87,30 @@ class SwingPanelTest {
     @Test
     fun swingPanelMouseInput() = runApplicationTest {
         val events = mutableListOf<MouseEvent>()
-        val listener = object : MouseAdapter() {
-            override fun mousePressed(e: MouseEvent) { events.add(e) }
-            override fun mouseReleased(e: MouseEvent) { events.add(e) }
-            override fun mouseWheelMoved(e: MouseWheelEvent) { events.add(e) }
-            override fun mouseMoved(e: MouseEvent) { events.add(e) }
-        }
-        val panel = JPanel().also {
-            it.addMouseListener(listener)
-            it.addMouseMotionListener(listener)
-            it.addMouseWheelListener(listener)
-        }
+        val listener =
+            object : MouseAdapter() {
+                override fun mousePressed(e: MouseEvent) {
+                    events.add(e)
+                }
+
+                override fun mouseReleased(e: MouseEvent) {
+                    events.add(e)
+                }
+
+                override fun mouseWheelMoved(e: MouseWheelEvent) {
+                    events.add(e)
+                }
+
+                override fun mouseMoved(e: MouseEvent) {
+                    events.add(e)
+                }
+            }
+        val panel =
+            JPanel().also {
+                it.addMouseListener(listener)
+                it.addMouseMotionListener(listener)
+                it.addMouseWheelListener(listener)
+            }
 
         val window = ComposeWindow()
         try {
@@ -105,12 +118,11 @@ class SwingPanelTest {
             window.setContent {
                 SwingPanel(
                     modifier = Modifier.size(100.dp).offset(50.dp, 50.dp),
-                    factory = { panel }
+                    factory = { panel },
                 )
             }
             window.isVisible = true
             awaitIdle()
-
 
             window.sendMouseEvent(MouseEvent.MOUSE_MOVED, 100, 100)
             awaitIdle()
@@ -151,54 +163,50 @@ class SwingPanelTest {
     }
 
     @Test
-    fun swingPanelIsSizedToContentPreferredSize() = runApplicationTest(useDelay = true) {
-        val panel = JPanel()
+    fun swingPanelIsSizedToContentPreferredSize() =
+        runApplicationTest(useDelay = true) {
+            val panel = JPanel()
 
-        panel.preferredSize = Dimension(100, 100)
+            panel.preferredSize = Dimension(100, 100)
 
-        val layoutBounds = LayoutBoundsHolder()
-        lateinit var density: Density
-        launchTestApplication {
-            Window(onCloseRequest = {}) {
-                SwingPanel(
-                    modifier = Modifier.layoutBounds(layoutBounds),
-                    factory = { panel }
-                )
-                density = LocalDensity.current
+            val layoutBounds = LayoutBoundsHolder()
+            lateinit var density: Density
+            launchTestApplication {
+                Window(onCloseRequest = {}) {
+                    SwingPanel(modifier = Modifier.layoutBounds(layoutBounds), factory = { panel })
+                    density = LocalDensity.current
+                }
             }
+
+            fun assertPanelSizeIsItsPreferredSize() {
+                assertEquals(
+                    (panel.preferredSize.width * density.density).roundToInt(),
+                    layoutBounds.bounds?.width,
+                )
+                assertEquals(
+                    (panel.preferredSize.height * density.density).roundToInt(),
+                    layoutBounds.bounds?.height,
+                )
+            }
+
+            awaitIdle()
+            assertPanelSizeIsItsPreferredSize()
+
+            // Also check that when the preferred size is updated, the SwingPanel is resized
+            panel.preferredSize = Dimension(200, 200)
+            panel.invalidate()
+            awaitIdle()
+            assertPanelSizeIsItsPreferredSize()
         }
-
-        fun assertPanelSizeIsItsPreferredSize() {
-            assertEquals((panel.preferredSize.width * density.density).roundToInt(), layoutBounds.bounds?.width)
-            assertEquals((panel.preferredSize.height * density.density).roundToInt(), layoutBounds.bounds?.height)
-        }
-
-        awaitIdle()
-        assertPanelSizeIsItsPreferredSize()
-
-        // Also check that when the preferred size is updated, the SwingPanel is resized
-        panel.preferredSize = Dimension(200, 200)
-        panel.invalidate()
-        awaitIdle()
-        assertPanelSizeIsItsPreferredSize()
-    }
 
     @Test
     fun swingPanelPropagatesMouseWheelEvents() = runApplicationTest {
         val scrollState = ScrollState(0)
-        launchTestWindowApplication(
-            state = WindowState(size = DpSize(500.dp, 500.dp))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scrollState)
-            ) {
+        launchTestWindowApplication(state = WindowState(size = DpSize(500.dp, 500.dp))) {
+            Box(modifier = Modifier.fillMaxSize().verticalScroll(scrollState)) {
                 Box(Modifier.fillMaxWidth().height(2000.dp)) {
                     SwingPanel(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(400.dp),
+                        modifier = Modifier.fillMaxWidth().height(400.dp),
                         factory = {
                             JPanel(BorderLayout()).also {
                                 it.add(JLabel("Swing content"))
@@ -211,7 +219,7 @@ class SwingPanelTest {
         }
         awaitIdle()
 
-        assertEquals(scrollState.value, 0)
+        assertEquals(0, scrollState.value)
         window.sendMouseWheelEvent(x = 200, y = 200, wheelRotation = 50.0)
         awaitIdle()
         assertTrue(scrollState.value > 0, "Compose did not scroll; SwingPanel blocked the event")
@@ -219,43 +227,36 @@ class SwingPanelTest {
 
     @Test
     fun swingPanelRespondsToDensityChange() = runApplicationTest {
-        val swingComponent = object: JComponent() {
-            override fun paint(g: Graphics) {
-                g.color = java.awt.Color.RED
-                g.fillRect(0, 0, width, height)
+        val swingComponent =
+            object : JComponent() {
+                override fun paint(g: Graphics) {
+                    g.color = java.awt.Color.RED
+                    g.fillRect(0, 0, width, height)
+                }
             }
-        }
         val swingElementSize = DpSize(200.dp, 200.dp)
 
         var densityScale by mutableFloatStateOf(1f)
-        launchTestWindowApplication(
-            state = WindowState(size = DpSize(500.dp, 500.dp))
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
+        launchTestWindowApplication(state = WindowState(size = DpSize(500.dp, 500.dp))) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 val density = LocalDensity.current.density
                 CompositionLocalProvider(LocalDensity provides Density(densityScale * density)) {
                     SwingPanel(
                         modifier = Modifier.size(swingElementSize),
-                        factory = { swingComponent }
+                        factory = { swingComponent },
                     )
                 }
             }
         }
 
         awaitIdle()
-        assertEquals(
-            expected = swingElementSize.roundToDimension(),
-            actual = swingComponent.size
-        )
+        assertEquals(expected = swingElementSize.roundToDimension(), actual = swingComponent.size)
 
         densityScale = 2f
         awaitIdle()
         assertEquals(
             expected = (swingElementSize * densityScale).roundToDimension(),
-            actual = swingComponent.size
+            actual = swingComponent.size,
         )
     }
 }

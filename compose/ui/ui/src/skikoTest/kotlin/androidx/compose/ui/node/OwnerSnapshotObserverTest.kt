@@ -17,6 +17,7 @@
 package androidx.compose.ui.node
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.layout.LazyLayoutPinnableItem
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -28,22 +29,20 @@ import androidx.compose.ui.test.runComposeUiTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
-
-/**
- * Tests related to [OwnerSnapshotObserver].
- */
+/** Tests related to [OwnerSnapshotObserver]. */
 @OptIn(ExperimentalTestApi::class)
 class OwnerSnapshotObserverTest {
 
     /**
-     * Verifies that [ObserverModifierNode.onObservedReadsChanged] is called before `onDispose` of
-     * a [DisposableEffect] when the read change and the disposal of the effect happen in the same
+     * Verifies that [ObserverModifierNode.onObservedReadsChanged] is called before `onDispose` of a
+     * [DisposableEffect] when the read change and the disposal of the effect happen in the same
      * recomposition.
      *
      * This behavior is relied upon by [LazyLayoutPinnableItem] and possibly others.
      *
-     * [The issue where the bug was originally discovered](https://youtrack.jetbrains.com/issue/COMPOSE-595).
-     * Also see [Slack discussion](https://kotlinlang.slack.com/archives/G010KHY484C/p1700136697942499).
+     * [The issue where the bug was originally
+     * discovered](https://youtrack.jetbrains.com/issue/COMPOSE-595). Also see
+     * [Slack discussion](https://kotlinlang.slack.com/archives/G010KHY484C/p1700136697942499).
      */
     @Suppress("DEPRECATION")
     @Test
@@ -59,7 +58,7 @@ class OwnerSnapshotObserverTest {
                 Modifier.then(
                     ObserverTestElement(
                         readValues = { localValue },
-                        observedReadsChanged = { observedReadsChanged = true }
+                        observedReadsChanged = { observedReadsChanged = true },
                     )
                 )
             )
@@ -67,7 +66,7 @@ class OwnerSnapshotObserverTest {
                 onDispose {
                     assertTrue(
                         actual = observedReadsChanged,
-                        message = "onDispose called before onObservedReadsChanged"
+                        message = "onDispose called before onObservedReadsChanged",
                     )
                     onDisposeCalled = true
                 }
@@ -82,13 +81,11 @@ class OwnerSnapshotObserverTest {
         assertTrue(onDisposeCalled, "onDispose not called")
     }
 
-
     private class ObserverTestElement(
         private var readValues: () -> Int,
-        private val observedReadsChanged: () -> Unit
+        private val observedReadsChanged: () -> Unit,
     ) : ModifierNodeElement<ObserverTestNode>() {
-        override fun create(): ObserverTestNode =
-            ObserverTestNode(readValues, observedReadsChanged)
+        override fun create(): ObserverTestNode = ObserverTestNode(readValues, observedReadsChanged)
 
         override fun update(node: ObserverTestNode) {
             node.update(readValues, observedReadsChanged)
@@ -104,32 +101,27 @@ class OwnerSnapshotObserverTest {
         }
 
         override fun hashCode(): Int {
-            return readValues.hashCode()*31 + observedReadsChanged.hashCode()
+            return readValues.hashCode() * 31 + observedReadsChanged.hashCode()
         }
     }
 
     private class ObserverTestNode(
         var readValues: () -> Int,
-        var observedReadsChanged: () -> Unit
+        var observedReadsChanged: () -> Unit,
     ) : Modifier.Node(), ObserverModifierNode {
         override fun onAttach() {
-            observeReads {
-                readValues()
-            }
+            observeReads { readValues() }
         }
 
         fun update(readValues: () -> Int, observedReadsChanged: () -> Unit) {
             this.readValues = readValues
             this.observedReadsChanged = observedReadsChanged
 
-            observeReads {
-                readValues()
-            }
+            observeReads { readValues() }
         }
 
         override fun onObservedReadsChanged() {
             observedReadsChanged()
         }
     }
-
 }

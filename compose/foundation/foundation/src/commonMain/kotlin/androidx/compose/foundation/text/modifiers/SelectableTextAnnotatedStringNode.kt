@@ -46,6 +46,7 @@ import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 
@@ -58,6 +59,7 @@ internal class SelectableTextAnnotatedStringNode(
     text: AnnotatedString,
     style: TextStyle,
     fontFamilyResolver: FontFamily.Resolver,
+    defaultLocaleList: LocaleList,
     onTextLayout: ((TextLayoutResult) -> Unit)? = null,
     overflow: TextOverflow = TextOverflow.Clip,
     softWrap: Boolean = true,
@@ -68,8 +70,7 @@ internal class SelectableTextAnnotatedStringNode(
     private var selectionController: SelectionController? = null,
     overrideColor: ColorProducer? = null,
     autoSize: TextAutoSize? = null,
-    private var onShowTranslation: ((TextAnnotatedStringNode.TextSubstitutionValue) -> Unit)? =
-        null,
+    private var onShowTranslation: ((TextAnnotatedStringNode.TextSubstitutionValue) -> Unit)? = null,
 ) :
     DelegatingNode(),
     LayoutModifierNode,
@@ -88,6 +89,7 @@ internal class SelectableTextAnnotatedStringNode(
                 text = text,
                 style = style,
                 fontFamilyResolver = fontFamilyResolver,
+                defaultLocaleList = defaultLocaleList,
                 onTextLayout = onTextLayout,
                 overflow = overflow,
                 softWrap = softWrap,
@@ -179,6 +181,7 @@ internal class SelectableTextAnnotatedStringNode(
         maxLines: Int,
         softWrap: Boolean,
         fontFamilyResolver: FontFamily.Resolver,
+        defaultLocaleList: LocaleList,
         overflow: TextOverflow,
         onTextLayout: ((TextLayoutResult) -> Unit)?,
         onPlaceholderLayout: ((List<Rect?>) -> Unit)?,
@@ -197,6 +200,7 @@ internal class SelectableTextAnnotatedStringNode(
                     maxLines = maxLines,
                     softWrap = softWrap,
                     fontFamilyResolver = fontFamilyResolver,
+                    defaultLocaleList = defaultLocaleList,
                     overflow = overflow,
                     autoSize = autoSize,
                 ),

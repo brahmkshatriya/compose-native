@@ -27,7 +27,8 @@ public interface CommonStyleScope :
     AnimateStyleScope,
     StyleStateScope,
     NestedStyleProviderStyleScope,
-    NestedStyleConsumerStyleScope
+    NestedStyleConsumerStyleScope,
+    StyleLayerScope
 
 /**
  * The [CommonStyle] is the style all style types must be converted to be resolved by the
@@ -74,14 +75,15 @@ public fun CommonStyle(
 
 @ExperimentalFoundationStyleApi
 private fun unionStyles(vararg styles: CommonStyle): CommonStyle {
-    val count = styles.fastSum {
-        when (it) {
-            CommonStyle -> 0
-            is DualCommonStyle -> 2
-            is CombinedCommonStyle -> it.styles.size
-            else -> 1
+    val count =
+        styles.fastSum {
+            when (it) {
+                CommonStyle -> 0
+                is DualCommonStyle -> 2
+                is CombinedCommonStyle -> it.styles.size
+                else -> 1
+            }
         }
-    }
     return when (count) {
         0 -> CommonStyle
         1 -> styles.fastFirst { it !== CommonStyle }

@@ -25,15 +25,36 @@ private external interface InputEventInit {
     val inputType: String
 }
 
-private  fun InputEventInit(inputType: String, data: String?, isComposing: Boolean): InputEventInit = js("({data: data, inputType: inputType, isComposing: isComposing})")
+private fun InputEventInit(
+    inputType: String,
+    data: String?,
+    isComposing: Boolean,
+    cancelable: Boolean,
+): InputEventInit =
+    js("({data: data, inputType: inputType, isComposing: isComposing, cancelable: cancelable})")
 
-private  external class InputEvent(type: String, options: InputEventInit) : UIEvent
+private external class InputEvent(type: String, options: InputEventInit) : UIEvent
 
-internal fun beforeInput(inputType: String, data: String?, isComposing: Boolean = false): UIEvent =
-    InputEvent("beforeinput", InputEventInit(inputType = inputType, data = data, isComposing = isComposing))
+internal fun beforeInput(
+    inputType: String,
+    data: String?,
+    isComposing: Boolean = false,
+    cancelable: Boolean = false,
+): UIEvent =
+    InputEvent(
+        "beforeinput",
+        InputEventInit(
+            inputType = inputType,
+            data = data,
+            isComposing = isComposing,
+            cancelable = cancelable,
+        ),
+    )
 
 private fun createStaticRange(startOffset: Int, endOffset: Int): StaticRange =
-    js("({ startContainer: null, endContainer: null, startOffset: startOffset, endOffset: endOffset, collapsed: startOffset === endOffset })")
+    js(
+        "({ startContainer: null, endContainer: null, startOffset: startOffset, endOffset: endOffset, collapsed: startOffset === endOffset })"
+    )
 
 internal fun InputEventExt.setFirstRange(startOffset: Int, endOffset: Int) {
     firstRange = createStaticRange(startOffset, endOffset)
@@ -50,13 +71,16 @@ internal fun beforeInputWithTargetRange(
     data: String?,
     startOffset: Int,
     endOffset: Int,
-    isComposing: Boolean = false
+    isComposing: Boolean = false,
+    cancelable: Boolean = false,
 ): UIEvent {
-    val evt = beforeInput(inputType, data, isComposing)
+    val evt = beforeInput(inputType, data, isComposing, cancelable)
     setTargetRange(evt, startOffset, endOffset)
     return evt
 }
 
 private fun setTargetRange(event: UIEvent, startOffset: Int, endOffset: Int) {
-    js("event.getTargetRanges = function() { return [{ startOffset: startOffset, endOffset: endOffset, collapsed: startOffset === endOffset }]; }")
+    js(
+        "event.getTargetRanges = function() { return [{ startOffset: startOffset, endOffset: endOffset, collapsed: startOffset === endOffset }]; }"
+    )
 }

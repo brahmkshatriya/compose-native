@@ -27,16 +27,18 @@ class InteropTransactionQueueTest {
     private val performed = mutableListOf<String>()
 
     // Non-empty transaction: recorded via its action, takes the normal scheduling path.
-    private fun transaction(name: String) = object : InteropSyncTransaction {
-        override val hasPendingActions: Boolean = true
-        override val isInteropActive: Boolean = false
+    private fun transaction(name: String) =
+        object : InteropSyncTransaction {
+            override val hasPendingActions: Boolean = true
+            override val isInteropActive: Boolean = false
 
-        override fun performTransaction() {
-            performed.add(name)
+            override fun performTransaction() {
+                performed.add(name)
+            }
         }
-    }
 
-    // Empty transaction: no actions, triggers the actions.isEmpty() fast-path in scheduleTransaction.
+    // Empty transaction: no actions, triggers the actions.isEmpty() fast-path in
+    // scheduleTransaction.
     private fun emptyTransaction() = InteropSyncTransaction.Empty
 
     @Test
@@ -193,9 +195,7 @@ class InteropTransactionQueueTest {
         val bufferSize = 16
         val overflowCount = 5
 
-        repeat(bufferSize + overflowCount) { i ->
-            queue.scheduleTransaction(transaction("t$i"))
-        }
+        repeat(bufferSize + overflowCount) { i -> queue.scheduleTransaction(transaction("t$i")) }
 
         // Each overflow evicts exactly 1 transaction, in schedule order
         assertEquals(listOf("t0", "t1", "t2", "t3", "t4"), performed)
@@ -218,7 +218,7 @@ class InteropTransactionQueueTest {
     fun `empty transaction completion drains all pending real transactions`() {
         val queue = SurfaceMetalRedrawer.InteropTransactionQueue()
         queue.scheduleTransaction(transaction("t0"))
-        val i1 = queue.scheduleTransaction(transaction("t1"))
+        queue.scheduleTransaction(transaction("t1"))
 
         val emptyIndex = queue.scheduleTransaction(emptyTransaction())
 

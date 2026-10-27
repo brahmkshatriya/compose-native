@@ -17,23 +17,23 @@
 package androidx.compose.ui.window
 
 import androidx.compose.ui.platform.DpInsets
+import androidx.compose.ui.platform.NativeTextEditingDelegate
 import androidx.compose.ui.platform.TextInputPosition
 import androidx.compose.ui.platform.TextInputRange
 import androidx.compose.ui.platform.TextInputStringTokenizer
 import androidx.compose.ui.platform.TextLayoutDirection
-import androidx.compose.ui.platform.NativeTextEditingDelegate
 import androidx.compose.ui.platform.caretRectForPosition
 import androidx.compose.ui.platform.selectTextNearCursor
 import androidx.compose.ui.platform.toTextRange
 import androidx.compose.ui.platform.toUITextRange
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.uikit.utils.CMPEditMenuCustomAction
-import androidx.compose.ui.uikit.utils.CMPTextInputView
 import androidx.compose.ui.uikit.utils.CMPGestureRecognizer
+import androidx.compose.ui.uikit.utils.CMPTextInputView
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpRect
-import androidx.compose.ui.unit.toCGRect
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toCGRect
 import androidx.compose.ui.viewinterop.UIKitInteropInteractionMode
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CValue
@@ -101,14 +101,25 @@ import platform.UIKit.addInteraction
 import platform.UIKit.systemBlueColor
 import platform.darwin.NSInteger
 
-internal class NativeTextInputView(
-    var input: NativeTextEditingDelegate,
-) : CMPTextInputView(frame = CGRectZero.readValue()), UIKeyInputProtocol, UITextInputProtocol {
+internal class NativeTextInputView(initialInput: NativeTextEditingDelegate) :
+    CMPTextInputView(frame = CGRectZero.readValue()), UIKeyInputProtocol, UITextInputProtocol {
     private var _inputDelegate: UITextInputDelegateProtocol? = null
 
-    private val touchesTrackerGestureRecognizer = TouchTrackingGestureRecognizer().also {
-        addGestureRecognizer(it)
-    }
+    private val touchesTrackerGestureRecognizer =
+        TouchTrackingGestureRecognizer().also { addGestureRecognizer(it) }
+
+    var input: NativeTextEditingDelegate = initialInput
+        set(value) {
+            if (field != value) {
+                if (isFirstResponder) {
+                    field.onResignFocus()
+                }
+                field = value
+                if (isFirstResponder) {
+                    field.onFocus()
+                }
+            }
+        }
 
     init {
         clipsToBounds = false
@@ -117,10 +128,10 @@ internal class NativeTextInputView(
     override fun canBecomeFirstResponder() = input.isInteractive
 
     private val selectionInteraction =
-        UITextInteraction.textInteractionForMode(UITextInteractionMode.UITextInteractionModeEditable)
-            .also {
-                it.setTextInput(this)
-            }
+        UITextInteraction.textInteractionForMode(
+                UITextInteractionMode.UITextInteractionModeEditable
+            )
+            .also { it.setTextInput(this) }
     private var selectionInteractionAttached: Boolean = false
 
     override fun didMoveToWindow() {
@@ -137,6 +148,7 @@ internal class NativeTextInputView(
         if (!input.isInteractive) {
             return false
         }
+        input.onFocus()
         val isFirstResponder = this.isFirstResponder()
         val result = super.becomeFirstResponder()
 
@@ -146,6 +158,11 @@ internal class NativeTextInputView(
         }
 
         return result
+    }
+
+    override fun resignFirstResponder(): Boolean {
+        input.onResignFocus()
+        return super.resignFirstResponder()
     }
 
     override fun setTintColor(tintColor: UIColor?) {
@@ -188,9 +205,10 @@ internal class NativeTextInputView(
     }
 
     /**
-     * Inserts a character into the displayed text.
-     * Add the character text to your class’s backing store at the index corresponding to the cursor and redisplay the text.
+     * Inserts a character into the displayed text. Add the character text to your class’s backing
+     * store at the index corresponding to the cursor and redisplay the text.
      * https://developer.apple.com/documentation/uikit/uikeyinput/1614543-inserttext
+     *
      * @param text A string object representing the character typed on the system keyboard.
      */
     override fun insertText(text: String) {
@@ -198,8 +216,8 @@ internal class NativeTextInputView(
     }
 
     /**
-     * Deletes a character from the displayed text.
-     * Remove the character just before the cursor from your class’s backing store and redisplay the text.
+     * Deletes a character from the displayed text. Remove the character just before the cursor from
+     * your class’s backing store and redisplay the text.
      * https://developer.apple.com/documentation/uikit/uikeyinput/1614572-deletebackward
      */
     override fun deleteBackward() {
@@ -217,6 +235,7 @@ internal class NativeTextInputView(
     /**
      * Returns the text in the specified range.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614527-text
+     *
      * @param range A range of text in a document.
      * @return A substring of a document that falls within the specified range.
      */
@@ -228,6 +247,7 @@ internal class NativeTextInputView(
     /**
      * Replaces the text in a document that is in the specified range.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614558-replace
+     *
      * @param range A range of text in a document.
      * @param withText A string to replace the text in range.
      */
@@ -238,12 +258,15 @@ internal class NativeTextInputView(
 
     override fun setSelectedTextRange(selectedTextRange: UITextRange?) {
         val range = selectedTextRange?.toTextRange()
-        if (input.getSelectedTextRange() == range) { return }
+        if (input.getSelectedTextRange() == range) {
+            return
+        }
 
         // iOS <= 16 does not update selection handles when selection changes from the keyboard
         // Posting an extra notification solves this issue
-        val notifySelectionChanges = !available(OS.Ios to OSVersion(major = 17)) &&
-            !touchesTrackerGestureRecognizer.isTrackingTouches
+        val notifySelectionChanges =
+            !available(OS.Ios to OSVersion(major = 17)) &&
+                !touchesTrackerGestureRecognizer.isTrackingTouches
         if (notifySelectionChanges) {
             selectionWillChange()
         }
@@ -254,10 +277,9 @@ internal class NativeTextInputView(
     }
 
     /**
-     * The range of selected text in a document.
-     * If the text range has a length, it indicates the currently selected text.
-     * If it has zero length, it indicates the caret (insertion point).
-     * If the text-range object is nil, it indicates that there is no current selection.
+     * The range of selected text in a document. If the text range has a length, it indicates the
+     * currently selected text. If it has zero length, it indicates the caret (insertion point). If
+     * the text-range object is nil, it indicates that there is no current selection.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614541-selectedtextrange
      */
     override fun selectedTextRange(): UITextRange? {
@@ -265,11 +287,10 @@ internal class NativeTextInputView(
     }
 
     /**
-     * The range of currently marked text in a document.
-     * If there is no marked text, the value of the property is nil.
-     * Marked text is provisionally inserted text that requires user confirmation;
-     * it occurs in multistage text input.
-     * The current selection, which can be a caret or an extended range, always occurs within the marked text.
+     * The range of currently marked text in a document. If there is no marked text, the value of
+     * the property is nil. Marked text is provisionally inserted text that requires user
+     * confirmation; it occurs in multistage text input. The current selection, which can be a caret
+     * or an extended range, always occurs within the marked text.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614489-markedtextrange
      */
     override fun markedTextRange(): UITextRange? {
@@ -285,27 +306,28 @@ internal class NativeTextInputView(
     }
 
     /**
-     * Inserts the provided text and marks it to indicate that it is part of an active input session.
-     * Setting marked text either replaces the existing marked text or,
-     * if none is present, inserts it in place of the current selection.
+     * Inserts the provided text and marks it to indicate that it is part of an active input
+     * session. Setting marked text either replaces the existing marked text or, if none is present,
+     * inserts it in place of the current selection.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614465-setmarkedtext
+     *
      * @param markedText The text to be marked.
-     * @param selectedRange A range within markedText that indicates the current selection.
-     * This range is always relative to markedText.
+     * @param selectedRange A range within markedText that indicates the current selection. This
+     *   range is always relative to markedText.
      */
     override fun setMarkedText(markedText: String?, selectedRange: CValue<NSRange>) {
-        val relativeTextRange = selectedRange.useContents {
-            val loc = location.toInt()
-            TextRange(loc, loc + length.toInt())
-        }
+        val relativeTextRange =
+            selectedRange.useContents {
+                val loc = location.toInt()
+                TextRange(loc, loc + length.toInt())
+            }
 
         input.setMarkedText(markedText, relativeTextRange)
     }
 
     /**
-     * Unmarks the currently marked text.
-     * After this method is called, the value of markedTextRange is nil.
-     * https://developer.apple.com/documentation/uikit/uitextinput/1614512-unmarktext
+     * Unmarks the currently marked text. After this method is called, the value of markedTextRange
+     * is nil. https://developer.apple.com/documentation/uikit/uitextinput/1614512-unmarktext
      */
     override fun unmarkText() {
         input.unmarkText()
@@ -323,30 +345,30 @@ internal class NativeTextInputView(
         return TextInputPosition(input.endOfDocument())
     }
 
-    /**
-     * Attention! fromPosition and toPosition may be null
-     */
+    /** Attention! fromPosition and toPosition may be null */
     override fun textRangeFromPosition(
         fromPosition: UITextPosition,
-        toPosition: UITextPosition
+        toPosition: UITextPosition,
     ): UITextRange? {
         val from = (fromPosition as? TextInputPosition)?.position ?: return null
         val to = (toPosition as? TextInputPosition)?.position ?: return null
         return TextInputRange(
             TextInputPosition(minOf(from, to)),
-            TextInputPosition(maxOf(from, to))
+            TextInputPosition(maxOf(from, to)),
         )
     }
 
     /**
      * Attention! position may be null
+     *
      * @param position a custom UITextPosition object that represents a location in a document.
      * @param offset a character offset from position. It can be a positive or negative value.
-     * Offset should be considered as a number of Unicode characters. One Unicode character can contain several bytes.
+     *   Offset should be considered as a number of Unicode characters. One Unicode character can
+     *   contain several bytes.
      */
     override fun positionFromPosition(
         position: UITextPosition,
-        offset: NSInteger
+        offset: NSInteger,
     ): UITextPosition? {
         val p = (position as? TextInputPosition)?.position ?: return null
         return input.positionFromPosition(position = p, offset = offset.toInt())?.let {
@@ -356,17 +378,18 @@ internal class NativeTextInputView(
 
     private fun positionFromPositionVertical(
         position: UITextPosition,
-        offset: NSInteger
+        offset: NSInteger,
     ): UITextPosition? {
         val p = (position as? TextInputPosition)?.position ?: return null
-        return input.verticalPositionFromPosition(position = p, verticalOffset = offset.toInt())
+        return input
+            .verticalPositionFromPosition(position = p, verticalOffset = offset.toInt())
             ?.let { TextInputPosition(it) }
     }
 
     override fun positionFromPosition(
         position: UITextPosition,
         inDirection: UITextLayoutDirection,
-        offset: NSInteger
+        offset: NSInteger,
     ): UITextPosition? {
         return when (inDirection) {
             UITextLayoutDirectionLeft -> positionFromPosition(position, -offset)
@@ -377,22 +400,21 @@ internal class NativeTextInputView(
         }
     }
 
-    /**
-     * Attention! position and toPosition may be null
-     */
+    /** Attention! position and toPosition may be null */
     override fun comparePosition(
         position: UITextPosition,
-        toPosition: UITextPosition
+        toPosition: UITextPosition,
     ): NSComparisonResult {
         val from = (position as? TextInputPosition)?.position ?: return NSOrderedSame
         val to = (toPosition as? TextInputPosition)?.position ?: return NSOrderedSame
-        val result = if (from < to) {
-            NSOrderedAscending
-        } else if (from > to) {
-            NSOrderedDescending
-        } else {
-            NSOrderedSame
-        }
+        val result =
+            if (from < to) {
+                NSOrderedAscending
+            } else if (from > to) {
+                NSOrderedDescending
+            } else {
+                NSOrderedSame
+            }
         return result
     }
 
@@ -405,7 +427,7 @@ internal class NativeTextInputView(
 
     override fun characterOffsetOfPosition(
         position: UITextPosition,
-        withinRange: UITextRange
+        withinRange: UITextRange,
     ): NSInteger {
         val withinTextRange = withinRange.toTextRange() ?: return 0L
         val intermediatePosition = (position as? TextInputPosition)?.position ?: 0
@@ -414,34 +436,34 @@ internal class NativeTextInputView(
 
     override fun positionWithinRangeAtCharacterOffset(
         range: UITextRange,
-        atCharacterOffset: NSInteger
+        atCharacterOffset: NSInteger,
     ): UITextPosition {
         val fallback = TextInputPosition(0)
         val textRange = range.toTextRange() ?: return fallback
-        return (textRange.start + atCharacterOffset.toInt()).takeIf { range.isValid() && it in textRange }
+        return (textRange.start + atCharacterOffset.toInt())
+            .takeIf { range.isValid() && it in textRange }
             ?.let { TextInputPosition(it) } ?: fallback
     }
 
     override fun positionWithinRangeFarthestInDirection(
         range: UITextRange,
-        farthestInDirection: UITextLayoutDirection
+        farthestInDirection: UITextLayoutDirection,
     ): UITextPosition {
         val fallback = TextInputPosition(0)
         val textRange = range.toTextRange() ?: return fallback
         return TextLayoutDirection(farthestInDirection)?.let { direction ->
-            input.positionWithinRange(textRange, direction)?.let {
-                TextInputPosition(it)
-            }
+            input.positionWithinRange(textRange, direction)?.let { TextInputPosition(it) }
         } ?: fallback
     }
 
     override fun characterRangeByExtendingPosition(
         position: UITextPosition,
-        inDirection: UITextLayoutDirection
+        inDirection: UITextLayoutDirection,
     ): UITextRange? {
         val oldPosition = position as? TextInputPosition ?: return null
-        val newPosition = positionFromPosition(oldPosition, inDirection = inDirection, offset = 1)
-            as? TextInputPosition ?: return null
+        val newPosition =
+            positionFromPosition(oldPosition, inDirection = inDirection, offset = 1)
+                as? TextInputPosition ?: return null
         return if (newPosition.position < oldPosition.position) {
             TextInputRange(newPosition, oldPosition)
         } else {
@@ -451,21 +473,20 @@ internal class NativeTextInputView(
 
     override fun baseWritingDirectionForPosition(
         position: UITextPosition,
-        inDirection: UITextStorageDirection
+        inDirection: UITextStorageDirection,
     ): NSWritingDirection {
         return NSWritingDirectionNatural
     }
 
     override fun setBaseWritingDirection(
         writingDirection: NSWritingDirection,
-        forRange: UITextRange
+        forRange: UITextRange,
     ) {}
 
     override fun firstRectForRange(range: UITextRange): CValue<CGRect> {
         val fallback = CGRectZero.readValue()
         val textRange = range.toTextRange() ?: return fallback
-        return input.firstSelectionRectForRange(textRange)?.toCGRect()
-            ?: fallback
+        return input.firstSelectionRectForRange(textRange)?.toCGRect() ?: fallback
     }
 
     override fun caretRectForPosition(position: UITextPosition): CValue<CGRect> =
@@ -473,10 +494,11 @@ internal class NativeTextInputView(
 
     override fun selectionRectsForRange(range: UITextRange): List<*> {
         val fallbackList = listOf<UITextSelectionRect>()
-        val textRange = TextRange(
-            start = (range.start as? TextInputPosition)?.position ?: return fallbackList,
-            end = (range.end as? TextInputPosition)?.position ?: return fallbackList
-        )
+        val textRange =
+            TextRange(
+                start = (range.start as? TextInputPosition)?.position ?: return fallbackList,
+                end = (range.end as? TextInputPosition)?.position ?: return fallbackList,
+            )
         return input.selectionDpRectsForRange(textRange)
     }
 
@@ -488,13 +510,12 @@ internal class NativeTextInputView(
 
     override fun closestPositionToPoint(
         point: CValue<CGPoint>,
-        withinRange: UITextRange
+        withinRange: UITextRange,
     ): UITextPosition? {
         val textRange = (withinRange as? TextInputRange)?.toTextRange() ?: return null
-        val closestPosition = input.closestPositionToPoint(
-            point.useContents { DpOffset(x.dp, y.dp) },
-            textRange
-        ) ?: return null
+        val closestPosition =
+            input.closestPositionToPoint(point.useContents { DpOffset(x.dp, y.dp) }, textRange)
+                ?: return null
         return TextInputPosition(closestPosition)
     }
 
@@ -506,10 +527,10 @@ internal class NativeTextInputView(
 
     override fun textStylingAtPosition(
         position: UITextPosition,
-        inDirection: UITextStorageDirection
+        inDirection: UITextStorageDirection,
     ): Map<Any?, *> {
         return NSDictionary.dictionary()
-        //TODO: Need to implement
+        // TODO: Need to implement
     }
 
     override fun shouldChangeTextInRange(range: UITextRange, replacementText: String): Boolean {
@@ -523,42 +544,50 @@ internal class NativeTextInputView(
     }
 
     override fun inputView(): UIView? = input.inputTraits.inputView()
-    override fun inputAccessoryView(): UIView? = input.inputTraits.inputAccessoryView()
-    override fun keyboardType(): UIKeyboardType = input.inputTraits.keyboardType()
-    override fun keyboardAppearance(): UIKeyboardAppearance = input.inputTraits.keyboardAppearance()
-    override fun returnKeyType(): UIReturnKeyType = input.inputTraits.returnKeyType()
-    override fun textContentType(): UITextContentType = input.inputTraits.textContentType()
-    override fun isSecureTextEntry(): Boolean = input.inputTraits.isSecureTextEntry()
-    override fun enablesReturnKeyAutomatically(): Boolean = input.inputTraits.enablesReturnKeyAutomatically()
-    override fun autocapitalizationType(): UITextAutocapitalizationType = input.inputTraits.autocapitalizationType()
-    override fun autocorrectionType(): UITextAutocorrectionType = input.inputTraits.autocorrectionType()
-    override fun spellCheckingType(): UITextSpellCheckingType = input.inputTraits.spellCheckingType()
-    override fun writingToolsBehavior(): UIWritingToolsBehavior = input.inputTraits.writingToolsBehavior()
 
-    /**
-     * Call when something changes in text data
-     */
+    override fun inputAccessoryView(): UIView? = input.inputTraits.inputAccessoryView()
+
+    override fun keyboardType(): UIKeyboardType = input.inputTraits.keyboardType()
+
+    override fun keyboardAppearance(): UIKeyboardAppearance = input.inputTraits.keyboardAppearance()
+
+    override fun returnKeyType(): UIReturnKeyType = input.inputTraits.returnKeyType()
+
+    override fun textContentType(): UITextContentType = input.inputTraits.textContentType()
+
+    override fun isSecureTextEntry(): Boolean = input.inputTraits.isSecureTextEntry()
+
+    override fun enablesReturnKeyAutomatically(): Boolean =
+        input.inputTraits.enablesReturnKeyAutomatically()
+
+    override fun autocapitalizationType(): UITextAutocapitalizationType =
+        input.inputTraits.autocapitalizationType()
+
+    override fun autocorrectionType(): UITextAutocorrectionType =
+        input.inputTraits.autocorrectionType()
+
+    override fun spellCheckingType(): UITextSpellCheckingType =
+        input.inputTraits.spellCheckingType()
+
+    override fun writingToolsBehavior(): UIWritingToolsBehavior =
+        input.inputTraits.writingToolsBehavior()
+
+    /** Call when something changes in text data */
     fun textWillChange() {
         _inputDelegate?.textWillChange(this)
     }
 
-    /**
-     * Call when something changes in text data
-     */
+    /** Call when something changes in text data */
     fun textDidChange() {
         _inputDelegate?.textDidChange(this)
     }
 
-    /**
-     * Call when something changes in text data
-     */
+    /** Call when something changes in text data */
     fun selectionWillChange() {
         _inputDelegate?.selectionWillChange(this)
     }
 
-    /**
-     * Call when something changes in text data
-     */
+    /** Call when something changes in text data */
     fun selectionDidChange() {
         _inputDelegate?.selectionDidChange(this)
     }
@@ -593,8 +622,8 @@ internal class NativeTextInputView(
 
     // On iOS Select and Select All buttons appear only when text selection is empty.
     // The presence of the onSelectAll lambda indicates that the select action is available.
-    private val showSelectAndSelectAllMenus: Boolean get() =
-        onSelectAll != null && hasText() && input.getSelectedTextRange()?.length == 0
+    private val showSelectAndSelectAllMenus: Boolean
+        get() = onSelectAll != null && hasText() && input.getSelectedTextRange()?.length == 0
 
     override fun canPerformAction(action: COpaquePointer?, withSender: Any?): Boolean =
         when (NSStringFromSelector(action)) {
@@ -611,7 +640,7 @@ internal class NativeTextInputView(
         paste: (() -> Unit)?,
         cut: (() -> Unit)?,
         selectAll: (() -> Unit)?,
-        customActions: List<CMPEditMenuCustomAction>
+        customActions: List<CMPEditMenuCustomAction>,
     ) {
         onCopy = copy
         onPaste = paste
@@ -644,9 +673,11 @@ internal class NativeTextInputView(
         }
     }
 
-    private val _tokenizer = TextInputStringTokenizer(textInput = this) {
-        input.textInRange(TextRange(0, input.endOfDocument()))
-    }
+    private val _tokenizer =
+        TextInputStringTokenizer(textInput = this) {
+            input.textInRange(TextRange(0, input.endOfDocument()))
+        }
+
     override fun tokenizer(): UITextInputTokenizerProtocol = _tokenizer
 
     private fun UITextRange.isValid(): Boolean {
@@ -657,23 +688,23 @@ internal class NativeTextInputView(
 }
 
 /**
- * A [UIScrollView] that hosts the [NativeTextInputView] when native input handling (Native Text Input)
- * is enabled.
+ * A [UIScrollView] that hosts the [NativeTextInputView] when native input handling (Native Text
+ * Input) is enabled.
  *
  * This container is necessary because:
  * 1. It provides a native coordinate system that matches the "full" (unclipped) text layout,
- *    allowing native iOS overlays (like the magnifier, floating cursor, and selection handles)
- *    to align correctly with the Compose-rendered text.
- * 2. It synchronizes its [contentOffset] and [contentInset] with the Compose text field's
- *    internal scroll state, ensuring that the UITextInput-conforming overlay view
- *    ([NativeTextInputView]) stays in sync with the visual rendering.
+ *    allowing native iOS overlays (like the magnifier, floating cursor, and selection handles) to
+ *    align correctly with the Compose-rendered text.
+ * 2. It synchronizes its [contentOffset] and [contentInset] with the Compose text field's internal
+ *    scroll state, ensuring that the UITextInput-conforming overlay view ([NativeTextInputView])
+ *    stays in sync with the visual rendering.
  * 3. It provides a larger hit-testing area for native interactive elements (like selection handles)
  *    that may overflow the immediate visual bounds of the text field.
  *
- * This view does not handle user-driven scrolling; scrolling is still managed by Compose,
- * which then updates this scroll view's state.
+ * This view does not handle user-driven scrolling; scrolling is still managed by Compose, which
+ * then updates this scroll view's state.
  */
-internal class NativeTextInputScrollView: UIScrollView(frame = CGRectZero.readValue()) {
+internal class NativeTextInputScrollView : UIScrollView(frame = CGRectZero.readValue()) {
     init {
         setScrollEnabled(false)
         setShowsVerticalScrollIndicator(false)
@@ -688,9 +719,7 @@ internal class NativeTextInputScrollView: UIScrollView(frame = CGRectZero.readVa
             if (field != value) {
                 field?.removeFromSuperview()
                 field = value
-                value?.let {
-                    addSubview(value)
-                }
+                value?.let { addSubview(value) }
             }
         }
 
@@ -701,22 +730,27 @@ internal class NativeTextInputScrollView: UIScrollView(frame = CGRectZero.readVa
         val hitTestResult = super.hitTest(point, withEvent)
 
         return if (available(OS.Ios to OSVersion(major = 17))) {
-            (hitTestResult ?: hitTestTextInteractiveViews(
-                point = point,
-                excludeItemsWithBounds = textView.bounds
-            ))?.let {
-                // The text input view always returns self as a hit test result, regardless of whether
-                // the pointer hits interactive elements within the view, such as selection handles.
-                textView
-            }
+            (hitTestResult
+                    ?: hitTestTextInteractiveViews(
+                        point = point,
+                        excludeItemsWithBounds = textView.bounds,
+                    ))
+                ?.let {
+                    // The text input view always returns self as a hit test result, regardless of
+                    // whether
+                    // the pointer hits interactive elements within the view, such as selection
+                    // handles.
+                    textView
+                }
         } else {
             // On iOS <= 16 actual text interaction view is zero size.
             // Find it using hit testing over subviews.
-            hitTestResult ?: textView.subviews.firstNotNullOfOrNull { subview ->
-                subview as UIView
-                val subviewPoint = this.convertPoint(point, toView = subview)
-                subview.hitTest(subviewPoint, withEvent = withEvent)
-            }
+            hitTestResult
+                ?: textView.subviews.firstNotNullOfOrNull { subview ->
+                    subview as UIView
+                    val subviewPoint = this.convertPoint(point, toView = subview)
+                    subview.hitTest(subviewPoint, withEvent = withEvent)
+                }
         }
     }
 
@@ -724,26 +758,29 @@ internal class NativeTextInputScrollView: UIScrollView(frame = CGRectZero.readVa
      * Updates frames and insets of the scroll view and underlying text view.
      *
      * Note on units:
-     * - `dpNewFrame` and `dpTextBounds` are in Compose `Dp` (mapped 1:1 to iOS points via `asCGRect()`).
+     * - `dpNewFrame` and `dpTextBounds` are in Compose `Dp` (mapped 1:1 to iOS points via
+     *   `asCGRect()`).
      * - `dpInsets` is in Compose `Dp` and can be passed to UIKit as POINTS directly.
      */
     fun setFrame(dpNewFrame: DpRect, dpTextBounds: DpRect, dpInsets: DpInsets) {
         val newFrame = dpNewFrame.toCGRect()
         val textBounds = dpTextBounds.toCGRect()
 
-        val textViewFrame = CGRectMake(
-            x = 0.0,
-            y = 0.0,
-            width = CGRectGetWidth(textBounds),
-            height = CGRectGetHeight(textBounds)
-        )
+        val textViewFrame =
+            CGRectMake(
+                x = 0.0,
+                y = 0.0,
+                width = CGRectGetWidth(textBounds),
+                height = CGRectGetHeight(textBounds),
+            )
 
-        val insets = UIEdgeInsetsMake(
-            top = dpInsets.top.value.toDouble(),
-            left = dpInsets.left.value.toDouble(),
-            bottom = dpInsets.bottom.value.toDouble(),
-            right = dpInsets.right.value.toDouble()
-        )
+        val insets =
+            UIEdgeInsetsMake(
+                top = dpInsets.top.value.toDouble(),
+                left = dpInsets.left.value.toDouble(),
+                bottom = dpInsets.bottom.value.toDouble(),
+                right = dpInsets.right.value.toDouble(),
+            )
 
         val scrollContentSize = textBounds.useContents { size.readValue() }
         val scrollContentInset = textBounds.useContents { origin.readValue() }
@@ -755,11 +792,12 @@ internal class NativeTextInputScrollView: UIScrollView(frame = CGRectZero.readVa
         val contentSizeChanged = !CGSizeEqualToSize(contentSize, scrollContentSize)
         val contentOffsetChanged = !CGPointEqualToPoint(contentOffset, scrollContentInset)
 
-        val hasChanges = textFrameChanged ||
-            frameChanged ||
-            contentInsetChanged ||
-            contentSizeChanged ||
-            contentOffsetChanged
+        val hasChanges =
+            textFrameChanged ||
+                frameChanged ||
+                contentInsetChanged ||
+                contentSizeChanged ||
+                contentOffsetChanged
 
         if (hasChanges) {
             textView?.selectionWillChange()
@@ -775,10 +813,11 @@ internal class NativeTextInputScrollView: UIScrollView(frame = CGRectZero.readVa
     }
 
     fun interactionModeAt(point: CValue<CGPoint>): UIKitInteropInteractionMode? {
-        val selectionHandleOrCursor = hitTestTextInteractiveViews(
-            point = point,
-            excludeItemsWithBounds = textView?.bounds ?: CGRectZero.readValue()
-        )
+        val selectionHandleOrCursor =
+            hitTestTextInteractiveViews(
+                point = point,
+                excludeItemsWithBounds = textView?.bounds ?: CGRectZero.readValue(),
+            )
 
         return if (selectionHandleOrCursor != null && selectionHandleOrCursor != this) {
             UIKitInteropInteractionMode.NonCooperative
@@ -792,15 +831,14 @@ internal class NativeTextInputScrollView: UIScrollView(frame = CGRectZero.readVa
 
 /**
  * The method traverses the text input view hierarchy, looking for interactive elements such as
- * selection handles or the cursor: usually these are only views that have different boundaries
- * from the text input view.
- * The method used to test interactive text editing elements when they are outside the boundaries
- * of the text input view.
+ * selection handles or the cursor: usually these are only views that have different boundaries from
+ * the text input view. The method used to test interactive text editing elements when they are
+ * outside the boundaries of the text input view.
  */
 private fun UIView.hitTestTextInteractiveViews(
     point: CValue<CGPoint>,
     excludeItemsWithBounds: CValue<CGRect>,
-    level: Int = 0
+    level: Int = 0,
 ): UIView? {
     subviews.reversed().forEach { subview ->
         subview as UIView
@@ -818,7 +856,8 @@ private fun UIView.hitTestTextInteractiveViews(
 private class TouchTrackingGestureRecognizer : CMPGestureRecognizer(target = null, action = null) {
     private val trackedTouches = mutableSetOf<UITouch>()
 
-    val isTrackingTouches: Boolean get() = trackedTouches.isNotEmpty()
+    val isTrackingTouches: Boolean
+        get() = trackedTouches.isNotEmpty()
 
     init {
         cancelsTouchesInView = true

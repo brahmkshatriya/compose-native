@@ -90,7 +90,8 @@ class ComposeNativePluginTest {
         )
         assertEquals(
             true,
-            "desktopNativeMainResolvableDependenciesMetadata".isMetadataTransformationConfiguration(),
+            "desktopNativeMainResolvableDependenciesMetadata"
+                .isMetadataTransformationConfiguration(),
         )
         assertEquals(
             false,
@@ -107,10 +108,7 @@ class ComposeNativePluginTest {
     fun redirectsOnlyMarkerCommonMetadataModules() {
         assertEquals(
             true,
-            isRedirectedCommonMetadataModule(
-                "dev.brahmkshatriya.compose.runtime",
-                "runtime",
-            ),
+            isRedirectedCommonMetadataModule("dev.brahmkshatriya.compose.runtime", "runtime"),
         )
         assertEquals(
             true,
@@ -121,19 +119,13 @@ class ComposeNativePluginTest {
         )
         assertEquals(
             false,
-            isRedirectedCommonMetadataModule(
-                "dev.brahmkshatriya.compose.runtime",
-                "runtime-retain",
-            ),
+            isRedirectedCommonMetadataModule("dev.brahmkshatriya.compose.runtime", "runtime-retain"),
         )
         assertEquals(
             true,
             isRedirectedCommonMetadataModule("dev.brahmkshatriya.compose.ui", "ui-skiko"),
         )
-        assertEquals(
-            false,
-            isRedirectedCommonMetadataModule("dev.brahmkshatriya.compose.ui", "ui"),
-        )
+        assertEquals(false, isRedirectedCommonMetadataModule("dev.brahmkshatriya.compose.ui", "ui"))
         assertEquals(
             true,
             isRedirectedCommonMetadataModule(
@@ -150,17 +142,11 @@ class ComposeNativePluginTest {
         )
         assertEquals(
             false,
-            isRedirectedCommonMetadataModule(
-                "dev.brahmkshatriya.androidx.collection",
-                "collection",
-            ),
+            isRedirectedCommonMetadataModule("dev.brahmkshatriya.androidx.collection", "collection"),
         )
         assertEquals(
             false,
-            isRedirectedCommonMetadataModule(
-                "dev.brahmkshatriya.compose.foundation",
-                "foundation",
-            ),
+            isRedirectedCommonMetadataModule("dev.brahmkshatriya.compose.foundation", "foundation"),
         )
     }
 
@@ -213,10 +199,7 @@ class ComposeNativePluginTest {
             )
         )
         assertNull(
-            nonDesktopForkPlatformRoutingOrNull(
-                "dev.brahmkshatriya.compose.ui",
-                "ui-iosarm64",
-            )
+            nonDesktopForkPlatformRoutingOrNull("dev.brahmkshatriya.compose.ui", "ui-iosarm64")
         )
     }
 
@@ -224,24 +207,15 @@ class ComposeNativePluginTest {
     fun keepsOnlyCrossPlatformForkRootsOnNonDesktopTargets() {
         assertEquals(
             true,
-            isCrossPlatformForkModule(
-                "dev.brahmkshatriya.compose.foundation",
-                "foundation",
-            ),
+            isCrossPlatformForkModule("dev.brahmkshatriya.compose.foundation", "foundation"),
         )
         assertEquals(
             true,
-            isCrossPlatformForkModule(
-                "dev.brahmkshatriya.compose.foundation",
-                "foundation-android",
-            ),
+            isCrossPlatformForkModule("dev.brahmkshatriya.compose.foundation", "foundation-android"),
         )
         assertEquals(
             true,
-            isCrossPlatformForkModule(
-                "dev.brahmkshatriya.compose.material3",
-                "material3-iosarm64",
-            ),
+            isCrossPlatformForkModule("dev.brahmkshatriya.compose.material3", "material3-iosarm64"),
         )
         assertEquals(
             false,
@@ -270,7 +244,7 @@ class ComposeNativePluginTest {
             )
         )
         assertEquals(
-            "org.jetbrains.compose.ui:ui:1.13.0-alpha01",
+            "org.jetbrains.compose.ui:ui:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.ui",
                 "ui",
@@ -278,7 +252,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.ui:ui:1.13.0-alpha01",
+            "org.jetbrains.compose.ui:ui:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.ui",
                 "ui",
@@ -287,7 +261,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.ui:ui-uikit:1.13.0-alpha01",
+            "org.jetbrains.compose.ui:ui-uikit:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.ui",
                 "ui-uikit",
@@ -328,7 +302,7 @@ class ComposeNativePluginTest {
             )
         )
         assertEquals(
-            "org.jetbrains.compose.animation:animation:1.13.0-alpha01",
+            "org.jetbrains.compose.animation:animation:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.animation",
                 "animation",
@@ -336,7 +310,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime:1.13.0-alpha03",
+            "androidx.compose.runtime:runtime:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime",
@@ -344,7 +318,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime:1.13.0-alpha03",
+            "androidx.compose.runtime:runtime:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime",
@@ -360,7 +334,7 @@ class ComposeNativePluginTest {
             )
         )
         assertEquals(
-            "org.jetbrains.compose.animation:animation-wasm-js:1.13.0-alpha01",
+            "org.jetbrains.compose.animation:animation-wasm-js:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.animation",
                 "animation-wasm-js",
@@ -369,7 +343,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime-wasm-js:1.13.0-alpha03",
+            "androidx.compose.runtime:runtime-wasm-js:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime-wasm-js",
@@ -378,7 +352,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.ui:ui-android:1.13.0-alpha01",
+            "org.jetbrains.compose.ui:ui-android:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.ui",
                 "ui-android",
@@ -386,7 +360,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.animation:animation:1.13.0-alpha01",
+            "org.jetbrains.compose.animation:animation:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.animation",
                 "animation",
@@ -394,7 +368,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.foundation:foundation-layout:1.13.0-alpha01",
+            "org.jetbrains.compose.foundation:foundation-layout:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.foundation",
                 "foundation-layout",
@@ -402,7 +376,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.material:material-ripple:1.13.0-alpha01",
+            "org.jetbrains.compose.material:material-ripple:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.material",
                 "material-ripple",
@@ -410,7 +384,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.material3:material3-ripple:1.13.0-alpha01",
+            "org.jetbrains.compose.material3:material3-ripple:1.13.0-beta01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.material3",
                 "material3-ripple",
@@ -419,14 +393,16 @@ class ComposeNativePluginTest {
         )
     }
 
-
     @Test
     fun identifiesKotlinMetadataCompilationTasks() {
         assertEquals(true, "compileCommonMainKotlinMetadata".isKotlinMetadataCompilationTask())
         assertEquals(true, "compileSkiaMainKotlinMetadata".isKotlinMetadataCompilationTask())
         assertEquals(true, "compileAppleMainKotlinMetadata".isKotlinMetadataCompilationTask())
         assertEquals(false, "compileKotlinLinuxX64".isKotlinMetadataCompilationTask())
-        assertEquals(false, "transformSkiaMainDependenciesMetadata".isKotlinMetadataCompilationTask())
+        assertEquals(
+            false,
+            "transformSkiaMainDependenciesMetadata".isKotlinMetadataCompilationTask(),
+        )
     }
 
     @Test
@@ -439,10 +415,22 @@ class ComposeNativePluginTest {
 
         assertEquals(true, isNativeRedirectImplementation("androidx.compose.runtime", "runtime"))
         assertEquals(true, isNativeRedirectImplementation("androidx.savedstate", "savedstate"))
-        assertEquals(true, isNativeRedirectImplementation("androidx.navigation3", "navigation3-runtime"))
-        assertEquals(false, isNativeRedirectImplementation("androidx.navigation3", "navigation3-ui"))
-        assertEquals(true, isNativeRedirectImplementation("androidx.navigationevent", "navigationevent-compose"))
-        assertEquals(true, isNativeRedirectImplementation("org.jetbrains.androidx.lifecycle", "lifecycle-runtime"))
+        assertEquals(
+            true,
+            isNativeRedirectImplementation("androidx.navigation3", "navigation3-runtime"),
+        )
+        assertEquals(
+            false,
+            isNativeRedirectImplementation("androidx.navigation3", "navigation3-ui"),
+        )
+        assertEquals(
+            true,
+            isNativeRedirectImplementation("androidx.navigationevent", "navigationevent-compose"),
+        )
+        assertEquals(
+            true,
+            isNativeRedirectImplementation("org.jetbrains.androidx.lifecycle", "lifecycle-runtime"),
+        )
         assertEquals(true, isNativeRedirectImplementation("androidx.collection", "collection"))
 
         assertEquals(
@@ -460,14 +448,14 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "androidx.navigation3:navigation3-runtime:1.2.0-rc01",
+            "androidx.navigation3:navigation3-runtime:1.2.0",
             nativeRedirectImplementationCoordinateOrNull(
                 "androidx.navigation3",
                 "navigation3-runtime",
             ),
         )
         assertEquals(
-            "androidx.navigation3:navigation3-runtime-linuxx64:1.2.0-rc01",
+            "androidx.navigation3:navigation3-runtime-linuxx64:1.2.0",
             nativeRedirectImplementationCoordinateOrNull(
                 "androidx.navigation3",
                 "navigation3-runtime-linuxx64",
@@ -481,7 +469,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime-linuxx64:1.13.0-alpha03",
+            "androidx.compose.runtime:runtime-linuxx64:1.13.0-beta01",
             nativeRedirectImplementationCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime-linuxx64",
@@ -495,7 +483,7 @@ class ComposeNativePluginTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime-retain-linuxx64:1.13.0-alpha03",
+            "androidx.compose.runtime:runtime-retain-linuxx64:1.13.0-beta01",
             nativeRedirectImplementationCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime-retain-linuxx64",
@@ -510,10 +498,7 @@ class ComposeNativePluginTest {
         )
         assertEquals(
             null,
-            nativeRedirectImplementationCoordinateOrNull(
-                "androidx.navigation3",
-                "navigation3-ui",
-            ),
+            nativeRedirectImplementationCoordinateOrNull("androidx.navigation3", "navigation3-ui"),
         )
     }
 
@@ -788,7 +773,7 @@ class ComposeNativePluginTest {
                 "ui-graphics",
                 "1.12.10-alpha02",
                 includeAndroidx = false,
-            ),
+            )
         )
         assertEquals(
             "dev.brahmkshatriya.compose.ui:ui-graphics:1.12.10-alpha02",
@@ -807,7 +792,7 @@ class ComposeNativePluginTest {
                 "1.12.10-alpha02",
                 useDesktopNativeFork = true,
                 includeAndroidx = false,
-            ),
+            )
         )
         assertEquals(
             "dev.brahmkshatriya.compose.ui:ui-skiko:1.12.10-alpha02",
@@ -825,7 +810,7 @@ class ComposeNativePluginTest {
                 "ui-android",
                 "1.12.10-alpha02",
                 includeAndroidx = true,
-            ),
+            )
         )
         assertNull(
             composeForkCoordinateFor(
@@ -833,7 +818,7 @@ class ComposeNativePluginTest {
                 "animation-core",
                 "1.12.10-alpha02",
                 includeAndroidx = false,
-            ),
+            )
         )
         assertEquals(
             "dev.brahmkshatriya.compose.foundation:foundation:1.12.10-alpha02",
@@ -850,7 +835,7 @@ class ComposeNativePluginTest {
                 "foundation-layout",
                 "1.12.10-alpha02",
                 includeAndroidx = false,
-            ),
+            )
         )
         assertEquals(
             "dev.brahmkshatriya.compose.components:components-resources:1.12.10-alpha02",

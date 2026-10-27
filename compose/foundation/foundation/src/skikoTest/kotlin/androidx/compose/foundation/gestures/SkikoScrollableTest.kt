@@ -57,17 +57,13 @@ class SkikoScrollableTest {
 
         setContent {
             LazyColumn(state = state, modifier = Modifier.testTag("list").fillMaxSize()) {
-                items(1000) {
-                    Box(Modifier.size(50.dp))
-                }
+                items(1000) { Box(Modifier.size(50.dp)) }
             }
         }
 
         runOnIdle { assertEquals(0, state.firstVisibleItemIndex) }
 
-        onNodeWithTag("list").performTouchInput {
-            swipe(Offset(30f, 500f), Offset(30f, 10f))
-        }
+        onNodeWithTag("list").performTouchInput { swipe(Offset(30f, 500f), Offset(30f, 10f)) }
 
         when (hostOs) {
             OS.Ios -> runOnIdle { assertEquals(33, state.firstVisibleItemIndex) }
@@ -82,25 +78,19 @@ class SkikoScrollableTest {
         var state by mutableStateOf(LazyListState())
         setContent {
             LazyColumn(Modifier.testTag("list").size(50.dp, 150.dp), state = state) {
-                items(1000) {
-                    Box(Modifier.size(50.dp))
-                }
+                items(1000) { Box(Modifier.size(50.dp)) }
             }
         }
 
-        runOnIdle { assertTrue(state.firstVisibleItemIndex == 0) }
+        runOnIdle { assertEquals(0, state.firstVisibleItemIndex) }
 
-        onNodeWithTag("list").performMouseInput {
-            scroll(1000f, ScrollWheel.Vertical)
-        }
+        onNodeWithTag("list").performMouseInput { scroll(1000f, ScrollWheel.Vertical) }
         runOnIdle { assertTrue(state.firstVisibleItemIndex > 0) }
 
         state = LazyListState()
-        runOnIdle { assertTrue(state.firstVisibleItemIndex == 0) }
+        runOnIdle { assertEquals(0, state.firstVisibleItemIndex) }
 
-        onNodeWithTag("list").performMouseInput {
-            scroll(1000f, ScrollWheel.Vertical)
-        }
+        onNodeWithTag("list").performMouseInput { scroll(1000f, ScrollWheel.Vertical) }
         runOnIdle { assertTrue(state.firstVisibleItemIndex > 0) }
     }
 
@@ -111,49 +101,42 @@ class SkikoScrollableTest {
         var state by mutableStateOf(LazyListState())
         setContent {
             LazyColumn(Modifier.testTag("list").size(50.dp, 150.dp), state = state) {
-                items(1000) {
-                    Box(Modifier.size(50.dp))
-                }
+                items(1000) { Box(Modifier.size(50.dp)) }
             }
         }
 
-        runOnIdle { assertTrue(state.firstVisibleItemIndex == 0) }
+        runOnIdle { assertEquals(0, state.firstVisibleItemIndex) }
 
-        onNodeWithTag("list").performTouchInput {
-            swipe(Offset(30f, 90f), Offset(30f, 10f))
-        }
+        onNodeWithTag("list").performTouchInput { swipe(Offset(30f, 90f), Offset(30f, 10f)) }
         runOnIdle { assertTrue(state.firstVisibleItemIndex > 0) }
 
         state = LazyListState()
-        runOnIdle { assertTrue(state.firstVisibleItemIndex == 0) }
+        runOnIdle { assertEquals(0, state.firstVisibleItemIndex) }
 
-        onNodeWithTag("list").performTouchInput {
-            swipe(Offset(30f, 90f), Offset(30f, 10f))
-        }
+        onNodeWithTag("list").performTouchInput { swipe(Offset(30f, 90f), Offset(30f, 10f)) }
         runOnIdle { assertTrue(state.firstVisibleItemIndex > 0) }
     }
 
     @OptIn(InternalComposeUiApi::class)
     @Suppress("DEPRECATION")
     @Test
-    fun closeSceneDuringScrollAnimation() = runSkikoComposeUiTest(
-        size = Size(100f, 100f),
-    ) {
-        setContent {
-            val state = rememberScrollState()
-            Column(Modifier.size(10.dp).verticalScroll(state)) {
-                Box(Modifier.size(10.dp, 210.dp))
+    fun closeSceneDuringScrollAnimation() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            setContent {
+                val state = rememberScrollState()
+                Column(Modifier.size(10.dp).verticalScroll(state)) {
+                    Box(Modifier.size(10.dp, 210.dp))
+                }
             }
+            scene.sendPointerEvent(
+                eventType = PointerEventType.Scroll,
+                position = Offset(0f, 0f),
+                scrollDelta = Offset(0f, 10000f),
+            )
+            /*
+             * This test doesn't contain any real assertions - its primary function is to ensure
+             * it doesn't freeze. This was an issue previously, as inside the scroll animation, there
+             * was a handler for the CancellationException that used to stop the scene from closing.
+             */
         }
-        scene.sendPointerEvent(
-            eventType = PointerEventType.Scroll,
-            position = Offset(0f, 0f),
-            scrollDelta = Offset(0f, 10000f)
-        )
-        /*
-         * This test doesn't contain any real assertions - its primary function is to ensure
-         * it doesn't freeze. This was an issue previously, as inside the scroll animation, there
-         * was a handler for the CancellationException that used to stop the scene from closing.
-         */
-    }
 }

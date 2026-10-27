@@ -135,13 +135,10 @@ class PlatformPrefetchSchedulerTest {
 
     @Test
     fun testRequestReceivesAvailableTimeBeforeNextFrameWhenNotIdle() {
-        var currentTime = 1.0
-        val scheduler = scheduler(currentTime = { currentTime })
+        val scheduler = scheduler(currentTime = { 1.0 })
         val availableTimes = mutableListOf<Long>()
 
-        scheduler.scheduleLowPriorityPrefetch(
-            request("request", availableTimes = availableTimes)
-        )
+        scheduler.scheduleLowPriorityPrefetch(request("request", availableTimes = availableTimes))
 
         scheduler.execute(lastFrameTimestamp = 1.0, targetTimestamp = 1.01, didDraw = false)
 
@@ -157,9 +154,7 @@ class PlatformPrefetchSchedulerTest {
         scheduler.execute(lastFrameTimestamp = 1.0, targetTimestamp = 1.01, didDraw = true)
         scheduler.execute(lastFrameTimestamp = 1.01, targetTimestamp = 1.03, didDraw = false)
 
-        scheduler.scheduleLowPriorityPrefetch(
-            request("request", availableTimes = availableTimes)
-        )
+        scheduler.scheduleLowPriorityPrefetch(request("request", availableTimes = availableTimes))
         currentTime = 1.031
 
         scheduler.execute(lastFrameTimestamp = 1.03, targetTimestamp = 1.05, didDraw = false)
@@ -183,26 +178,28 @@ class PlatformPrefetchSchedulerTest {
     private fun scheduler(
         onPrefetchVoteChanged: (Boolean) -> Unit = {},
         currentTime: () -> NSTimeInterval = { 0.0 },
-    ) = IosPrefetchScheduler(
-        onPrefetchVoteChanged = onPrefetchVoteChanged,
-        currentTime = currentTime,
-    )
+    ) =
+        IosPrefetchScheduler(
+            onPrefetchVoteChanged = onPrefetchVoteChanged,
+            currentTime = currentTime,
+        )
 
     private fun request(
         name: String,
         executedRequests: MutableList<String> = mutableListOf(),
         availableTimes: MutableList<Long> = mutableListOf(),
         executeResults: List<Boolean> = listOf(false),
-    ) = object : PlatformPrefetchRequest {
-        private var executionCount = 0
+    ) =
+        object : PlatformPrefetchRequest {
+            private var executionCount = 0
 
-        override fun PlatformPrefetchRequestScope.execute(): Boolean {
-            executedRequests.add(name)
-            availableTimes.add(availableTimeNanos())
+            override fun PlatformPrefetchRequestScope.execute(): Boolean {
+                executedRequests.add(name)
+                availableTimes.add(availableTimeNanos())
 
-            val result = executeResults.getOrElse(executionCount) { false }
-            executionCount += 1
-            return result
+                val result = executeResults.getOrElse(executionCount) { false }
+                executionCount += 1
+                return result
+            }
         }
-    }
 }

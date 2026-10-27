@@ -22,17 +22,17 @@ import androidx.compose.ui.text.input.EditProcessor
 import androidx.compose.ui.text.input.ImeOptions
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TextInputService
+import java.awt.Component
+import java.awt.event.InputMethodEvent
+import java.awt.im.InputMethodRequests
+import java.text.AttributedString
 import org.junit.Assert
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
-import java.awt.Component
-import java.awt.event.InputMethodEvent
-import java.awt.im.InputMethodRequests
-import java.text.AttributedString
 
-private object DummyComponent : Component()
+@Suppress("JavaIoSerializableObjectMustHaveReadResolve") private object DummyComponent : Component()
 
 @RunWith(JUnit4::class)
 class DesktopInputComponentTest {
@@ -43,12 +43,13 @@ class DesktopInputComponentTest {
         val input = DesktopTextInputService(PlatformComponent.Empty)
         val inputService = TextInputService(input)
 
-        val session = inputService.startInput(
-            value = TextFieldValue(),
-            imeOptions = ImeOptions.Default,
-            onEditCommand = processor::apply,
-            onImeActionPerformed = {}
-        )
+        val session =
+            inputService.startInput(
+                value = TextFieldValue(),
+                imeOptions = ImeOptions.Default,
+                onEditCommand = processor::apply,
+                onImeActionPerformed = {},
+            )
 
         processor.reset(TextFieldValue("h"), session)
 
@@ -61,7 +62,7 @@ class DesktopInputComponentTest {
                 AttributedString(familyEmoji).iterator,
                 11,
                 null,
-                null
+                null,
             )
         )
 
@@ -76,26 +77,28 @@ class DesktopInputComponentTest {
         assumeTrue(isMacOs)
         val processor = EditProcessor()
 
-        val component = object : PlatformComponent by PlatformComponent.Empty {
-            var enabledInput: InputMethodRequests? = null
+        val component =
+            object : PlatformComponent by PlatformComponent.Empty {
+                var enabledInput: InputMethodRequests? = null
 
-            override fun enableInput(inputMethodRequests: InputMethodRequests) {
-                enabledInput = inputMethodRequests
-            }
+                override fun enableInput(inputMethodRequests: InputMethodRequests) {
+                    enabledInput = inputMethodRequests
+                }
 
-            override fun disableInput() {
-                enabledInput = null
+                override fun disableInput() {
+                    enabledInput = null
+                }
             }
-        }
         val input = DesktopTextInputService(component)
         val inputService = TextInputService(input)
 
-        val session = inputService.startInput(
-            value = TextFieldValue(),
-            imeOptions = ImeOptions.Default,
-            onEditCommand = processor::apply,
-            onImeActionPerformed = {}
-        )
+        val session =
+            inputService.startInput(
+                value = TextFieldValue(),
+                imeOptions = ImeOptions.Default,
+                onEditCommand = processor::apply,
+                onImeActionPerformed = {},
+            )
 
         input.charKeyPressed = true
         processor.reset(TextFieldValue("a", selection = TextRange(1)), session)
@@ -109,7 +112,7 @@ class DesktopInputComponentTest {
                 AttributedString("ä").iterator,
                 1,
                 null,
-                null
+                null,
             )
         )
 

@@ -47,60 +47,40 @@ internal class TooltipAreaTest {
     @Suppress("DEPRECATION")
     @Test
     fun simpleTooltipIsShown() = runComposeUiTest {
-        setContent {
-            SimpleTooltipArea()
-        }
+        setContent { SimpleTooltipArea() }
 
         onNodeWithTag("tooltip").assertDoesNotExist()
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(30f, 40f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(30f, 40f)) }
         mainClock.advanceTimeToAfterTooltipDelay()
         onNodeWithTag("tooltip").assertExists()
     }
 
-    /**
-     * Verify that the tooltip is hidden when the tooltip area is pressed.
-     */
+    /** Verify that the tooltip is hidden when the tooltip area is pressed. */
     @Suppress("DEPRECATION")
     @Test
     fun tooltipHiddenOnPress() = runComposeUiTest {
-        setContent {
-            SimpleTooltipArea()
-        }
+        setContent { SimpleTooltipArea() }
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(30f, 40f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(30f, 40f)) }
         mainClock.advanceTimeToAfterTooltipDelay()
         onNodeWithTag("tooltip").assertExists()
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            press()
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { press() }
         onNodeWithTag("tooltip").assertDoesNotExist()
     }
 
-    /**
-     * Verify that the tooltip is hidden when the mouse leaves the tooltip area.
-     */
+    /** Verify that the tooltip is hidden when the mouse leaves the tooltip area. */
     @Suppress("DEPRECATION")
     @Test
     fun tooltipHiddenOnExit() = runComposeUiTest {
-        setContent {
-            SimpleTooltipArea()
-        }
+        setContent { SimpleTooltipArea() }
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(30f, 40f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(30f, 40f)) }
         mainClock.advanceTimeToAfterTooltipDelay()
         onNodeWithTag("tooltip").assertExists()
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(150f, 150f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(150f, 150f)) }
         onNodeWithTag("tooltip").assertDoesNotExist()
     }
 
@@ -115,31 +95,24 @@ internal class TooltipAreaTest {
             TooltipArea(
                 tooltip = {
                     Box(Modifier.size(100.dp).testTag("tooltip"))
-                    DisposableEffect(Unit) {
-                        onDispose {
-                            tooltipHidden = true
-                        }
-                    }
+                    DisposableEffect(Unit) { onDispose { tooltipHidden = true } }
                 },
-                tooltipPlacement = TooltipPlacement.CursorPoint(
-                    offset = DpOffset(x = 0.dp, y = 10.dp)
-                ),
+                tooltipPlacement =
+                    TooltipPlacement.CursorPoint(offset = DpOffset(x = 0.dp, y = 10.dp)),
             ) {
                 Box(Modifier.size(100.dp).testTag("tooltipArea"))
             }
         }
 
         // Move into the tooltip area
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(30f, 40f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(30f, 40f)) }
         mainClock.advanceTimeToAfterTooltipDelay()
 
         // Move into the tooltip, but still inside the area
         onNodeWithTag("tooltip").let {
             it.assertExists()
             it.performMouseInput {
-                moveTo(Offset(10f, 10f))  // Still inside the tooltip area
+                moveTo(Offset(10f, 10f)) // Still inside the tooltip area
             }
         }
         waitForIdle()
@@ -152,52 +125,38 @@ internal class TooltipAreaTest {
         onNodeWithTag("tooltip").let {
             it.assertExists()
             it.performMouseInput {
-                moveTo(Offset(99f, 99f))  // Outside the tooltip area
+                moveTo(Offset(99f, 99f)) // Outside the tooltip area
             }
         }
         onNodeWithTag("tooltip").assertDoesNotExist()
     }
 
-    /**
-     * Verify that the tooltip is shown after the given delay and not beforehand.
-     */
+    /** Verify that the tooltip is shown after the given delay and not beforehand. */
     @Suppress("DEPRECATION")
     @Test
     fun tooltipShownAfterDelay() = runComposeUiTest {
         mainClock.autoAdvance = false
 
-        setContent {
-            SimpleTooltipArea(delayMillis = 200)
-        }
+        setContent { SimpleTooltipArea(delayMillis = 200) }
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(30f, 40f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(30f, 40f)) }
         mainClock.advanceTimeBy(100)
         onNodeWithTag("tooltip").assertDoesNotExist()
         mainClock.advanceTimeBy(101)
         onNodeWithTag("tooltip").assertExists()
     }
 
-    /**
-     * Verify that the tooltip is re-shown after press -> release -> move
-     */
+    /** Verify that the tooltip is re-shown after press -> release -> move */
     @Suppress("DEPRECATION")
     @Test
     fun tooltipReshownOnMove() = runComposeUiTest {
-        setContent {
-            SimpleTooltipArea()
-        }
+        setContent { SimpleTooltipArea() }
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(30f, 40f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(30f, 40f)) }
         mainClock.advanceTimeToAfterTooltipDelay()
         onNodeWithTag("tooltip").assertExists()
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            press()
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { press() }
         onNodeWithTag("tooltip").assertDoesNotExist()
 
         onNodeWithTag("tooltipArea").performMouseInput {
@@ -214,25 +173,17 @@ internal class TooltipAreaTest {
     @Suppress("DEPRECATION")
     @Test
     fun tooltipHiddenOnExitEvenIfPointerInside() = runComposeUiTest {
-        setContent {
-            SimpleTooltipArea()
-        }
+        setContent { SimpleTooltipArea() }
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(1f, 1f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(1f, 1f)) }
         mainClock.advanceTimeToAfterTooltipDelay()
         onNodeWithTag("tooltip").assertExists()
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            exit(Offset(0f, 0f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { exit(Offset(0f, 0f)) }
         onNodeWithTag("tooltip").assertDoesNotExist()
     }
 
-    /**
-     * Verify that the tooltip is hidden when the pointer exits into an overlapping element.
-     */
+    /** Verify that the tooltip is hidden when the pointer exits into an overlapping element. */
     @Suppress("DEPRECATION")
     @Test
     fun tooltipHiddenOnExitIntoOverlappingElement() = runComposeUiTest {
@@ -243,15 +194,11 @@ internal class TooltipAreaTest {
             }
         }
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(1f, 1f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(1f, 1f)) }
         mainClock.advanceTimeToAfterTooltipDelay()
         onNodeWithTag("tooltip").assertExists()
 
-        onNodeWithTag("tooltipArea").performMouseInput {
-            moveTo(Offset(75f, 75f))
-        }
+        onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(75f, 75f)) }
         onNodeWithTag("tooltip").assertDoesNotExist()
     }
 
@@ -261,58 +208,50 @@ internal class TooltipAreaTest {
      */
     @Test
     fun tooltipHiddenOnExitFromTooltipEvenIfPointerInsideTooltipAreaWithoutEnterEvent() =
-        runComposeUiTestWithStandardTestDispatcher() {
+        runComposeUiTestWithStandardTestDispatcher {
             setContent {
                 SimpleTooltipArea(
-                    tooltipPlacement = TooltipPlacement.ComponentRect(
-                        anchor = Alignment.TopStart,
-                        alignment = Alignment.BottomEnd,
-                    )
+                    tooltipPlacement =
+                        TooltipPlacement.ComponentRect(
+                            anchor = Alignment.TopStart,
+                            alignment = Alignment.BottomEnd,
+                        )
                 )
             }
 
-            onNodeWithTag("tooltipArea").performMouseInput {
-                moveTo(Offset(50f, 50f))
-            }
+            onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(50f, 50f)) }
             mainClock.advanceTimeToAfterTooltipDelay()
             onNodeWithTag("tooltip").assertExists()
 
-            onNodeWithTag("tooltip").performMouseInput {
-                moveTo(Offset(1f, 1f))
-            }
+            onNodeWithTag("tooltip").performMouseInput { moveTo(Offset(1f, 1f)) }
             onNodeWithTag("tooltip").assertExists()
 
-            onNodeWithTag("tooltip").performMouseInput {
-                exit(Offset(0f, 0f))
-            }
+            onNodeWithTag("tooltip").performMouseInput { exit(Offset(0f, 0f)) }
             onNodeWithTag("tooltip").assertDoesNotExist()
         }
 
     /**
-     * Verify that the tooltip is not hidden on exit from the tooltip if the pointer is "inside"
-     * the tooltip area and the area itself receives an "enter" event.
+     * Verify that the tooltip is not hidden on exit from the tooltip if the pointer is "inside" the
+     * tooltip area and the area itself receives an "enter" event.
      */
     @Test
     fun tooltipNotHiddenOnExitFromTooltipIfPointerInsideTooltipAreaAndReceivedEnterEvent() =
         runComposeUiTestWithStandardTestDispatcher {
             setContent {
                 SimpleTooltipArea(
-                    tooltipPlacement = TooltipPlacement.ComponentRect(
-                        anchor = Alignment.TopStart,
-                        alignment = Alignment.BottomEnd,
-                    )
+                    tooltipPlacement =
+                        TooltipPlacement.ComponentRect(
+                            anchor = Alignment.TopStart,
+                            alignment = Alignment.BottomEnd,
+                        )
                 )
             }
 
-            onNodeWithTag("tooltipArea").performMouseInput {
-                moveTo(Offset(50f, 50f))
-            }
+            onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(50f, 50f)) }
             mainClock.advanceTimeToAfterTooltipDelay()
             onNodeWithTag("tooltip").assertExists()
 
-            onNodeWithTag("tooltip").performMouseInput {
-                moveTo(Offset(1f, 1f))
-            }
+            onNodeWithTag("tooltip").performMouseInput { moveTo(Offset(1f, 1f)) }
             onNodeWithTag("tooltip").assertExists()
 
             onNodeWithTag("tooltip").performMouseInput {
@@ -331,31 +270,26 @@ internal class TooltipAreaTest {
             setContent {
                 Box(Modifier.size(200.dp)) {
                     SimpleTooltipArea(
-                        tooltipPlacement = TooltipPlacement.ComponentRect(
-                            anchor = Alignment.TopEnd,
-                            alignment = Alignment.TopStart,
-                            offset = DpOffset(x = 10.dp, y = 0.dp)
-                        )
+                        tooltipPlacement =
+                            TooltipPlacement.ComponentRect(
+                                anchor = Alignment.TopEnd,
+                                alignment = Alignment.TopStart,
+                                offset = DpOffset(x = 10.dp, y = 0.dp),
+                            )
                     )
                 }
             }
 
-            onNodeWithTag("tooltipArea").performMouseInput {
-                moveTo(Offset(50f, 50f))
-            }
+            onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(50f, 50f)) }
             mainClock.advanceTimeToAfterTooltipDelay()
             onNodeWithTag("tooltip").assertExists()
 
             // Move into the tooltip while still inside the tooltip area
-            onNodeWithTag("tooltip").performMouseInput {
-                moveTo(Offset(1f, 1f))
-            }
+            onNodeWithTag("tooltip").performMouseInput { moveTo(Offset(1f, 1f)) }
             onNodeWithTag("tooltip").assertExists()
 
             // Move inside the tooltip but outside the bounds of the tooltip area
-            onNodeWithTag("tooltip").performMouseInput {
-                moveTo(Offset(15f, 1f))
-            }
+            onNodeWithTag("tooltip").performMouseInput { moveTo(Offset(15f, 1f)) }
             onNodeWithTag("tooltip").assertDoesNotExist()
         }
 
@@ -369,22 +303,19 @@ internal class TooltipAreaTest {
             setContent {
                 Box(Modifier.size(200.dp)) {
                     SimpleTooltipArea(
-                        tooltipPlacement = TooltipPlacement.ComponentRect(
-                            anchor = Alignment.Center,
-                            alignment = Alignment.Center,
-                        )
+                        tooltipPlacement =
+                            TooltipPlacement.ComponentRect(
+                                anchor = Alignment.Center,
+                                alignment = Alignment.Center,
+                            )
                     )
                 }
             }
 
             // Move into the tooltip area
-            onNodeWithTag("tooltipArea").performMouseInput {
-                moveTo(Offset(50f, 50f))
-            }
+            onNodeWithTag("tooltipArea").performMouseInput { moveTo(Offset(50f, 50f)) }
             // Move outside the tooltip area without waiting
-            onNodeWithTag("tooltipArea").performMouseInput {
-                exit(Offset(0f, 0f))
-            }
+            onNodeWithTag("tooltipArea").performMouseInput { exit(Offset(0f, 0f)) }
             mainClock.advanceTimeToAfterTooltipDelay()
             onNodeWithTag("tooltip").assertDoesNotExist()
         }
@@ -395,25 +326,20 @@ internal class TooltipAreaTest {
     @OptIn(InternalComposeUiApi::class, InternalTestApi::class)
     private fun runComposeUiTestWithStandardTestDispatcher(
         block: suspend ComposeUiTest.() -> Unit
-    ) = runInternalSkikoComposeUiTest {
-        block()
-    }
+    ) = runInternalSkikoComposeUiTest { block() }
 
     @Composable
     private fun SimpleTooltipArea(
         areaSize: Dp = 100.dp,
         tooltipSize: Dp = 20.dp,
         delayMillis: Int = TooltipDelayMillis,
-        tooltipPlacement: TooltipPlacement = TooltipPlacement.CursorPoint(
-            offset = DpOffset(0.dp, 16.dp)
-        )
+        tooltipPlacement: TooltipPlacement =
+            TooltipPlacement.CursorPoint(offset = DpOffset(0.dp, 16.dp)),
     ) {
         TooltipArea(
-            tooltip = {
-                Box(Modifier.size(tooltipSize).testTag("tooltip"))
-            },
+            tooltip = { Box(Modifier.size(tooltipSize).testTag("tooltip")) },
             delayMillis = delayMillis,
-            tooltipPlacement = tooltipPlacement
+            tooltipPlacement = tooltipPlacement,
         ) {
             Box(Modifier.size(areaSize).testTag("tooltipArea"))
         }

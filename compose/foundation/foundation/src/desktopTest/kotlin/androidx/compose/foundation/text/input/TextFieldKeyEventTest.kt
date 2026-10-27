@@ -488,8 +488,8 @@ class TextFieldKeyEventTest {
         )
 
     @Test
-    fun textField_altBackspace_windows() =  // Performs "undo"
-        keysSequenceTest(
+    fun textField_altBackspace_windows() = // Performs "undo"
+    keysSequenceTest(
             namedKeyMapping = WindowsKeyMapping,
             initText = "hello",
             initSelection = TextRange(5),
@@ -686,10 +686,7 @@ class TextFieldKeyEventTest {
         val NonMacOsKeyMapping = NamedKeyMapping("Default (non-macOS)", DefaultSkikoKeyMapping)
     }
 
-    private class NamedKeyMapping(
-        val name: String,
-        val keyMapping: KeyMapping,
-    )
+    private class NamedKeyMapping(val name: String, val keyMapping: KeyMapping)
 }
 
 internal class FakeClipboard(private var clipEntry: ClipEntry?) : Clipboard {
@@ -712,6 +709,7 @@ internal class FakeClipboard(private var clipEntry: ClipEntry?) : Clipboard {
         this@FakeClipboard.clipEntry = clipEntry
     }
 
+    @Deprecated("Use platform-specific extension to get platform reference")
     override val nativeClipboard: NativeClipboard
         get() {
             throw UnsupportedOperationException("Native Clipboard isn't needed in tests")

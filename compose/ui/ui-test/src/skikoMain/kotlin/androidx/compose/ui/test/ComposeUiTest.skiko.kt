@@ -23,7 +23,7 @@ import androidx.compose.ui.draganddrop.DragAndDropTransferData
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.graphics.SkiaCanvasHolder
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.node.RootForTest
@@ -86,7 +86,7 @@ actual fun runComposeUiTest(
     effectContext: CoroutineContext,
     runTestContext: CoroutineContext,
     testTimeout: Duration,
-    block: suspend ComposeUiTest.() -> Unit
+    block: suspend ComposeUiTest.() -> Unit,
 ): TestResult {
     return runSkikoComposeUiTest(
         effectContext = effectContext,
@@ -112,34 +112,37 @@ fun runSkikoComposeUiTest(
     effectContext: CoroutineContext = EmptyCoroutineContext,
     runTestContext: CoroutineContext = EmptyCoroutineContext,
     testTimeout: Duration = Duration.INFINITE,
-    block: suspend SkikoComposeUiTest.() -> Unit
+    block: suspend SkikoComposeUiTest.() -> Unit,
 ): TestResult {
     return SkikoComposeUiTest(
-        width = size.width.roundToInt(),
-        height = size.height.roundToInt(),
-        effectContext = effectContext,
-        testTimeout = testTimeout,
-        runTestContext = runTestContext,
-        density = density,
-        semanticsOwnerListener = null,
-        windowInsets = null,
-        useStandardTestDispatcherForComposition = false,
-    ).runTest(block)
+            width = size.width.roundToInt(),
+            height = size.height.roundToInt(),
+            effectContext = effectContext,
+            testTimeout = testTimeout,
+            runTestContext = runTestContext,
+            density = density,
+            semanticsOwnerListener = null,
+            windowInsets = null,
+            useStandardTestDispatcherForComposition = false,
+        )
+        .runTest(block)
 }
 
 /**
- * How often to check idling resources.
- * Empirically checked that Android (espresso, really) tests approximately at this rate.
+ * How often to check idling resources. Empirically checked that Android (espresso, really) tests
+ * approximately at this rate.
  */
 private const val IDLING_RESOURCES_CHECK_INTERVAL_MS = 20L
 
 /**
  * @param effectContext The [CoroutineContext] used to run the composition. The context for
- * `LaunchedEffect`s and `rememberCoroutineScope` will be derived from this context.
+ *   `LaunchedEffect`s and `rememberCoroutineScope` will be derived from this context.
  */
 @ExperimentalTestApi
 @OptIn(InternalTestApi::class, InternalComposeUiApi::class)
-open class SkikoComposeUiTest @InternalTestApi constructor(
+open class SkikoComposeUiTest
+@InternalTestApi
+constructor(
     width: Int = 1024,
     height: Int = 768,
     private val effectContext: CoroutineContext = EmptyCoroutineContext,
@@ -171,7 +174,7 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
         effectContext: CoroutineContext = EmptyCoroutineContext,
         runTestContext: CoroutineContext = EmptyCoroutineContext,
         testTimeout: Duration = Duration.INFINITE,
-        density: Density = Density(1f)
+        density: Density = Density(1f),
     ) : this(
         width = width,
         height = height,
@@ -198,42 +201,45 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
         customTestDispatcher
             ?: effectContext.createDefaultTestDispatcher(useStandardTestDispatcherForComposition)
 
-    private val mainClockImpl = MainTestClockImpl(
-        scheduler = compositionCoroutineDispatcher.scheduler,
-        frameDelayMillis = FRAME_DELAY_MILLIS,
-        isStandardTestDispatcherSupportEnabled = useStandardTestDispatcherForComposition
-    )
+    private val mainClockImpl =
+        MainTestClockImpl(
+            scheduler = compositionCoroutineDispatcher.scheduler,
+            frameDelayMillis = FRAME_DELAY_MILLIS,
+            isStandardTestDispatcherSupportEnabled = useStandardTestDispatcherForComposition,
+        )
     override val mainClock: MainTestClock
         get() = mainClockImpl
 
-    private val uncaughtExceptionHandler = UncaughtExceptionHandler(
-        effectContext[CoroutineExceptionHandler]
-    )
-    private val infiniteAnimationPolicy = object : InfiniteAnimationPolicy {
-        override suspend fun <R> onInfiniteOperation(block: suspend () -> R): R {
-            if (mainClock.autoAdvance) {
-                throw CancellationException("Infinite animations are disabled on tests")
+    private val uncaughtExceptionHandler =
+        UncaughtExceptionHandler(effectContext[CoroutineExceptionHandler])
+    private val infiniteAnimationPolicy =
+        object : InfiniteAnimationPolicy {
+            override suspend fun <R> onInfiniteOperation(block: suspend () -> R): R {
+                if (mainClock.autoAdvance) {
+                    throw CancellationException("Infinite animations are disabled on tests")
+                }
+                return block()
             }
-            return block()
         }
-    }
 
-    private val recomposerCoroutineScope = CoroutineScope(
-        effectContext +
-            compositionCoroutineDispatcher +
-            infiniteAnimationPolicy +
-            uncaughtExceptionHandler +
-            Job()
-    )
+    private val recomposerCoroutineScope =
+        CoroutineScope(
+            effectContext +
+                compositionCoroutineDispatcher +
+                infiniteAnimationPolicy +
+                uncaughtExceptionHandler +
+                Job()
+        )
 
     // Lazy on purpose: on JS Skia is only usable after onSkikoReady
     private val surface by lazy { Surface.makeRasterN32Premul(width, height) }
+    private val canvasHolder: SkiaCanvasHolder = SkiaCanvasHolder(surface.canvas)
+
     private val size = IntSize(width, height)
 
     @InternalComposeUiApi
     lateinit var scene: ComposeScene
-        @InternalTestApi
-        set
+        @InternalTestApi set
 
     private lateinit var frameRecomposer: FrameRecomposer
 
@@ -242,9 +248,7 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
     private val testOwner = SkikoTestOwner()
     private val testContext = TestContext(testOwner)
 
-    fun runTest(
-        block: suspend SkikoComposeUiTest.() -> Unit
-    ): TestResult {
+    fun runTest(block: suspend SkikoComposeUiTest.() -> Unit): TestResult {
         @OptIn(ExperimentalStdlibApi::class)
         // We don't restrict the type to be TestDispatcher, because it's not a requirement from
         // ComposeUiTest perspective.
@@ -263,21 +267,18 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
 
         return onSkikoReady {
             // Note: on web this call returns immediately (it returns a Promise),
-            runTest(
-                timeout = testTimeout,
-                context = combinedRunTestCoroutineContext
-            ) {
+            runTest(timeout = testTimeout, context = combinedRunTestCoroutineContext) {
                 composeRootRegistry.withRegistry {
                     withScene {
                         withRenderLoop {
                             // MonotonicFrameClock is necessary. See the CL for details:
                             // https://android-review.googlesource.com/c/platform/frameworks/support/+/3284298
-                            // > Anything that might result in animation may require the MonotonicFrameClock,
-                            // > and to get the timing right it should be the clock provided by the Recomposer's effect context
+                            // > Anything that might result in animation may require the
+                            // MonotonicFrameClock,
+                            // > and to get the timing right it should be the clock provided by the
+                            // Recomposer's effect context
                             // It's covered by SkikoComposeUiTestTest.canDriveAnimationsFromTest.
-                            frameRecomposer.withMonotonicFrameClock {
-                                block()
-                            }
+                            frameRecomposer.withMonotonicFrameClock { block() }
                         }
                     }
                 }
@@ -293,7 +294,8 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
         } finally {
             runOnUiThread(::closeScene)
             // After the scene is closed, run all left foreground TestDispatchEvent.
-            // They might've been added outside the runTest call, using the provided coroutineDispatcher:
+            // They might've been added outside the runTest call, using the provided
+            // coroutineDispatcher:
             compositionCoroutineDispatcher.scheduler.advanceUntilIdle()
             // TODO: re-enable once tests that register the backend asynchronously (e.g. AWT
             //  ComposePanel/ComposeWindow via ComposeContainer on the EDT) no longer rely on the
@@ -311,7 +313,7 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
                     delay(FRAME_DELAY_MILLIS)
                     runOnUiThread {
                         frameRecomposer.performFrame(
-                            frameTimeNanos = mainClock.currentTime * NanoSecondsPerMilliSecond,
+                            frameTimeNanos = mainClock.currentTime * NanoSecondsPerMilliSecond
                         )
                         redraw()
                     }
@@ -325,27 +327,28 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
 
     /**
      * Redraws the current (already-settled) state into [surface] WITHOUT advancing the frame clock,
-     * so a capture reflects the latest state. Draw is decoupled from idle, so producing
-     * an up-to-date image is the capture's responsibility rather than the idle loop's.
+     * so a capture reflects the latest state. Draw is decoupled from idle, so producing an
+     * up-to-date image is the capture's responsibility rather than the idle loop's.
      */
     private fun redraw() = runOnUiThread {
         scene.measureAndLayout()
         with(surface.canvas) {
             clear(Color.TRANSPARENT)
-            scene.draw(asComposeCanvas())
+            canvasHolder.drawInto(this, scene::draw)
         }
     }
 
     private fun createScene() {
         frameRecomposer = FrameRecomposer(recomposerCoroutineScope.coroutineContext)
-        scene = CanvasLayersComposeScene(
-            frameRecomposer = frameRecomposer,
-            density = density,
-            size = size,
-            platformContext = TestContext(),
-            invalidateLayout = { },
-            invalidateDraw = { },
-        )
+        scene =
+            CanvasLayersComposeScene(
+                frameRecomposer = frameRecomposer,
+                density = density,
+                size = size,
+                platformContext = TestContext(),
+                invalidateLayout = {},
+                invalidateDraw = {},
+            )
         architectureComponentsOwner.enableSavedStateHandles()
         architectureComponentsOwner.lifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
     }
@@ -364,7 +367,8 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
             runOnUiThread {
                 // Settle non-frame work WITHOUT advancing the frame clock - drain
                 // the currently-due tasks via the test scheduler, then run layout and draw.
-                // Never run [frameRecomposer.performFrame],so withFrameNanos awaiters are not resumed.
+                // Never run [frameRecomposer.performFrame],so withFrameNanos awaiters are not
+                // resumed.
                 compositionCoroutineDispatcher.scheduler.runCurrent()
                 redraw()
 
@@ -392,15 +396,15 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
         // Do NOT gate on draw, matching Android's ComposeIdlingResource.isIdleNow.
         // A pending draw is instead flushed after the wait loop by [ensureScheduledDrawCompleted],
         // mirroring Android's waitForNextChoreographerFrame.
-        return !Snapshot.current.hasPendingChanges()
-            && !Snapshot.isApplyObserverNotificationPending
-            && !scene.hasPendingMeasureOrLayout
-            && areAllResourcesIdle()
+        return !Snapshot.current.hasPendingChanges() &&
+            !Snapshot.isApplyObserverNotificationPending &&
+            !scene.hasPendingMeasureOrLayout &&
+            areAllResourcesIdle()
     }
 
     /**
-     * Awaits composition, measure and layout - the analog of Android's idlingStrategy.runUntilIdle().
-     * Draw is intentionally NOT awaited here.
+     * Awaits composition, measure and layout - the analog of Android's
+     * idlingStrategy.runUntilIdle(). Draw is intentionally NOT awaited here.
      */
     private inline fun runUntilIdle(block: () -> Unit) {
         // Always check even if we are idle.
@@ -418,10 +422,10 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
     }
 
     /**
-     * Ensures a scheduled draw has completed before returning from a wait.
-     * On Android the draw is produced by the Choreographer/ViewRootImpl pipeline running during
-     * the wait in `waitForNextChoreographerFrame()`; there is no such pipeline here,
-     * so we render the pending draw directly.
+     * Ensures a scheduled draw has completed before returning from a wait. On Android the draw is
+     * produced by the Choreographer/ViewRootImpl pipeline running during the wait in
+     * `waitForNextChoreographerFrame()`; there is no such pipeline here, so we render the pending
+     * draw directly.
      */
     private fun ensureScheduledDrawCompleted() {
         if (scene.hasPendingDraw) {
@@ -441,7 +445,8 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
     }
 
     override suspend fun awaitIdle() {
-        // Same two-step shape as [waitForIdle], but suspending: await idleness, then flush the draw.
+        // Same two-step shape as [waitForIdle], but suspending: await idleness, then flush the
+        // draw.
         runUntilIdle {
             if (!areAllResourcesIdle()) {
                 delay(IDLING_RESOURCES_CHECK_INTERVAL_MS)
@@ -467,7 +472,7 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
     override fun waitUntil(
         conditionDescription: String?,
         timeoutMillis: Long,
-        condition: () -> Boolean
+        condition: () -> Boolean,
     ) {
         val startTime = currentNanoTime()
         val timeoutNanos = timeoutMillis * NanoSecondsPerMilliSecond
@@ -491,9 +496,7 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
         if (isOnUiThread()) {
             scene.setContent(content = composable)
         } else {
-            runOnUiThread {
-                scene.setContent(content = composable)
-            }
+            runOnUiThread { scene.setContent(content = composable) }
 
             // Only wait for idleness if not on the UI thread. If we are on the UI thread, the
             // caller clearly wants to keep tight control over execution order, so don't go
@@ -508,14 +511,14 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
 
     override fun onNode(
         matcher: SemanticsMatcher,
-        useUnmergedTree: Boolean
+        useUnmergedTree: Boolean,
     ): SemanticsNodeInteraction {
         return SemanticsNodeInteraction(testContext, useUnmergedTree, matcher)
     }
 
     override fun onAllNodes(
         matcher: SemanticsMatcher,
-        useUnmergedTree: Boolean
+        useUnmergedTree: Boolean,
     ): SemanticsNodeInteractionCollection {
         return SemanticsNodeInteractionCollection(testContext, useUnmergedTree, matcher)
     }
@@ -528,12 +531,13 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
     fun captureToImage(semanticsNode: SemanticsNode): ImageBitmap {
         redraw()
         val rect = semanticsNode.boundsInWindow
-        val image = surface.makeImageSnapshot(
-            rect.left.toInt(),
-            rect.top.toInt(),
-            rect.right.toInt(),
-            rect.bottom.toInt()
-        )
+        val image =
+            surface.makeImageSnapshot(
+                rect.left.toInt(),
+                rect.top.toInt(),
+                rect.right.toInt(),
+                rect.bottom.toInt(),
+            )
         return image!!.toComposeImageBitmap()
     }
 
@@ -597,37 +601,36 @@ open class SkikoComposeUiTest @InternalTestApi constructor(
         override val isRequestDragAndDropTransferRequired: Boolean
             get() = true
 
-        override fun requestDragAndDropTransfer(
-            source: PlatformDragAndDropSource,
-            offset: Offset
-        ) {
+        override fun requestDragAndDropTransfer(source: PlatformDragAndDropSource, offset: Offset) {
             var isTransferStarted = false
-            val startTransferScope = object : PlatformDragAndDropSource.StartTransferScope {
-                override fun startDragAndDropTransfer(
-                    transferData: DragAndDropTransferData,
-                    decorationSize: Size,
-                    drawDragDecoration: DrawScope.() -> Unit
-                ): Boolean {
-                    isTransferStarted = true
-                    return true
+            val startTransferScope =
+                object : PlatformDragAndDropSource.StartTransferScope {
+                    override fun startDragAndDropTransfer(
+                        transferData: DragAndDropTransferData,
+                        decorationSize: Size,
+                        drawDragDecoration: DrawScope.() -> Unit,
+                    ): Boolean {
+                        isTransferStarted = true
+                        return true
+                    }
                 }
-            }
             with(source) {
-                startTransferScope.startDragAndDropTransfer(offset) {
-                    isTransferStarted
-                }
+                startTransferScope.startDragAndDropTransfer(offset) { isTransferStarted }
             }
         }
     }
 
     private inner class TestContext : PlatformContext by PlatformContext.Empty() {
         override val windowInfo: WindowInfo = TestWindowInfo()
-        override val architectureComponentsOwner get() = this@SkikoComposeUiTest.architectureComponentsOwner
+        override val architectureComponentsOwner
+            get() = this@SkikoComposeUiTest.architectureComponentsOwner
+
         override val rootForTestListener: PlatformContext.RootForTestListener
             get() = composeRootRegistry
 
         override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener?
             get() = this@SkikoComposeUiTest.semanticsOwnerListener
+
         override val windowInsets: PlatformWindowInsets
             get() = this@SkikoComposeUiTest.windowInsets ?: super.windowInsets
 

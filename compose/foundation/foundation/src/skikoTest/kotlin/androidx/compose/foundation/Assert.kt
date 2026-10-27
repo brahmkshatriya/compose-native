@@ -23,7 +23,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
-import kotlin.test.fail
 
 // TODO: may be replace it with :kruth or with the published androidx.kruth:1.1.0-SNAPSHOT?
 //  So tests copied from androidx will work properly
@@ -62,8 +61,10 @@ internal fun AssertThat<Int>.isWithin1PixelFrom(from: Int) {
     isEqualTo(from, 1)
 }
 
+@Suppress("ReplaceAssertBooleanWithAssertEquality")
 internal fun AssertThat<Boolean>.isTrue() = assertTrue(t == true, message)
 
+@Suppress("ReplaceAssertBooleanWithAssertEquality")
 internal fun AssertThat<Boolean>.isFalse() = assertTrue(t == false, message)
 
 internal fun <K, T : Iterable<K>> AssertThat<T>.containsExactlyInOrder(vararg any: K) {
@@ -96,11 +97,10 @@ internal fun <K : Comparable<K>, T : Iterable<K>> AssertThat<T>.containsExactly(
     assertContentEquals(t.sorted(), any.sorted(), message)
 }
 
+@Suppress("unused")
 internal fun <K, T : Iterable<K>> AssertThat<T>.containsAtLeast(vararg any: K) {
     require(t != null)
-    any.toList().forEach {
-        assertContains(t, it, message)
-    }
+    any.toList().forEach { assertContains(t, it, message) }
 }
 
 internal fun AssertThat<Float>.isGreaterThan(n: Int) {
@@ -114,17 +114,20 @@ internal fun AssertThat<Float>.isAtLeast(n: Float) {
 internal fun AssertThat<Float>.isGreaterThan(n: Float) {
     assertTrue(t!! > n, message ?: "$t is not greater than $n")
 }
+
 internal fun AssertThat<Float>.isLessThan(n: Float) {
     assertTrue(t!! < n, message ?: "$t is not less than $n")
 }
-internal fun AssertThat<Int>.isLessThan(n: Int, d: Int = 0) {
+
+internal fun AssertThat<Int>.isLessThan(n: Int, @Suppress("unused") dummy: Int = 0) {
     assertTrue(t!! < n, message ?: "$t is not less than $n")
 }
+
 internal fun AssertThat<Float>.isAtMost(n: Float) {
     assertTrue(t!! <= n, message ?: "$t is greater than $n")
 }
 
-internal fun AssertThat<Int>.isAtMost(n: Int, d: Int = 0) {
+internal fun AssertThat<Int>.isAtMost(n: Int, @Suppress("unused") dummy: Int = 0) {
     assertTrue(t!! <= n, message ?: "$t is greater than $n")
 }
 
@@ -145,12 +148,11 @@ internal fun <T : Collection<*>> AssertThat<T>.hasSize(size: Int) {
 }
 
 internal fun <K, T : Collection<*>> AssertThat<T>.contains(vararg items: K) {
-    assertTrue(message) {
-        t!!.containsAll(items.toList())
-    }
+    assertTrue(message) { t!!.containsAll(items.toList()) }
 }
 
 internal fun AssertThat<Float>.isZero() = isEqualTo(0f, absoluteTolerance = 0.001f)
+
 internal fun AssertThat<Float>.isNonZero() = isNotEqualTo(0f, absoluteTolerance = 0.001f)
 
 internal fun AssertThat<*>.isNull() {
@@ -167,6 +169,8 @@ internal fun <T> assertThat(t: T?, message: String? = null): AssertThat<T> {
 
 internal fun assertWithMessage(message: String) = AssertMessage(message)
 
-internal fun AssertThat<Int>.isGreaterThan(other: Int, d: Int = 0) {
-    assertTrue(message ?: "The was expected to be greater than $other. But value = $t") { t!! > other }
+internal fun AssertThat<Int>.isGreaterThan(other: Int, @Suppress("unused") dummy: Int = 0) {
+    assertTrue(message ?: "The was expected to be greater than $other. But value = $t") {
+        t!! > other
+    }
 }

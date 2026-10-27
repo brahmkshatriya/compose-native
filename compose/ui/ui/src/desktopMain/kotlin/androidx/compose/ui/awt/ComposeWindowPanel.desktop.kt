@@ -34,50 +34,50 @@ import java.awt.Insets
 import java.awt.Window
 import java.awt.event.MouseListener
 import java.awt.event.MouseMotionListener
+import javax.swing.JLayeredPane
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import org.jetbrains.skiko.DelicateSkikoApi
 import org.jetbrains.skiko.SkiaLayerAnalytics
 import org.jetbrains.skiko.transparentWindowBackgroundHack
 
-/**
- * A panel used as a main view in [ComposeWindow] and [ComposeDialog].
- */
+/** A panel used as a main view in [ComposeWindow] and [ComposeDialog]. */
 internal class ComposeWindowPanel(
     private val window: Window,
     private val isUndecorated: () -> Boolean,
     skiaLayerAnalytics: SkiaLayerAnalytics,
     savedState: SavedState? = null,
     coroutineContext: CoroutineContext = EmptyCoroutineContext,
-) : JLayeredPaneWithTransparencyHack() {
+) : JLayeredPane() {
     private var isDisposed = false
 
     // AWT can leak JFrame in some cases
     // (see https://youtrack.jetbrains.com/issue/CMP-1688),
     // so we nullify bridge on dispose, to prevent keeping
     // big objects in memory (like the whole LayoutNode tree of the window)
-    private var _composeContainer: ComposeContainer? = ComposeContainer(
-        container = this,
-        isWindowLevel = true,
-        skiaLayerAnalytics = skiaLayerAnalytics,
-        window = window,
-        windowContainer = this,
-        savedState = savedState,
-        layerType = ComposeFeatureFlags.layerType.value.let {
-            // LayerType.OnComponent may can only be used with rendering via Swing graphics,
-            // but it's always disabled here. Using fallback instead of [check] to support
-            // opening separate windows from [ComposePanel] with such layer type.
-            if (it == LayerType.OnComponent) LayerType.OnSameCanvas else it
-        },
-        // Swing graphics is not supposed to be used here.
-        // TODO: Add isVsyncEnabled flag to ComposeWindowPanel constructor
-        renderSettings = RenderSettings.SkiaSurface(),
-        coroutineContext = coroutineContext
-    )
+    private var _composeContainer: ComposeContainer? =
+        ComposeContainer(
+            container = this,
+            isWindowLevel = true,
+            skiaLayerAnalytics = skiaLayerAnalytics,
+            window = window,
+            windowContainer = this,
+            savedState = savedState,
+            layerType =
+                ComposeFeatureFlags.layerType.value.let {
+                    // LayerType.OnComponent may can only be used with rendering via Swing graphics,
+                    // but it's always disabled here. Using fallback instead of [check] to support
+                    // opening separate windows from [ComposePanel] with such layer type.
+                    if (it == LayerType.OnComponent) LayerType.OnSameCanvas else it
+                },
+            // Swing graphics is not supposed to be used here.
+            // TODO: Add isVsyncEnabled flag to ComposeWindowPanel constructor
+            renderSettings = RenderSettings.SkiaSurface(),
+            coroutineContext = coroutineContext,
+        )
     private val composeContainer
-        get() = requireNotNull(_composeContainer) {
-            "ComposeContainer is disposed"
-        }
+        get() = requireNotNull(_composeContainer) { "ComposeContainer is disposed" }
+
     private val contentComponent by composeContainer::contentComponent
 
     val windowContext by composeContainer::windowContext
@@ -109,13 +109,20 @@ internal class ComposeWindowPanel(
 
     init {
         layout = null
-        focusTraversalPolicy = object : FocusTraversalPolicy() {
-            override fun getComponentAfter(aContainer: Container?, aComponent: Component?) = null
-            override fun getComponentBefore(aContainer: Container?, aComponent: Component?) = null
-            override fun getFirstComponent(aContainer: Container?) = null
-            override fun getLastComponent(aContainer: Container?) = null
-            override fun getDefaultComponent(aContainer: Container?) = null
-        }
+        focusTraversalPolicy =
+            object : FocusTraversalPolicy() {
+                override fun getComponentAfter(aContainer: Container?, aComponent: Component?) =
+                    null
+
+                override fun getComponentBefore(aContainer: Container?, aComponent: Component?) =
+                    null
+
+                override fun getFirstComponent(aContainer: Container?) = null
+
+                override fun getLastComponent(aContainer: Container?) = null
+
+                override fun getDefaultComponent(aContainer: Container?) = null
+            }
         isFocusCycleRoot = true
     }
 
@@ -139,16 +146,14 @@ internal class ComposeWindowPanel(
         onPreviewKeyEvent: (KeyEvent) -> Boolean = { false },
         onKeyEvent: (KeyEvent) -> Boolean = { false },
         modifier: Modifier = Modifier,
-        content: @Composable () -> Unit
+        content: @Composable () -> Unit,
     ) {
         composeContainer.setKeyEventListeners(
             onPreviewKeyEvent = onPreviewKeyEvent,
-            onKeyEvent = onKeyEvent
+            onKeyEvent = onKeyEvent,
         )
         composeContainer.setContent {
-            CompositionLocalProvider(
-                LocalAwtWindow provides window
-            ) {
+            CompositionLocalProvider(LocalAwtWindow provides window) {
                 WindowContentLayout(modifier, content)
             }
         }

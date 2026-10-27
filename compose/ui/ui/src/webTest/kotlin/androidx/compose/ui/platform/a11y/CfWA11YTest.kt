@@ -23,6 +23,7 @@ package androidx.compose.ui.platform.a11y
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -41,8 +42,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.OnCanvasTests
-import androidx.compose.ui.events.keyEvent
 import androidx.compose.ui.currentTimeMillis
+import androidx.compose.ui.events.keyEvent
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
@@ -52,15 +53,16 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlin.test.Test
-import kotlin.test.assertFailsWith
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
-import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -75,28 +77,27 @@ import org.w3c.dom.get
  * https://youtrack.jetbrains.com/issue/CMP-9069/CfWA11YTest.-timed-out-in-Firefox
  *
  * Here, I'd like to share my findings:
- * - `awaitIdle` can take an undefined amount of time, that's why I removed it in tests checking the timing of A11Y updates.
- *   Then the tests use `awaitA11YChanges` - awaiting the HTML mutations.
- * - In some tests I used a Boolean state switching it back and forth.
- *   Even though the state changes caused the invalidation, the A11Y tree didn't change if an update produced the same A11Y tree (for the same state).
- *   It led to awaitA11YChanges hanging forever or to a timeout.
- *   That's why it's better to use an Int state in such tests, so the change in HTML will be noticed 100%.
- * - Note: running the k/js tests in FF takes 15% longer than in Chrome. K/Wasm is fast in both cases.
+ * - `awaitIdle` can take an undefined amount of time, that's why I removed it in tests checking the
+ *   timing of A11Y updates. Then the tests use `awaitA11YChanges` - awaiting the HTML mutations.
+ * - In some tests I used a Boolean state switching it back and forth. Even though the state changes
+ *   caused the invalidation, the A11Y tree didn't change if an update produced the same A11Y tree
+ *   (for the same state). It led to awaitA11YChanges hanging forever or to a timeout. That's why
+ *   it's better to use an Int state in such tests, so the change in HTML will be noticed 100%.
+ * - Note: running the k/js tests in FF takes 15% longer than in Chrome. K/Wasm is fast in both
+ *   cases.
  */
 class CfWA11YTest : OnCanvasTests {
 
     @Test
     fun a11yButtonClick() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var clickCounter = 0
 
-        createComposeWindow {
-            Button(onClick = {
-                clickCounter++
-            }) {
-                Text("Button1")
-            }
-        }
+        createComposeWindow { Button(onClick = { clickCounter++ }) { Text("Button1") } }
 
         val a11yContainer = getA11YContainer()
         assertNotNull(a11yContainer)
@@ -117,26 +118,44 @@ class CfWA11YTest : OnCanvasTests {
     }
 
     @Test
+    fun mergeDescendantsMergesText() = runApplicationTest {
+        createComposeWindow {
+            Column(
+                modifier = Modifier.testTag("mergedItem").semantics(mergeDescendants = true) {}
+            ) {
+                Row { Text("Hello") }
+                Row { Text("World") }
+            }
+        }
+
+        awaitA11YChanges()
+
+        val mergedNode =
+            assertNotNull(
+                getShadowRoot().getElementById("mergedItem") as? HTMLElement,
+                "The merged semantics node must be present in the a11y tree",
+            )
+        assertEquals("Hello\nWorld", mergedNode.textContent)
+        assertEquals(0, mergedNode.children.length, "Merged text must not expose child nodes")
+    }
+
+    @Test
     fun changesAreApplied() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var clickCounter1 = 0
         var clickCounter2 = 0
 
         var showButton2 by mutableStateOf(false)
 
         createComposeWindow {
-            Button(onClick = {
-                clickCounter1++
-            }) {
-                Text("Button1")
-            }
+            Button(onClick = { clickCounter1++ }) { Text("Button1") }
 
             if (showButton2) {
-                Button(onClick = {
-                    clickCounter2++
-                }) {
-                    Text("Button2")
-                }
+                Button(onClick = { clickCounter2++ }) { Text("Button2") }
             }
         }
 
@@ -163,7 +182,6 @@ class CfWA11YTest : OnCanvasTests {
         assertEquals("Button2", button2.innerText)
         assertTrue(button2.isConnected)
 
-
         repeat(3) {
             button1.click()
             button2.click()
@@ -183,32 +201,22 @@ class CfWA11YTest : OnCanvasTests {
         var showButton2 by mutableStateOf(false)
 
         createComposeWindow {
-            Button(
-                modifier = Modifier.testTag("button1"),
-                onClick = {},
-            ) {
-                Text("Button1")
-            }
+            Button(modifier = Modifier.testTag("button1"), onClick = {}) { Text("Button1") }
 
             if (showButton2) {
-                Button(
-                    modifier = Modifier.testTag("button2"),
-                    onClick = {},
-                ) {
-                    Text("Button2")
-                }
+                Button(modifier = Modifier.testTag("button2"), onClick = {}) { Text("Button2") }
             }
         }
 
         awaitA11YChanges()
 
         val a11yContainer = assertNotNull(getA11YContainer())
-        val buttonBefore =
-            assertNotNull(getShadowRoot().getElementById("button1") as? HTMLElement)
+        val buttonBefore = assertNotNull(getShadowRoot().getElementById("button1") as? HTMLElement)
         var buttonWasRemoved = false
         val observer = createMutationObserver { removedNode ->
-            if (removedNode === buttonBefore ||
-                (removedNode as? HTMLElement)?.contains(buttonBefore) == true
+            if (
+                removedNode === buttonBefore ||
+                    (removedNode as? HTMLElement)?.contains(buttonBefore) == true
             ) {
                 buttonWasRemoved = true
             }
@@ -238,13 +246,9 @@ class CfWA11YTest : OnCanvasTests {
         var showButton2 by mutableStateOf(true)
 
         createComposeWindow {
-            Button(modifier = Modifier.testTag("button1"), onClick = {}) {
-                Text("Button1")
-            }
+            Button(modifier = Modifier.testTag("button1"), onClick = {}) { Text("Button1") }
             if (showButton2) {
-                Button(modifier = Modifier.testTag("button2"), onClick = {}) {
-                    Text("Button2")
-                }
+                Button(modifier = Modifier.testTag("button2"), onClick = {}) { Text("Button2") }
             }
         }
 
@@ -254,8 +258,8 @@ class CfWA11YTest : OnCanvasTests {
         val button2 = assertNotNull(getShadowRoot().getElementById("button2") as? HTMLElement)
         var button1WasRemoved = false
         val observer = createMutationObserver { removedNode ->
-            if (removedNode === button1 ||
-                (removedNode as? HTMLElement)?.contains(button1) == true
+            if (
+                removedNode === button1 || (removedNode as? HTMLElement)?.contains(button1) == true
             ) {
                 button1WasRemoved = true
             }
@@ -294,14 +298,13 @@ class CfWA11YTest : OnCanvasTests {
 
         awaitA11YChanges()
         val parent = assertNotNull(getShadowRoot().getElementById("parent") as? HTMLElement)
-        val buttons = (1..3).associateWith { item ->
-            assertNotNull(getShadowRoot().getElementById("button$item") as? HTMLElement)
-        }
+        val buttons =
+            (1..3).associateWith { item ->
+                assertNotNull(getShadowRoot().getElementById("button$item") as? HTMLElement)
+            }
         var parentWasRemoved = false
         val observer = createMutationObserver { removedNode ->
-            if (removedNode === parent ||
-                (removedNode as? HTMLElement)?.contains(parent) == true
-            ) {
+            if (removedNode === parent || (removedNode as? HTMLElement)?.contains(parent) == true) {
                 parentWasRemoved = true
             }
         }
@@ -331,21 +334,15 @@ class CfWA11YTest : OnCanvasTests {
     fun reparentedNodeRetainsItsElement() = runApplicationTest {
         var moveToSecondParent by mutableStateOf(false)
         val buttonInMovableContent = movableContentOf {
-            Button(modifier = Modifier.testTag("movableButton"), onClick = {}) {
-                Text("Movable")
-            }
+            Button(modifier = Modifier.testTag("movableButton"), onClick = {}) { Text("Movable") }
         }
 
         createComposeWindow {
             Column {
                 Box(modifier = Modifier.testTag("parent1")) {
-                    Button(modifier = Modifier.testTag("button1"), onClick = {}) {
-                        Text("Button1")
-                    }
+                    Button(modifier = Modifier.testTag("button1"), onClick = {}) { Text("Button1") }
                     if (!moveToSecondParent) buttonInMovableContent()
-                    Button(modifier = Modifier.testTag("button2"), onClick = {}) {
-                        Text("Button2")
-                    }
+                    Button(modifier = Modifier.testTag("button2"), onClick = {}) { Text("Button2") }
                 }
                 Box(modifier = Modifier.testTag("parent2")) {
                     if (moveToSecondParent) buttonInMovableContent()
@@ -357,16 +354,20 @@ class CfWA11YTest : OnCanvasTests {
         val parent1 = assertNotNull(getShadowRoot().getElementById("parent1") as? HTMLElement)
         val parent2 = assertNotNull(getShadowRoot().getElementById("parent2") as? HTMLElement)
 
-        val movableButton = assertNotNull(getShadowRoot().getElementById("movableButton") as? HTMLElement)
+        val movableButton =
+            assertNotNull(getShadowRoot().getElementById("movableButton") as? HTMLElement)
         val button1 = assertNotNull(getShadowRoot().getElementById("button1") as? HTMLElement)
         val button2 = assertNotNull(getShadowRoot().getElementById("button2") as? HTMLElement)
 
         var unaffectedNodeWasRemoved = false
         val observer = createMutationObserver { removedNode ->
-            if (removedNode === parent1 || removedNode === parent2 ||
-                removedNode === button1 || removedNode === button2 ||
-                (removedNode as? HTMLElement)?.contains(button1) == true ||
-                (removedNode as? HTMLElement)?.contains(button2) == true
+            if (
+                removedNode === parent1 ||
+                    removedNode === parent2 ||
+                    removedNode === button1 ||
+                    removedNode === button2 ||
+                    (removedNode as? HTMLElement)?.contains(button1) == true ||
+                    (removedNode as? HTMLElement)?.contains(button2) == true
             ) {
                 unaffectedNodeWasRemoved = true
             }
@@ -397,26 +398,24 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test
     fun orderOfElements() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var show1 by mutableStateOf(true)
         var show2 by mutableStateOf(false)
         var show3 by mutableStateOf(false)
 
         createComposeWindow {
             if (show1) {
-                Button(onClick = {}) {
-                    Text("Button1")
-                }
+                Button(onClick = {}) { Text("Button1") }
             }
             if (show2) {
-                Button(onClick = {}) {
-                    Text("Button2")
-                }
+                Button(onClick = {}) { Text("Button2") }
             }
             if (show3) {
-                Button(onClick = {}) {
-                    Text("Button3")
-                }
+                Button(onClick = {}) { Text("Button3") }
             }
         }
 
@@ -455,18 +454,20 @@ class CfWA11YTest : OnCanvasTests {
     }
 
     /**
-     * The tests use a TestCoroutineScope with delay skipping.
-     * In some cases we need a test to wait for some time, and that's the purpose of this function.
+     * The tests use a TestCoroutineScope with delay skipping. In some cases we need a test to wait
+     * for some time, and that's the purpose of this function.
      */
     suspend fun realDelay(timeMs: Long) {
-        withContext(Dispatchers.Default) {
-            delay(timeMs)
-        }
+        withContext(Dispatchers.Default) { delay(timeMs.milliseconds) }
     }
 
     @Test
     fun changesMustBeBatched() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var value by mutableStateOf(0)
 
         var recompositions = 0
@@ -478,11 +479,14 @@ class CfWA11YTest : OnCanvasTests {
         }
 
         val a11yContainer = getA11YContainer()!!
-        assertEquals("",a11yContainer.innerHTML)
-        assertEquals(0,a11yContainer.childElementCount)
+        assertEquals("", a11yContainer.innerHTML)
+        assertEquals(0, a11yContainer.childElementCount)
 
         awaitA11YChanges()
-        assertTrue(a11yContainer.innerHTML.contains("Text in Button - 0"), "Expected the button to be added in HTML")
+        assertTrue(
+            a11yContainer.innerHTML.contains("Text in Button - 0"),
+            "Expected the button to be added in HTML",
+        )
 
         recompositions = 0 // resetting because we're interested to count them only after this point
 
@@ -490,7 +494,10 @@ class CfWA11YTest : OnCanvasTests {
             value++
             awaitAnimationFrame()
             // No changes expected yet due to debounce
-            assertTrue(a11yContainer.innerHTML.contains("Text in Button - 0"), "The state is changing but we expect a debounce and no A11Y tree changes")
+            assertTrue(
+                a11yContainer.innerHTML.contains("Text in Button - 0"),
+                "The state is changing but we expect a debounce and no A11Y tree changes",
+            )
         }
 
         assertTrue(recompositions > 0, "The state has been changing, but no recompositions?")
@@ -509,27 +516,33 @@ class CfWA11YTest : OnCanvasTests {
 
         // The tolerance is quite large, but it's so to reduce the flakiness.
         // The idea is that the change is not expected to happen immediately, but with debounce.
-        assertTrue(waitedForChangesMs in 50..250, "Changes must be batched, waited for $waitedForChangesMs ms. Allowed tolerance was exceeded")
+        assertTrue(
+            waitedForChangesMs in 50..250,
+            "Changes must be batched, waited for $waitedForChangesMs ms. Allowed tolerance was exceeded",
+        )
     }
 
     @Test
     fun changesMustBeAppliedDespiteConstantDebounceAfter1Second() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var value by mutableStateOf(0)
 
-        createComposeWindow {
-            Button(onClick = {}) {
-                Text("Text in Button - $value")
-            }
-        }
+        createComposeWindow { Button(onClick = {}) { Text("Text in Button - $value") } }
 
         val a11yContainer = getA11YContainer()!!
 
-        assertEquals("",a11yContainer.innerHTML, "No A11Y tree expected yet")
-        assertEquals(0,a11yContainer.childElementCount, "No A11Y tree expected yet")
+        assertEquals("", a11yContainer.innerHTML, "No A11Y tree expected yet")
+        assertEquals(0, a11yContainer.childElementCount, "No A11Y tree expected yet")
 
         awaitA11YChanges()
-        assertTrue(a11yContainer.innerHTML.contains("Text in Button - 0"), "Button must be present in the A11Y tree")
+        assertTrue(
+            a11yContainer.innerHTML.contains("Text in Button - 0"),
+            "Button must be present in the A11Y tree",
+        )
 
         var changesAppliedTime = 0L
 
@@ -540,16 +553,23 @@ class CfWA11YTest : OnCanvasTests {
 
         // Make sure nothing else interferes with the A11Y tree
         realDelay(1200)
-        assertEquals(0, changesAppliedTime, "There were no state changes! Why did A11Y tree change?")
+        assertEquals(
+            0,
+            changesAppliedTime,
+            "There were no state changes! Why did A11Y tree change?",
+        )
 
         var debounceCounter = 0
         val startTime = currentTimeMillis()
 
-        while(changesAppliedTime == 0L) {
+        while (changesAppliedTime == 0L) {
             if (currentTimeMillis() - startTime > 2000) {
-                error("Changes must be applied after 1 second, waited for ${currentTimeMillis() - startTime} ms")
+                error(
+                    "Changes must be applied after 1 second, waited for ${currentTimeMillis() - startTime} ms"
+                )
             }
-            // Change the state every frame. Such changes must be "debounced", (time delta is less than 100ms)
+            // Change the state every frame. Such changes must be "debounced", (time delta is less
+            // than 100ms)
             value += 1
             awaitAnimationFrame()
 
@@ -564,13 +584,17 @@ class CfWA11YTest : OnCanvasTests {
         // Adding a tolerance of 200ms, just to avoid flakiness
         assertTrue(
             changesAppliedTime - startTime in (1000..1200),
-            "Changes must be applied after 1 second, waited for ${changesAppliedTime - startTime} ms"
+            "Changes must be applied after 1 second, waited for ${changesAppliedTime - startTime} ms",
         )
     }
 
     @Test
     fun noChangesFor1SecondTheDebounceShouldWork() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var show by mutableStateOf(true)
 
         var recompositions = 0
@@ -594,7 +618,10 @@ class CfWA11YTest : OnCanvasTests {
         repeat(10) {
             show = !show
             awaitAnimationFrame()
-            assertTrue(textEl.isConnected, "textEl must be connected despite value changes - debounce expected. (Iteration $it)")
+            assertTrue(
+                textEl.isConnected,
+                "textEl must be connected despite value changes - debounce expected. (Iteration $it)",
+            )
         }
 
         assertTrue(recompositions > 0, "The state has been changing, but no recompositions?")
@@ -607,7 +634,11 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test
     fun clickListenerMustBeUpdated() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var clickCounter1 = 0
         var clickCounter2 = 0
 
@@ -615,11 +646,13 @@ class CfWA11YTest : OnCanvasTests {
 
         createComposeWindow {
             Button(
-                onClick = if (clickListenerSwitch) {
-                { clickCounter1++ }
-            } else {
-                { clickCounter2++ }
-            }) {
+                onClick =
+                    if (clickListenerSwitch) {
+                        { clickCounter1++ }
+                    } else {
+                        { clickCounter2++ }
+                    }
+            ) {
                 Text("Click me")
             }
         }
@@ -656,13 +689,13 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test
     fun noA11YRootAndElementsWithDisabledA11Y() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
-        createComposeWindow(
-            configure = { isA11YEnabled = false }
-        ) {
-            Button(onClick = {}) {
-                Text("Button1")
-            }
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
+        createComposeWindow(configure = { isA11YEnabled = false }) {
+            Button(onClick = {}) { Text("Button1") }
         }
         assertNull(getA11YContainer())
 
@@ -680,18 +713,17 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test
     fun modifierTestTagIsSetToId() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var showButton by mutableStateOf(true)
         var clickCounter = 0
 
         createComposeWindow {
             if (showButton) {
-                Button(
-                    onClick = {
-                        clickCounter++
-                    },
-                    modifier = Modifier.testTag("buttonTag")
-                ) {
+                Button(onClick = { clickCounter++ }, modifier = Modifier.testTag("buttonTag")) {
                     Text("Button with a test tag")
                 }
             }
@@ -712,14 +744,18 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test
     fun textFieldHasTextBoxRole() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var text by mutableStateOf("Hello, World!")
 
         createComposeWindow {
             TextField(
                 value = text,
                 onValueChange = { text = it },
-                modifier = Modifier.testTag("textFieldTag")
+                modifier = Modifier.testTag("textFieldTag"),
             )
         }
 
@@ -785,10 +821,7 @@ class CfWA11YTest : OnCanvasTests {
     @Test
     fun progressIndicatorsHaveProgressbarRoleAndRangeValues() = runApplicationTest {
         createComposeWindow {
-            LinearProgressIndicator(
-                progress = 0.4f,
-                modifier = Modifier.testTag("progress"),
-            )
+            LinearProgressIndicator(progress = 0.4f, modifier = Modifier.testTag("progress"))
         }
 
         awaitA11YChanges()
@@ -803,9 +836,7 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test
     fun indeterminateProgressIndicatorOmitsRangeValues() = runApplicationTest {
-        createComposeWindow {
-            LinearProgressIndicator(modifier = Modifier.testTag("progress"))
-        }
+        createComposeWindow { LinearProgressIndicator(modifier = Modifier.testTag("progress")) }
 
         awaitA11YChanges()
 
@@ -845,15 +876,17 @@ class CfWA11YTest : OnCanvasTests {
             Column {
                 Text(
                     "Polite",
-                    modifier = Modifier
-                        .testTag("politeLiveRegion")
-                        .semantics { liveRegion = LiveRegionMode.Polite },
+                    modifier =
+                        Modifier.testTag("politeLiveRegion").semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
                 )
                 Text(
                     "Assertive",
-                    modifier = Modifier
-                        .testTag("assertiveLiveRegion")
-                        .semantics { liveRegion = LiveRegionMode.Assertive },
+                    modifier =
+                        Modifier.testTag("assertiveLiveRegion").semantics {
+                            liveRegion = LiveRegionMode.Assertive
+                        },
                 )
             }
         }
@@ -874,16 +907,13 @@ class CfWA11YTest : OnCanvasTests {
         createComposeWindow {
             Column {
                 Box(
-                    Modifier.testTag("checkbox").size(24.dp)
+                    Modifier.testTag("checkbox")
+                        .size(24.dp)
                         .semantics { role = Role.Checkbox }
-                        .clickable { }
+                        .clickable {}
                 )
-                Box(
-                    Modifier.testTag("tab").size(24.dp)
-                        .semantics { role = Role.Tab }
-                        .clickable { }
-                )
-                Box(Modifier.testTag("clickable").size(24.dp).clickable { })
+                Box(Modifier.testTag("tab").size(24.dp).semantics { role = Role.Tab }.clickable {})
+                Box(Modifier.testTag("clickable").size(24.dp).clickable {})
             }
         }
 
@@ -907,9 +937,7 @@ class CfWA11YTest : OnCanvasTests {
         var addSemantics by mutableStateOf(true)
 
         createComposeWindow {
-            Column(
-                modifier = if (addSemantics) Modifier.testTag("myColumn") else Modifier
-            ) {
+            Column(modifier = if (addSemantics) Modifier.testTag("myColumn") else Modifier) {
                 Text("ChildText")
             }
         }
@@ -934,16 +962,20 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test // https://youtrack.jetbrains.com/issue/CMP-8614
     fun clickableRemovalStopsFiringClick() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var clickCounter = 0
         var clickable by mutableStateOf(true)
 
         createComposeWindow {
             Text(
                 "Tap me",
-                modifier = Modifier
-                    .testTag("clickableText")
-                    .then(if (clickable) Modifier.clickable { clickCounter++ } else Modifier)
+                modifier =
+                    Modifier.testTag("clickableText")
+                        .then(if (clickable) Modifier.clickable { clickCounter++ } else Modifier),
             )
         }
 
@@ -972,24 +1004,25 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test
     fun clickOnNestedClickableBox() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var outerClickCounter = 0
         var innerClickCounter = 0
 
         createComposeWindow {
-            // A clickable Box is a "merging" semantics node (shouldMergeDescendantSemantics == true),
+            // A clickable Box is a "merging" semantics node (shouldMergeDescendantSemantics ==
+            // true),
             // so it survives the outer clickable's descendant-merge and stays as a separate
             // nested a11y node (the same way a Button stays separate inside a clickable Row).
-            Box(
-                modifier = Modifier
-                    .testTag("outerBox")
-                    .clickable { outerClickCounter++ }
-            ) {
+            Box(modifier = Modifier.testTag("outerBox").clickable { outerClickCounter++ }) {
                 Box(
-                    modifier = Modifier
-                        .padding(40.dp)
-                        .testTag("innerBox")
-                        .clickable { innerClickCounter++ }
+                    modifier =
+                        Modifier.padding(40.dp).testTag("innerBox").clickable {
+                            innerClickCounter++
+                        }
                 ) {
                     Text("Nested text")
                 }
@@ -1008,34 +1041,45 @@ class CfWA11YTest : OnCanvasTests {
         assertTrue(a11yContainer.contains(innerBox))
         assertNotNull(innerBox, "Nested clickable box must be present in the a11y tree")
         assertEquals("button", innerBox.getAttribute("role"))
-        assertTrue(outerBox.contains(innerBox), "Nested box must be nested inside the outer box a11y node")
+        assertTrue(
+            outerBox.contains(innerBox),
+            "Nested box must be nested inside the outer box a11y node",
+        )
 
         // A click where event.target is the nested clickable element must fire
         // the INNER click action (the innermost clickable wins), not the outer one
         innerBox.click()
         assertEquals(1, innerClickCounter, "Clicking the nested box must fire its own click action")
-        assertEquals(0, outerClickCounter, "Clicking the nested box must not fire the outer click action")
+        assertEquals(
+            0,
+            outerClickCounter,
+            "Clicking the nested box must not fire the outer click action",
+        )
 
         // A click where event.target is the outer element fires the outer click action
         outerBox.click()
         assertEquals(1, outerClickCounter, "Clicking the outer box must fire its own click action")
-        assertEquals(1, innerClickCounter, "Clicking the outer box must not fire the nested click action")
+        assertEquals(
+            1,
+            innerClickCounter,
+            "Clicking the outer box must not fire the nested click action",
+        )
     }
 
     @Test
     fun stopRemovesClickListenerAndStopsA11YUpdates() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var clickCounter = 0
         var showButton2 by mutableStateOf(false)
 
         createComposeWindow {
-            Button(onClick = { clickCounter++ }) {
-                Text("Button1")
-            }
+            Button(onClick = { clickCounter++ }) { Text("Button1") }
             if (showButton2) {
-                Button(onClick = {}) {
-                    Text("Button2")
-                }
+                Button(onClick = {}) { Text("Button2") }
             }
         }
 
@@ -1062,7 +1106,11 @@ class CfWA11YTest : OnCanvasTests {
             listener.start(CoroutineScope(EmptyCoroutineContext))
         }
 
-        assertEquals(0, a11yContainer.childElementCount, "A11Y tree must be cleared from the DOM after stop()")
+        assertEquals(
+            0,
+            a11yContainer.childElementCount,
+            "A11Y tree must be cleared from the DOM after stop()",
+        )
 
         button1.click()
         assertEquals(1, clickCounter, "Click listener must be removed after stop()")
@@ -1077,7 +1125,11 @@ class CfWA11YTest : OnCanvasTests {
 
     @Test // https://youtrack.jetbrains.com/issue/CMP-8614
     fun disabledButtonAriaDisabledAndClickBehavior() = runApplicationTest {
-        assertEquals(0, getContainer().childElementCount, "No content expected before a composition")
+        assertEquals(
+            0,
+            getContainer().childElementCount,
+            "No content expected before a composition",
+        )
         var clickCounter = 0
         var buttonEnabled by mutableStateOf(true)
 
@@ -1085,7 +1137,7 @@ class CfWA11YTest : OnCanvasTests {
             Button(
                 onClick = { clickCounter++ },
                 enabled = buttonEnabled,
-                modifier = Modifier.testTag("disabledButtonTestTag")
+                modifier = Modifier.testTag("disabledButtonTestTag"),
             ) {
                 Text("Button")
             }
@@ -1096,7 +1148,10 @@ class CfWA11YTest : OnCanvasTests {
         val button = getShadowRoot().getElementById("disabledButtonTestTag") as? HTMLElement
         assertNotNull(button)
         assertEquals("button", button.getAttribute("role"))
-        assertNull(button.getAttribute("aria-disabled"), "Button should not have aria-disabled when enabled")
+        assertNull(
+            button.getAttribute("aria-disabled"),
+            "Button should not have aria-disabled when enabled",
+        )
 
         button.click()
         assertEquals(1, clickCounter, "Enabled button must fire click action")
@@ -1105,7 +1160,11 @@ class CfWA11YTest : OnCanvasTests {
         buttonEnabled = false
         awaitA11YChanges()
 
-        assertEquals("true", button.getAttribute("aria-disabled"), "Button must have aria-disabled=\"true\" when disabled")
+        assertEquals(
+            "true",
+            button.getAttribute("aria-disabled"),
+            "Button must have aria-disabled=\"true\" when disabled",
+        )
         button.click()
         assertEquals(1, clickCounter, "Disabled button must not fire click action")
 
@@ -1113,7 +1172,10 @@ class CfWA11YTest : OnCanvasTests {
         buttonEnabled = true
         awaitA11YChanges()
 
-        assertNull(button.getAttribute("aria-disabled"), "Button must not have aria-disabled when re-enabled")
+        assertNull(
+            button.getAttribute("aria-disabled"),
+            "Button must not have aria-disabled when re-enabled",
+        )
         button.click()
         assertEquals(2, clickCounter, "Re-enabled button must fire click action")
     }
@@ -1130,9 +1192,9 @@ class CfWA11YTest : OnCanvasTests {
             // Conditionally add/remove the entire graphicsLayer modifier so
             // the modifier chain rebuild triggers semantics invalidation.
             Spacer(
-                modifier = if (enableClip)
-                    Modifier.graphicsLayer(clip = true, shape = RectangleShape)
-                else Modifier
+                modifier =
+                    if (enableClip) Modifier.graphicsLayer(clip = true, shape = RectangleShape)
+                    else Modifier
             )
             Text("Sibling")
         }

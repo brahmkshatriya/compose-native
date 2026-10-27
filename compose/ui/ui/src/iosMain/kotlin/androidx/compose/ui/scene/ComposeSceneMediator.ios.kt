@@ -16,16 +16,17 @@
 
 package androidx.compose.ui.scene
 
+import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.CompositionLocalContext
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.annotation.VisibleForTesting
+import androidx.compose.ui.ExperimentalMediaQueryApi
 import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.UiMediaScope
 import androidx.compose.ui.draganddrop.IosDragAndDropManager
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -38,8 +39,8 @@ import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.internal
 import androidx.compose.ui.input.key.PointerKeyboardModifiers
+import androidx.compose.ui.input.key.internal
 import androidx.compose.ui.input.key.toComposeEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.HistoricalChange
@@ -47,6 +48,7 @@ import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.isCtrlPressed
@@ -55,41 +57,32 @@ import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.layout.OffsetToFocusedRect
 import androidx.compose.ui.navigationevent.IosBackNavigationEventInput
 import androidx.compose.ui.platform.AccessibilityMediator
+import androidx.compose.ui.platform.ApplicationIdleTimer
 import androidx.compose.ui.platform.CUPERTINO_TOUCH_SLOP
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.DefaultInputModeManager
 import androidx.compose.ui.platform.DelegateRootForTestListener
 import androidx.compose.ui.platform.FrameChoreographer
+import androidx.compose.ui.platform.IosUiMediaScope
 import androidx.compose.ui.platform.PlatformArchitectureComponentsOwner
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.PlatformScreenReader
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
-import androidx.compose.ui.platform.WindowContext
-import androidx.compose.ui.platform.ApplicationIdleTimer
 import androidx.compose.ui.platform.TaskDispatchers
 import androidx.compose.ui.platform.TextInputService
-import androidx.compose.ui.platform.WindowInsetsManager
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.compose.ui.platform.WindowContext
 import androidx.compose.ui.platform.WindowInfo
+import androidx.compose.ui.platform.WindowInsetsManager
+import androidx.compose.ui.platform.createPlatformClipboard
+import androidx.compose.ui.platform.createPlatformUriHandler
 import androidx.compose.ui.semantics.SemanticsOwner
-import androidx.compose.ui.uikit.InterfaceOrientation
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.uikit.LocalTextInputContainer
 import androidx.compose.ui.uikit.LocalUIView
 import androidx.compose.ui.uikit.OnFocusBehavior
-import androidx.compose.ui.uikit.density
-import androidx.compose.ui.uikit.toNanoSeconds
-import androidx.compose.ui.input.key.internal
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
-import androidx.compose.ui.input.pointer.isAltPressed
-import androidx.compose.ui.input.pointer.isCtrlPressed
-import androidx.compose.ui.input.pointer.isMetaPressed
-import androidx.compose.ui.input.pointer.isShiftPressed
-import androidx.compose.ui.platform.Clipboard
-import androidx.compose.ui.platform.UriHandler
-import androidx.compose.ui.platform.createPlatformClipboard
-import androidx.compose.ui.platform.createPlatformUriHandler
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.DpOffset
@@ -105,15 +98,15 @@ import androidx.compose.ui.unit.toDpRect
 import androidx.compose.ui.unit.toDpSize
 import androidx.compose.ui.unit.toOffset
 import androidx.compose.ui.unit.toSize
+import androidx.compose.ui.viewinterop.InteropSyncTransaction
+import androidx.compose.ui.viewinterop.IosInteropContainer
 import androidx.compose.ui.viewinterop.LocalInteropContainer
 import androidx.compose.ui.viewinterop.TrackInteropPlacementContainer
-import androidx.compose.ui.viewinterop.IosInteropContainer
-import androidx.compose.ui.viewinterop.InteropSyncTransaction
 import androidx.compose.ui.window.BackgroundInputView
 import androidx.compose.ui.window.FocusedViewsList
+import androidx.compose.ui.window.IosPrefetchScheduler
 import androidx.compose.ui.window.KeyboardInsetsManager
 import androidx.compose.ui.window.OverlayInputView
-import androidx.compose.ui.window.IosPrefetchScheduler
 import androidx.compose.ui.window.TouchesEventKind
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration.Companion.seconds
@@ -142,11 +135,13 @@ import platform.UIKit.UITouchTypePencil
 import platform.UIKit.UIView
 
 /**
- * iOS specific-implementation of [PlatformContext.SemanticsOwnerListener] used to track changes in [SemanticsOwner].
+ * iOS specific-implementation of [PlatformContext.SemanticsOwnerListener] used to track changes in
+ * [SemanticsOwner].
  *
  * @property view The UI container associated with the semantics owner.
  * @property coroutineContext The coroutine context to use for handling semantics changes.
- * @property performEscape A lambda to delegate accessibility escape operation. Returns true if the escape was handled, false otherwise.
+ * @property performEscape A lambda to delegate accessibility escape operation. Returns true if the
+ *   escape was handled, false otherwise.
  */
 private class SemanticsOwnerListenerImpl(
     private val view: UIView,
@@ -165,15 +160,15 @@ private class SemanticsOwnerListenerImpl(
 
     override fun onSemanticsOwnerAppended(semanticsOwner: SemanticsOwner) {
         if (accessibilityMediator == null) {
-            accessibilityMediator = AccessibilityMediator(
-                view,
-                semanticsOwner,
-                coroutineContext,
-                performEscape,
-                onScreenReaderActive
-            ).also {
-                it.isEnabled = isEnabled
-            }
+            accessibilityMediator =
+                AccessibilityMediator(
+                        view,
+                        semanticsOwner,
+                        coroutineContext,
+                        performEscape,
+                        onScreenReaderActive,
+                    )
+                    .also { it.isEnabled = isEnabled }
         }
     }
 
@@ -197,7 +192,8 @@ private class SemanticsOwnerListenerImpl(
         }
     }
 
-    val hasInvalidations: Boolean get() = accessibilityMediator?.hasPendingInvalidations ?: false
+    val hasInvalidations: Boolean
+        get() = accessibilityMediator?.hasPendingInvalidations ?: false
 
     fun dispose() {
         accessibilityMediator?.dispose()
@@ -214,72 +210,74 @@ internal class ComposeSceneMediator(
     private val architectureComponentsOwner: PlatformArchitectureComponentsOwner,
     val coroutineContext: CoroutineContext,
     private val navigationEventInput: IosBackNavigationEventInput,
-    interfaceOrientationState: State<InterfaceOrientation>,
+    private val mediaScope: IosUiMediaScope,
     composeSceneFactory: (platformContext: PlatformContext) -> ComposeScene,
     private val schedulePendingInteropViewUpdates: () -> Unit = {},
 ) {
     private var onPreviewKeyEvent: (KeyEvent) -> Boolean = { false }
     private var onKeyEvent: (KeyEvent) -> Boolean = { false }
     private var animateKeyboardOffsetChanges by mutableStateOf(false)
-    private val platformScreenReader = object : PlatformScreenReader {
-        override var isActive by mutableStateOf(false)
-    }
+    private val platformScreenReader =
+        object : PlatformScreenReader {
+            override var isActive by mutableStateOf(false)
+        }
     private val activitiesHandler = frameChoreographer.createActivitiesHandler()
 
     private val coroutineScope = CoroutineScope(coroutineContext)
 
-    private val isActive get() = coroutineContext.isActive
+    private val isActive
+        get() = coroutineContext.isActive
 
-    private val prefetchScheduler = IosPrefetchScheduler(
-        onPrefetchVoteChanged = { isVoteActive ->
-            if (isVoteActive) {
-                activitiesHandler.onActivitiesStarted()
-            } else {
-                activitiesHandler.onActivitiesEnded()
+    private val prefetchScheduler =
+        IosPrefetchScheduler(
+            onPrefetchVoteChanged = { isVoteActive ->
+                if (isVoteActive) {
+                    activitiesHandler.onActivitiesStarted()
+                } else {
+                    activitiesHandler.onActivitiesEnded()
+                }
             }
-        }
-    )
+        )
 
     /**
      * Indicates that a draw happened in the current display-link interval so
-     * [FrameChoreographer.Listener.onOutOfFrame] can determine whether pending interop view
-     * updates still need a host draw, and the prefetch scheduler can tell whether the draw loop
-     * was idle.
+     * [FrameChoreographer.Listener.onOutOfFrame] can determine whether pending interop view updates
+     * still need a host draw, and the prefetch scheduler can tell whether the draw loop was idle.
      */
     private var didDrawSinceDisplayLink = false
-    private val frameChoreographerListener = object : FrameChoreographer.Listener {
-        override fun onDisplayLinkTick() {
-            didDrawSinceDisplayLink = false
-        }
-
-        override fun onOutOfFrame(
-            lastFrameTimestamp: NSTimeInterval,
-            targetTimestamp: NSTimeInterval
-        ) {
-            if (!didDrawSinceDisplayLink && interopContainer.hasPendingViewUpdatesOnly) {
-                schedulePendingInteropViewUpdates()
+    private val frameChoreographerListener =
+        object : FrameChoreographer.Listener {
+            override fun onDisplayLinkTick() {
+                didDrawSinceDisplayLink = false
             }
 
-            prefetchScheduler.execute(
-                lastFrameTimestamp = lastFrameTimestamp,
-                targetTimestamp = targetTimestamp,
-                didDraw = didDrawSinceDisplayLink,
-            )
+            override fun onOutOfFrame(
+                lastFrameTimestamp: NSTimeInterval,
+                targetTimestamp: NSTimeInterval,
+            ) {
+                if (!didDrawSinceDisplayLink && interopContainer.hasPendingViewUpdatesOnly) {
+                    schedulePendingInteropViewUpdates()
+                }
+
+                prefetchScheduler.execute(
+                    lastFrameTimestamp = lastFrameTimestamp,
+                    targetTimestamp = targetTimestamp,
+                    didDraw = didDrawSinceDisplayLink,
+                )
+            }
         }
-    }
 
     private val viewConfiguration: ViewConfiguration =
         object : ViewConfiguration by PlatformContext.DefaultViewConfiguration {
             override val touchSlop: Float
-                get() = with(screenDensity) {
-                    // this value is originating from iOS 16 drag behavior reverse engineering
-                    CUPERTINO_TOUCH_SLOP.dp.toPx()
-                }
+                get() =
+                    with(screenDensity) {
+                        // this value is originating from iOS 16 drag behavior reverse engineering
+                        CUPERTINO_TOUCH_SLOP.dp.toPx()
+                    }
         }
 
-    private val scene: ComposeScene by lazy {
-        composeSceneFactory(IosPlatformContext())
-    }
+    private val scene: ComposeScene by lazy { composeSceneFactory(IosPlatformContext()) }
 
     private var composeSceneSize: IntSize?
         get() = scene.size
@@ -299,7 +297,8 @@ internal class ComposeSceneMediator(
      * composeSceneDensity without regressions (merging [screenDensity] and [composeSceneDensity]
      * into one causes rendering and interaction issues because they are semantically different).
      */
-    val composeSceneDensity: Density get() = scene.density
+    val composeSceneDensity: Density
+        get() = scene.density
 
     fun setComposeSceneFontScale(fontScale: Float) {
         if (isActive) {
@@ -320,7 +319,8 @@ internal class ComposeSceneMediator(
      * This value is intentionally separate from [composeSceneDensity] so we can support setting
      * [composeSceneDensity] without regressions.
      */
-    private val screenDensity: Density get() = windowContext.screenDensity
+    private val screenDensity: Density
+        get() = windowContext.screenDensity
 
     var layoutDirection: LayoutDirection
         get() = scene.layoutDirection
@@ -338,77 +338,81 @@ internal class ComposeSceneMediator(
             }
         }
 
-    val hasInteropViews: Boolean get() = interopContainer.hasInteropViews
+    val hasInteropViews: Boolean
+        get() = interopContainer.hasInteropViews
 
     /**
-     * Primary view to handle user input.
-     * Also, it is used as a root container view for accessibility and text input.
+     * Primary view to handle user input. Also, it is used as a root container view for
+     * accessibility and text input.
      */
-    private val _overlayView: OverlayInputView = OverlayInputView(
-        hitTestInteropView = ::hitTestInteropView,
-        isPointInsideInteractionBounds = ::isPointInsideInteractionBounds,
-        onTouchesEvent = ::onTouchesEvent,
-        onCancelAllTouches = ::onCancelAllTouches,
-        onScrollEvent = ::onScrollEvent,
-        onCancelScroll = ::onCancelScroll,
-        onPinchEvent = ::onPinchEvent,
-        onCancelPinch = ::onCancelPinch,
-        onHoverEvent = ::onHoverEvent,
-        onKeyboardPresses = ::onKeyboardPresses,
-        isHigherPriorityGestureTrackingTouches = navigationEventInput::isBackGestureTrackingTouches,
-        onRemoveSubview = {
-            CoroutineScope(coroutineContext).launch {
-                finishUnattachedKeysPresses()
-            }
-        },
-        onHasWindowChanged = { hasWindow ->
-            if (hasWindow) {
-                keyboardManager.start()
-                focusOverlayViewIfNeeded()
-            } else {
-                keyboardManager.stop()
-            }
-        }
-    )
+    private val _overlayView: OverlayInputView =
+        OverlayInputView(
+            hitTestInteropView = ::hitTestInteropView,
+            isPointInsideInteractionBounds = ::isPointInsideInteractionBounds,
+            onTouchesEvent = ::onTouchesEvent,
+            onCancelAllTouches = ::onCancelAllTouches,
+            onScrollEvent = ::onScrollEvent,
+            onCancelScroll = ::onCancelScroll,
+            onPinchEvent = ::onPinchEvent,
+            onCancelPinch = ::onCancelPinch,
+            onHoverEvent = ::onHoverEvent,
+            onKeyboardPresses = ::onKeyboardPresses,
+            isHigherPriorityGestureTrackingTouches =
+                navigationEventInput::isBackGestureTrackingTouches,
+            onRemoveSubview = {
+                CoroutineScope(coroutineContext).launch { finishUnattachedKeysPresses() }
+            },
+            onHasWindowChanged = { hasWindow ->
+                if (hasWindow) {
+                    keyboardManager.start()
+                    focusOverlayViewIfNeeded()
+                } else {
+                    keyboardManager.stop()
+                }
+            },
+        )
 
-    val overlayView: UIView get() = _overlayView
+    val overlayView: UIView
+        get() = _overlayView
 
     /**
-     * A holder for interop views that located below the Metal canvas.
-     * The view handles user touches that occur only over the interop views located on it.
+     * A holder for interop views that located below the Metal canvas. The view handles user touches
+     * that occur only over the interop views located on it.
      */
-    private val _backgroundView = BackgroundInputView(
-        onLayoutSubviews = ::updateLayout,
-        hitTestInteropView = ::hitTestInteropView,
-        isPointInsideInteractionBounds = ::isPointInsideInteractionBounds,
-        onTouchesEvent = ::onTouchesEvent,
-        onCancelAllTouches = ::onCancelAllTouches,
-        isHigherPriorityGestureTrackingTouches = navigationEventInput::isBackGestureTrackingTouches
-    )
+    private val _backgroundView =
+        BackgroundInputView(
+            onLayoutSubviews = ::updateLayout,
+            hitTestInteropView = ::hitTestInteropView,
+            isPointInsideInteractionBounds = ::isPointInsideInteractionBounds,
+            onTouchesEvent = ::onTouchesEvent,
+            onCancelAllTouches = ::onCancelAllTouches,
+            isHigherPriorityGestureTrackingTouches =
+                navigationEventInput::isBackGestureTrackingTouches,
+        )
 
-    val backgroundView: UIView get() = _backgroundView
+    val backgroundView: UIView
+        get() = _backgroundView
 
-    /**
-     * Container for managing UIKitView and UIKitViewController
-     */
-    private val interopContainer = IosInteropContainer(
-        overlayContainer = _overlayView,
-        backgroundContainer = _backgroundView,
-        requestRedraw = frameChoreographer::requestFrame,
-    )
+    /** Container for managing UIKitView and UIKitViewController */
+    private val interopContainer =
+        IosInteropContainer(
+            overlayContainer = _overlayView,
+            backgroundContainer = _backgroundView,
+            requestRedraw = frameChoreographer::requestFrame,
+        )
 
-    private val dragAndDropManager = IosDragAndDropManager(
-        view = _overlayView,
-        getComposeRootDragAndDropNode = { scene.rootDragAndDropNode },
-    )
+    private val dragAndDropManager =
+        IosDragAndDropManager(
+            view = _overlayView,
+            getComposeRootDragAndDropNode = { scene.rootDragAndDropNode },
+        )
 
-    private val windowInsetsManager = WindowInsetsManager(
-        windowInsetsViews = listOf(
-            { _overlayView },
-            { windowContext.window?.rootViewController?.view },
-        ),
-        interfaceOrientation = interfaceOrientationState
-    )
+    private val windowInsetsManager =
+        WindowInsetsManager(
+            windowInsetsViews =
+                listOf({ _overlayView }, { windowContext.window?.rootViewController?.view }),
+            interfaceOrientation = mediaScope.interfaceOrientationState,
+        )
 
     /**
      * A callback to define whether the precondition for the user input view hit test is met.
@@ -431,7 +435,7 @@ internal class ComposeSceneMediator(
 
                 down || up
             },
-            onScreenReaderActive = { platformScreenReader.isActive = it }
+            onScreenReaderActive = { platformScreenReader.isActive = it },
         )
     }
 
@@ -456,50 +460,51 @@ internal class ComposeSceneMediator(
                     animateKeyboardOffsetChanges = false
                     windowInsetsManager.keyboardOverlapHeight.value = heightPx
                 }
-            }
+            },
         )
     }
 
     private val textInputService =
         TextInputService(
             updateView = {
-                frameChoreographer.performFrameIfNeeded()
-                scene.measureAndLayout()
+                frameChoreographer.performRecomposerFrameIfNeeded()
+                requestMeasureAndLayout()
                 CATransaction.flush()
             },
             view = _overlayView,
             viewConfiguration = viewConfiguration,
             focusedViewsList = focusedViewsList,
-            listener = object : TextInputService.Listener {
-                override fun onInputWillStart() {
-                    keyboardManager.awaitKeyboardFrameIfNeeded()
-                }
-                override fun onInputDidStart() {
-                    animateKeyboardOffsetChanges = true
-                }
-                override fun onInputDidStop() {
-                    keyboardManager.cancelAwaitingKeyboardFrame()
-                }
-            },
+            listener =
+                object : TextInputService.Listener {
+                    override fun onInputWillStart() {
+                        keyboardManager.awaitKeyboardFrameIfNeeded()
+                    }
+
+                    override fun onInputDidStart() {
+                        animateKeyboardOffsetChanges = true
+                    }
+
+                    override fun onInputDidStop() {
+                        keyboardManager.cancelAwaitingKeyboardFrame()
+                    }
+                },
             focusManager = { scene.focusManager },
             coroutineContext = coroutineContext,
         )
 
     private val textInputServiceAdapter by lazy {
-        TextInputServiceAdapter(
-            textInputService,
-            coroutineScope
-        )
+        TextInputServiceAdapter(textInputService, coroutineScope)
     }
 
-    val hasInvalidations: Boolean get() {
-        return scene.hasInvalidations() ||
-            frameChoreographer.frameRecomposer.hasPendingWork() ||
-            keyboardManager.hasPendingWork ||
-            isLayoutTransitionAnimating ||
-            semanticsOwnerListener.hasInvalidations ||
-            textInputService.hasInvalidations
-    }
+    val hasInvalidations: Boolean
+        get() {
+            return scene.hasInvalidations() ||
+                frameChoreographer.frameRecomposer.hasPendingWork() ||
+                keyboardManager.hasPendingWork ||
+                isLayoutTransitionAnimating ||
+                semanticsOwnerListener.hasInvalidations ||
+                textInputService.hasInvalidations
+        }
 
     init {
         coroutineContext.job.invokeOnCompletion { dispose() }
@@ -512,41 +517,43 @@ internal class ComposeSceneMediator(
             val interopView = scene.hitTestInteropView(position)
 
             // Find a group of a holder associated with a given interop view or view controller
-            interopView?.let {
-                interopContainer.groupForInteropView(it)
-            }
+            interopView?.let { interopContainer.groupForInteropView(it) }
         }
 
+    @OptIn(ExperimentalMediaQueryApi::class)
     private fun onScrollEvent(
         position: DpOffset,
         delta: DpOffset,
         event: UIEvent?,
-        eventKind: TouchesEventKind
+        eventKind: TouchesEventKind,
     ) {
-        val eventType = when (eventKind) {
-            TouchesEventKind.BEGAN -> {
-                activitiesHandler.onActivitiesStarted()
-                PointerEventType.PanStart
+        mediaScope.updatePointerPrecision(UiMediaScope.PointerPrecision.Fine)
+        val eventType =
+            when (eventKind) {
+                TouchesEventKind.BEGAN -> {
+                    activitiesHandler.onActivitiesStarted()
+                    PointerEventType.PanStart
+                }
+                TouchesEventKind.MOVED -> {
+                    PointerEventType.PanMove
+                }
+                TouchesEventKind.ENDED -> {
+                    activitiesHandler.onActivitiesEnded()
+                    PointerEventType.PanEnd
+                }
             }
-            TouchesEventKind.MOVED -> {
-                PointerEventType.PanMove
-            }
-            TouchesEventKind.ENDED -> {
-                activitiesHandler.onActivitiesEnded()
-                PointerEventType.PanEnd
-            }
-        }
 
         scene.sendPointerEvent(
             eventType = eventType,
-            pointers = listOf(
-                ComposeScenePointer(
-                    id = PointerId(0),
-                    position = position.toOffset(composeSceneDensity),
-                    pressed = false,
-                    type = PointerType.Mouse,
-                )
-            ),
+            pointers =
+                listOf(
+                    ComposeScenePointer(
+                        id = PointerId(0),
+                        position = position.toOffset(composeSceneDensity),
+                        pressed = false,
+                        type = PointerType.Mouse,
+                    )
+                ),
             timeMillis = event.timeMillis,
             nativeEvent = event,
             keyboardModifiers = PointerKeyboardModifiers(modifierFlags = event.modifierFlagsOrZero),
@@ -558,32 +565,34 @@ internal class ComposeSceneMediator(
         position: DpOffset,
         scale: Float,
         event: UIEvent?,
-        eventKind: TouchesEventKind
+        eventKind: TouchesEventKind,
     ) {
-        val eventType = when (eventKind) {
-            TouchesEventKind.BEGAN -> {
-                activitiesHandler.onActivitiesStarted()
-                PointerEventType.ScaleStart
+        val eventType =
+            when (eventKind) {
+                TouchesEventKind.BEGAN -> {
+                    activitiesHandler.onActivitiesStarted()
+                    PointerEventType.ScaleStart
+                }
+                TouchesEventKind.MOVED -> {
+                    PointerEventType.ScaleChange
+                }
+                TouchesEventKind.ENDED -> {
+                    activitiesHandler.onActivitiesEnded()
+                    PointerEventType.ScaleEnd
+                }
             }
-            TouchesEventKind.MOVED -> {
-                PointerEventType.ScaleChange
-            }
-            TouchesEventKind.ENDED -> {
-                activitiesHandler.onActivitiesEnded()
-                PointerEventType.ScaleEnd
-            }
-        }
 
         scene.sendPointerEvent(
             eventType = eventType,
-            pointers = listOf(
-                ComposeScenePointer(
-                    id = PointerId(0),
-                    position = position.toOffset(composeSceneDensity),
-                    pressed = false,
-                    type = PointerType.Mouse,
-                )
-            ),
+            pointers =
+                listOf(
+                    ComposeScenePointer(
+                        id = PointerId(0),
+                        position = position.toOffset(composeSceneDensity),
+                        pressed = false,
+                        type = PointerType.Mouse,
+                    )
+                ),
             timeMillis = event.timeMillis,
             nativeEvent = event,
             keyboardModifiers = PointerKeyboardModifiers(modifierFlags = event.modifierFlagsOrZero),
@@ -591,30 +600,30 @@ internal class ComposeSceneMediator(
         )
     }
 
-    private fun onHoverEvent(
-        position: DpOffset,
-        event: UIEvent?,
-        eventKind: TouchesEventKind
-    ) {
-        val eventType = when (eventKind) {
-            TouchesEventKind.BEGAN -> PointerEventType.Enter
-            TouchesEventKind.MOVED -> PointerEventType.Move
-            TouchesEventKind.ENDED -> PointerEventType.Exit
-        }
+    @OptIn(ExperimentalMediaQueryApi::class)
+    private fun onHoverEvent(position: DpOffset, event: UIEvent?, eventKind: TouchesEventKind) {
+        mediaScope.updatePointerPrecision(UiMediaScope.PointerPrecision.Fine)
+        val eventType =
+            when (eventKind) {
+                TouchesEventKind.BEGAN -> PointerEventType.Enter
+                TouchesEventKind.MOVED -> PointerEventType.Move
+                TouchesEventKind.ENDED -> PointerEventType.Exit
+            }
 
         scene.sendPointerEvent(
             eventType = eventType,
-            pointers = listOf(
-                ComposeScenePointer(
-                    id = PointerId(0),
-                    position = position.toOffset(composeSceneDensity),
-                    pressed = false,
-                    type = PointerType.Mouse,
-                )
-            ),
+            pointers =
+                listOf(
+                    ComposeScenePointer(
+                        id = PointerId(0),
+                        position = position.toOffset(composeSceneDensity),
+                        pressed = false,
+                        type = PointerType.Mouse,
+                    )
+                ),
             timeMillis = event.timeMillis,
             nativeEvent = event,
-            keyboardModifiers = PointerKeyboardModifiers(modifierFlags = event.modifierFlagsOrZero)
+            keyboardModifiers = PointerKeyboardModifiers(modifierFlags = event.modifierFlagsOrZero),
         )
     }
 
@@ -633,11 +642,12 @@ internal class ComposeSceneMediator(
         scene.cancelPointerInput()
     }
 
+    @OptIn(ExperimentalMediaQueryApi::class)
     private fun onTouchesEvent(
         allTrackedTouches: Set<UITouch>,
         changedTouches: Set<UITouch>,
         event: UIEvent?,
-        eventKind: TouchesEventKind
+        eventKind: TouchesEventKind,
     ): PointerEventResult {
         when (eventKind) {
             TouchesEventKind.BEGAN -> activitiesHandler.onActivitiesStarted(changedTouches.count())
@@ -645,70 +655,80 @@ internal class ComposeSceneMediator(
             TouchesEventKind.MOVED -> {}
         }
 
-        val pointers = allTrackedTouches.mapIndexed { index, touch ->
-            val position = touch.offsetInView(_backgroundView, screenDensity.density)
-            val pointerType = when (touch.type) {
-                UITouchTypeDirect -> PointerType.Touch
-                UITouchTypeIndirect, UITouchTypeIndirectPointer -> PointerType.Mouse
-                UITouchTypePencil -> PointerType.Stylus
-                else -> PointerType.Touch
+        var anyTouchIsStylus = false
+        val pointers =
+            allTrackedTouches.mapIndexed { index, touch ->
+                val position = touch.offsetInView(_backgroundView, screenDensity.density)
+                val pointerType =
+                    when (touch.type) {
+                        UITouchTypeDirect -> PointerType.Touch
+                        UITouchTypeIndirect,
+                        UITouchTypeIndirectPointer -> PointerType.Mouse
+                        UITouchTypePencil -> {
+                            anyTouchIsStylus = true
+                            PointerType.Stylus
+                        }
+                        else -> PointerType.Touch
+                    }
+                val id =
+                    touch.hashCode().toLong().takeIf { pointerType != PointerType.Mouse }
+                        ?: index.toLong()
+                ComposeScenePointer(
+                    id = PointerId(id),
+                    position = position,
+                    pressed = touch.isPressed,
+                    type = pointerType,
+                    pressure = touch.force.toFloat(),
+                    historical =
+                        event?.historicalChangesForTouch(touch, _overlayView, screenDensity.density)
+                            ?: emptyList(),
+                )
             }
-            val id = touch.hashCode().toLong().takeIf {
-                pointerType != PointerType.Mouse
-            } ?: index.toLong()
-            ComposeScenePointer(
-                id = PointerId(id),
-                position = position,
-                pressed = touch.isPressed,
-                type = pointerType,
-                pressure = touch.force.toFloat(),
-                historical = event?.historicalChangesForTouch(
-                    touch,
-                    _overlayView,
-                    screenDensity.density
-                ) ?: emptyList()
-            )
+
+        if (anyTouchIsStylus) {
+            mediaScope.updatePointerPrecision(UiMediaScope.PointerPrecision.Fine)
+        } else {
+            mediaScope.updatePointerPrecision(UiMediaScope.PointerPrecision.Coarse)
         }
 
         // UIKit sends buttonMask that was before the release action. It should be empty if no
         // pressed pointers left.
-        val pointerButtonsMask = event.buttonMaskOrZero.takeIf {
-            pointers.any { it.pressed }
-        } ?: 0L
+        val pointerButtonsMask = event.buttonMaskOrZero.takeIf { pointers.any { it.pressed } } ?: 0L
 
-        return scene.sendPointerEvent(
-            eventType = eventKind.toPointerEventType(),
-            pointers = pointers,
-            timeMillis = event.timeMillis,
-            nativeEvent = event,
-            button = event?.getButton(previousButtonMask, eventKind, previousTouchEventKind),
-            buttons = PointerButtons(pointerButtonsMask),
-            keyboardModifiers = PointerKeyboardModifiers(modifierFlags = event.modifierFlagsOrZero)
-        ).also {
-            previousButtonMask = event.buttonMaskOrZero
-            if (eventKind != TouchesEventKind.MOVED) {
-                previousTouchEventKind = eventKind
+        return scene
+            .sendPointerEvent(
+                eventType = eventKind.toPointerEventType(),
+                pointers = pointers,
+                timeMillis = event.timeMillis,
+                nativeEvent = event,
+                button = event?.getButton(previousButtonMask, eventKind, previousTouchEventKind),
+                buttons = PointerButtons(pointerButtonsMask),
+                keyboardModifiers =
+                    PointerKeyboardModifiers(modifierFlags = event.modifierFlagsOrZero),
+            )
+            .also {
+                previousButtonMask = event.buttonMaskOrZero
+                if (eventKind != TouchesEventKind.MOVED) {
+                    previousTouchEventKind = eventKind
+                }
             }
-        }
     }
+
     private var previousButtonMask: Long = 0L
     private var previousTouchEventKind: TouchesEventKind? = null
 
     private var lastFocusedRect: Rect? = null
+
     private fun getFocusedRect(): Rect? {
-        return scene.focusManager.getFocusRect(afterLayout = false)?.also {
-            lastFocusedRect = it
-        } ?: lastFocusedRect
+        return scene.focusManager.getFocusRect(afterLayout = false)?.also { lastFocusedRect = it }
+            ?: lastFocusedRect
     }
 
     var onOutsidePointerEvent: (PointerEventType) -> Unit by _overlayView::onOutsidePointerEvent
     var isInterceptingOutsideEvents: Boolean by _overlayView::isInterceptingOutsideEvents
     var interactionBounds = IntRect.Zero
 
-    fun setContent(
-        parentCompositionContext: CompositionContext,
-        content: @Composable () -> Unit
-    ) {
+    fun setContent(parentCompositionContext: CompositionContext, content: @Composable () -> Unit) {
         _backgroundView.runOnceOnAppeared {
             scene.setContent(parentCompositionContext) {
                 ProvideComposeSceneMediatorCompositionLocals {
@@ -721,7 +741,10 @@ internal class ComposeSceneMediator(
     }
 
     private var isLayoutTransitionAnimating = false
-    fun prepareAndGetSizeTransitionAnimation(withProgress: suspend ((Float) -> Unit) -> Unit): suspend () -> Unit {
+
+    fun prepareAndGetSizeTransitionAnimation(
+        withProgress: suspend ((Float) -> Unit) -> Unit
+    ): suspend () -> Unit {
         isLayoutTransitionAnimating = true
 
         val initialWindowInsets = windowInsetsManager.windowInsetsSnapshot()
@@ -732,13 +755,11 @@ internal class ComposeSceneMediator(
                 withProgress { progress ->
                     windowInsetsManager.updateInsetsForAnimation(
                         initialWindowInsets = initialWindowInsets,
-                        progress = progress
+                        progress = progress,
                     )
-                    composeSceneSize = lerp(
-                        start = initialSize,
-                        stop = currentViewSize,
-                        fraction = progress
-                    ).roundToIntSize()
+                    composeSceneSize =
+                        lerp(start = initialSize, stop = currentViewSize, fraction = progress)
+                            .roundToIntSize()
                 }
             } finally {
                 isLayoutTransitionAnimating = false
@@ -747,8 +768,15 @@ internal class ComposeSceneMediator(
         }
     }
 
-    fun measureAndLayout() {
-        scene.measureAndLayout()
+    fun requestMeasureAndLayout(completion: () -> Unit = {}) {
+        frameChoreographer.performOutsideRecomposerFrame {
+            scene.measureAndLayout()
+            completion()
+        }
+    }
+
+    fun updateKeyboardOverlap() {
+        keyboardManager.updateOverlapForCurrentGeometry()
     }
 
     fun draw(canvas: Canvas) {
@@ -772,7 +800,7 @@ internal class ComposeSceneMediator(
             LocalInteropContainer provides interopContainer,
             LocalUIView provides _overlayView,
             LocalTextInputContainer provides textInputService.textInputContainer,
-            content = content
+            content = content,
         )
 
     @Composable
@@ -781,16 +809,14 @@ internal class ComposeSceneMediator(
             OffsetToFocusedRect(
                 insets = windowInsetsManager.windowInsets.ime,
                 getFocusedRect = ::getFocusedRect,
-                size = scene.size,
-                animationDuration = if (animateKeyboardOffsetChanges) {
-                    FOCUS_CHANGE_ANIMATION_DURATION
-                } else {
-                    0.seconds
-                },
-                animationCompletion = {
-                    animateKeyboardOffsetChanges = false
-                },
-                content = content
+                animationDuration =
+                    if (animateKeyboardOffsetChanges) {
+                        FOCUS_CHANGE_ANIMATION_DURATION
+                    } else {
+                        0.seconds
+                    },
+                animationCompletion = { animateKeyboardOffsetChanges = false },
+                content = content,
             )
         } else {
             content()
@@ -819,25 +845,23 @@ internal class ComposeSceneMediator(
         textInputService.dispose()
     }
 
-    /**
-     * Updates the [ComposeScene] with the properties derived from the [_overlayView].
-     */
+    /** Updates the [ComposeScene] with the properties derived from the [_overlayView]. */
     private fun updateLayout() {
         if (isLayoutTransitionAnimating) {
             return
         }
         windowInsetsManager.updateInsets()
         composeSceneSize = currentViewSize.roundToIntSize()
-        interactionBounds = with(screenDensity) {
-            _overlayView.bounds.toDpRect().toRect().roundToIntRect()
-        }
+        interactionBounds =
+            with(screenDensity) { _overlayView.bounds.toDpRect().toRect().roundToIntRect() }
     }
 
-    private val currentViewSize: Size get() {
-        return with(screenDensity) {
-            _overlayView.frame.useContents { size.toDpSize() }.toSize()
+    private val currentViewSize: Size
+        get() {
+            return with(screenDensity) {
+                _overlayView.frame.useContents { size.toDpSize() }.toSize()
+            }
         }
-    }
 
     fun sceneDidAppear() {
         keyboardManager.start()
@@ -849,7 +873,8 @@ internal class ComposeSceneMediator(
 
     // The Overlay View needs to be focused to be able to handle keyboard actions.
     // In general, the iOS system automatically reassigns the first responder focus to the overlay
-    // view when other views resign the first responder focus, except at the time of initial appearance.
+    // view when other views resign the first responder focus, except at the time of initial
+    // appearance.
     private fun focusOverlayViewIfNeeded() {
         if (!isFocusEnabled) {
             return
@@ -875,7 +900,7 @@ internal class ComposeSceneMediator(
 
     fun setKeyEventListener(
         onPreviewKeyEvent: ((KeyEvent) -> Boolean)?,
-        onKeyEvent: ((KeyEvent) -> Boolean)?
+        onKeyEvent: ((KeyEvent) -> Boolean)?,
     ) {
         this.onPreviewKeyEvent = onPreviewKeyEvent ?: { false }
         this.onKeyEvent = onKeyEvent ?: { false }
@@ -885,7 +910,9 @@ internal class ComposeSceneMediator(
 
     /**
      * Converts [UIPress] objects to [KeyEvent] and dispatches them to the appropriate handlers.
-     * @param presses a [Set] of [UIPress] objects. Erasure happens due to K/N not supporting Obj-C lightweight generics.
+     *
+     * @param presses a [Set] of [UIPress] objects. Erasure happens due to K/N not supporting Obj-C
+     *   lightweight generics.
      */
     private fun onKeyboardPresses(presses: Set<*>) {
         presses.forEach {
@@ -901,18 +928,18 @@ internal class ComposeSceneMediator(
     ) {
         var press: UIPress? = null // Should not be part of the identifier
 
-        val isAttachedToWindow: Boolean get() = (press?.responder as? UIView)?.window != null
+        val isAttachedToWindow: Boolean
+            get() = (press?.responder as? UIView)?.window != null
     }
 
     private fun KeyEvent.keyIdentifier(): KeyIdentifier {
         val internalEvent = internal
         return KeyIdentifier(
-            key = internalEvent.key,
-            codePoint = internalEvent.codePoint,
-            modifiers = internalEvent.modifiers,
-        ).also {
-            it.press = internalEvent.nativeEvent as? UIPress
-        }
+                key = internalEvent.key,
+                codePoint = internalEvent.codePoint,
+                modifiers = internalEvent.modifiers,
+            )
+            .also { it.press = internalEvent.nativeEvent as? UIPress }
     }
 
     private val pressedKeysState = mutableListOf<KeyIdentifier>()
@@ -923,28 +950,31 @@ internal class ComposeSceneMediator(
         if (pressedKeysState.isEmpty()) {
             return
         }
-        pressedKeysState.filter { !it.isAttachedToWindow }.forEach { key ->
-            onKeyboardEvent(
-                KeyEvent(
-                    key = key.key,
-                    type = KeyEventType.KeyUp,
-                    codePoint = key.codePoint,
-                    isCtrlPressed = key.modifiers.isCtrlPressed,
-                    isMetaPressed = key.modifiers.isMetaPressed,
-                    isAltPressed = key.modifiers.isAltPressed,
-                    isShiftPressed = key.modifiers.isShiftPressed,
-                    nativeEvent = key.press,
+        pressedKeysState
+            .filter { !it.isAttachedToWindow }
+            .forEach { key ->
+                onKeyboardEvent(
+                    KeyEvent(
+                        key = key.key,
+                        type = KeyEventType.KeyUp,
+                        codePoint = key.codePoint,
+                        isCtrlPressed = key.modifiers.isCtrlPressed,
+                        isMetaPressed = key.modifiers.isMetaPressed,
+                        isAltPressed = key.modifiers.isAltPressed,
+                        isShiftPressed = key.modifiers.isShiftPressed,
+                        nativeEvent = key.press,
+                    )
                 )
-            )
-        }
+            }
     }
 
     private fun onKeyboardEvent(keyEvent: KeyEvent): Boolean {
-        val result = textInputService.onPreviewKeyEvent(keyEvent)
-            || onPreviewKeyEvent(keyEvent)
-            || scene.sendKeyEvent(keyEvent)
-            || onKeyEvent(keyEvent)
-            || navigationEventInput.onKeyEvent(keyEvent)
+        val result =
+            textInputService.onPreviewKeyEvent(keyEvent) ||
+                onPreviewKeyEvent(keyEvent) ||
+                scene.sendKeyEvent(keyEvent) ||
+                onKeyEvent(keyEvent) ||
+                navigationEventInput.onKeyEvent(keyEvent)
 
         val identifier = keyEvent.keyIdentifier()
         if (keyEvent.type == KeyEventType.KeyDown) {
@@ -962,29 +992,35 @@ internal class ComposeSceneMediator(
     }
 
     private inner class IosPlatformContext : PlatformContext {
-        override val windowInfo: WindowInfo get() = windowContext.windowInfo
-        override val taskDispatchers: TaskDispatchers = object : TaskDispatchers {
-            override val Default = Dispatchers.Default
-            override val IO = Dispatchers.IO
-        }
-        override val architectureComponentsOwner get() = this@ComposeSceneMediator.architectureComponentsOwner
-        override val screenReader: PlatformScreenReader get() = platformScreenReader
+        override val windowInfo: WindowInfo
+            get() = windowContext.windowInfo
 
-        override val hapticFeedback: HapticFeedback by lazy(LazyThreadSafetyMode.NONE) {
-            CupertinoHapticFeedback()
-        }
+        @OptIn(ExperimentalMediaQueryApi::class)
+        override val mediaScope: UiMediaScope
+            get() = this@ComposeSceneMediator.mediaScope
 
-        override val clipboard: Clipboard by lazy(LazyThreadSafetyMode.NONE) {
-            createPlatformClipboard()
-        }
+        override val taskDispatchers: TaskDispatchers =
+            object : TaskDispatchers {
+                override val Default = Dispatchers.Default
+                override val IO = Dispatchers.IO
+            }
+        override val architectureComponentsOwner
+            get() = this@ComposeSceneMediator.architectureComponentsOwner
 
-        override val uriHandler: UriHandler by lazy(LazyThreadSafetyMode.NONE) {
-            createPlatformUriHandler()
-        }
+        override val screenReader: PlatformScreenReader
+            get() = platformScreenReader
 
-        override val fontFamilyResolver: FontFamily.Resolver by lazy(LazyThreadSafetyMode.NONE) {
-            createFontFamilyResolver()
-        }
+        override val hapticFeedback: HapticFeedback by
+            lazy(LazyThreadSafetyMode.NONE) { CupertinoHapticFeedback() }
+
+        override val clipboard: Clipboard by
+            lazy(LazyThreadSafetyMode.NONE) { createPlatformClipboard() }
+
+        override val uriHandler: UriHandler by
+            lazy(LazyThreadSafetyMode.NONE) { createPlatformUriHandler() }
+
+        override val fontFamilyResolver: FontFamily.Resolver by
+            lazy(LazyThreadSafetyMode.NONE) { createFontFamilyResolver() }
 
         override fun convertLocalToWindowPosition(localPosition: Offset): Offset =
             windowContext.convertLocalToWindowPosition(_overlayView, localPosition)
@@ -998,26 +1034,44 @@ internal class ComposeSceneMediator(
         override fun convertScreenToLocalPosition(positionOnScreen: Offset): Offset =
             windowContext.convertScreenToLocalPosition(_overlayView, positionOnScreen)
 
-        override val viewConfiguration get() = this@ComposeSceneMediator.viewConfiguration
+        override val viewConfiguration
+            get() = this@ComposeSceneMediator.viewConfiguration
 
-        override val inputModeManager by lazy(LazyThreadSafetyMode.NONE) {
-            DefaultInputModeManager(InputMode.Touch)
-        }
+        override val inputModeManager by
+            lazy(LazyThreadSafetyMode.NONE) { DefaultInputModeManager(InputMode.Touch) }
 
-        override val textInputService get() = this@ComposeSceneMediator.textInputServiceAdapter
-        override val textToolbar get() = this@ComposeSceneMediator.textInputService.textToolbar
-        override val semanticsOwnerListener get() = this@ComposeSceneMediator.semanticsOwnerListener
-        override val rootForTestListener get() = this@ComposeSceneMediator.rootForTestListener
-        override val dragAndDropManager get() = this@ComposeSceneMediator.dragAndDropManager
-        override val windowInsets get() = this@ComposeSceneMediator.windowInsetsManager.windowInsets
-        override val outOfFrameExecutor get() = this@ComposeSceneMediator.frameChoreographer.outOfFrameExecutor
-        override val prefetchScheduler get() = this@ComposeSceneMediator.prefetchScheduler
+        override val textInputService
+            get() = this@ComposeSceneMediator.textInputServiceAdapter
+
+        override val textToolbar
+            get() = this@ComposeSceneMediator.textInputService.textToolbar
+
+        override val semanticsOwnerListener
+            get() = this@ComposeSceneMediator.semanticsOwnerListener
+
+        override val rootForTestListener
+            get() = this@ComposeSceneMediator.rootForTestListener
+
+        override val dragAndDropManager
+            get() = this@ComposeSceneMediator.dragAndDropManager
+
+        override val windowInsets
+            get() = this@ComposeSceneMediator.windowInsetsManager.windowInsets
+
+        override val outOfFrameExecutor
+            get() = this@ComposeSceneMediator.frameChoreographer.outOfFrameExecutor
+
+        override val prefetchScheduler
+            get() = this@ComposeSceneMediator.prefetchScheduler
+
         override val isClearFocusOnMouseDownEnabled: Boolean
             get() = this@ComposeSceneMediator.isClearFocusOnMouseDownEnabled
 
         override var isKeepScreenOnEnabled: Boolean
             get() = ApplicationIdleTimer.isDisabled
-            set(value) { ApplicationIdleTimer.setIdleTimerState(this@ComposeSceneMediator, value) }
+            set(value) {
+                ApplicationIdleTimer.setIdleTimerState(this@ComposeSceneMediator, value)
+            }
 
         override fun voteFrameRate(frameRate: Float, frameRateCategory: Float) {
             frameChoreographer.voteFrameRate(frameRate, frameRateCategory)
@@ -1032,29 +1086,34 @@ internal class ComposeSceneMediator(
 private fun UIEvent.getButton(
     previousButtonMask: Long,
     eventKind: TouchesEventKind,
-    previousEventKind: TouchesEventKind?
+    previousEventKind: TouchesEventKind?,
 ): PointerButton? =
     if (eventKind == TouchesEventKind.MOVED) {
         null
-    } else if (buttonMaskOrZero and UIEventButtonMaskPrimary != 0L &&
-        (previousButtonMask and UIEventButtonMaskPrimary == 0L ||
-            eventKind != previousEventKind)) {
+    } else if (
+        buttonMaskOrZero and UIEventButtonMaskPrimary != 0L &&
+            (previousButtonMask and UIEventButtonMaskPrimary == 0L ||
+                eventKind != previousEventKind)
+    ) {
         PointerButton.Primary
-    } else if (buttonMaskOrZero and UIEventButtonMaskSecondary != 0L &&
-        (previousButtonMask and UIEventButtonMaskSecondary == 0L ||
-            eventKind != previousEventKind)) {
+    } else if (
+        buttonMaskOrZero and UIEventButtonMaskSecondary != 0L &&
+            (previousButtonMask and UIEventButtonMaskSecondary == 0L ||
+                eventKind != previousEventKind)
+    ) {
         PointerButton.Secondary
     } else {
         null
     }
 
-private val UIEvent?.timeMillis: Long get() {
-    // If the touches were cancelled due to gesture failure, the timestamp is not available,
-    // because no actual event with touch updates happened. We just use the current time in
-    // this case.
-    val timestamp = this?.timestamp ?: CACurrentMediaTime()
-    return (timestamp * 1e3).toLong()
-}
+private val UIEvent?.timeMillis: Long
+    get() {
+        // If the touches were cancelled due to gesture failure, the timestamp is not available,
+        // because no actual event with touch updates happened. We just use the current time in
+        // this case.
+        val timestamp = this?.timestamp ?: CACurrentMediaTime()
+        return (timestamp * 1e3).toLong()
+    }
 
 private val FOCUS_CHANGE_ANIMATION_DURATION = 0.15.seconds
 
@@ -1068,7 +1127,7 @@ private fun TouchesEventKind.toPointerEventType(): PointerEventType =
 private fun UIEvent.historicalChangesForTouch(
     touch: UITouch,
     view: UIView,
-    density: Float
+    density: Float,
 ): List<HistoricalChange> {
     val touches = coalescedTouchesForTouch(touch) ?: return emptyList()
 
@@ -1090,17 +1149,19 @@ private fun UIEvent.historicalChangesForTouch(
     }
 }
 
-private val UIEvent?.buttonMaskOrZero: Long get() = this?.buttonMask ?: 0L
+private val UIEvent?.buttonMaskOrZero: Long
+    get() = this?.buttonMask ?: 0L
 
-private val UIEvent?.modifierFlagsOrZero: Long get() = this?.modifierFlags ?: 0L
+private val UIEvent?.modifierFlagsOrZero: Long
+    get() = this?.modifierFlags ?: 0L
 
 private val UITouch.isPressed
-    get() = when (phase) {
-        UITouchPhase.UITouchPhaseEnded, UITouchPhase.UITouchPhaseCancelled -> false
-        else -> true
-    }
+    get() =
+        when (phase) {
+            UITouchPhase.UITouchPhaseEnded,
+            UITouchPhase.UITouchPhaseCancelled -> false
+            else -> true
+        }
 
 private fun UITouch.offsetInView(view: UIView, density: Float): Offset =
-    locationInView(view).useContents {
-        Offset(x.toFloat() * density, y.toFloat() * density)
-    }
+    locationInView(view).useContents { Offset(x.toFloat() * density, y.toFloat() * density) }

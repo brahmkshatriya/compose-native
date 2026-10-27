@@ -36,13 +36,21 @@ import platform.UIKit.UITouch
 import platform.UIKit.UIView
 
 // Mirror's foundation `Handle`, except Cursor (no-op on iOS)
-internal enum class TestHandle { SelectionStart, SelectionEnd }
+internal enum class TestHandle {
+    SelectionStart,
+    SelectionEnd,
+}
+
 // Mirror's foundation `SelectionHandleAnchor`, except Middle (no-op on iOS)
-internal enum class TestSelectionHandleAnchor { Left, Right }
+internal enum class TestSelectionHandleAnchor {
+    Left,
+    Right,
+}
 
 /**
- * The contents of a selection handle, either parsed from foundation's internal `SelectionHandleInfo`
- * (Compose-rendered handles) or read off the private UIKit handle views of a native text field.
+ * The contents of a selection handle, either parsed from foundation's internal
+ * `SelectionHandleInfo` (Compose-rendered handles) or read off the private UIKit handle views of a
+ * native text field.
  *
  * @property position The point the handle is anchored to. For Compose handles it is read verbatim
  *   from foundation (relative to the selectable content; may be [Offset.Unspecified]); for native
@@ -69,17 +77,15 @@ internal class TestSelectionHandle(
     val node: SemanticsNode? = null,
 )
 
-internal class SelectionHandlePair(
-    val start: TestSelectionHandle,
-    val end: TestSelectionHandle,
-)
+internal class SelectionHandlePair(val start: TestSelectionHandle, val end: TestSelectionHandle)
 
 private const val SelectionHandleInfoKeyName = "SelectionHandleInfo"
 
 /**
  * How long UIKit keeps a finished tap open for one more tap of the same sequence. Touches sent
- * within this window continue the sequence instead of starting a new gesture.
- * 500ms should be enough
+ * within this window continue the sequence instead of starting a new gesture. 500ms should be
+ * enough
+ *
  * TODO: CMP-10641
  */
 private const val NativeTapSequenceWindowMillis = 500L
@@ -88,16 +94,18 @@ private val offsetRegex = Regex("""Offset\((-?[\d.]+),\s*(-?[\d.]+)\)""")
 
 /**
  * Parses the `toString()` of foundation's internal `SelectionHandleInfo` data class, e.g.
- * `SelectionHandleInfo(handle=SelectionStart, position=Offset(12.3, 45.6), anchor=Left, visible=true)`.
+ * `SelectionHandleInfo(handle=SelectionStart, position=Offset(12.3, 45.6), anchor=Left,
+ * visible=true)`.
  */
 internal fun parseSelectionHandleInfo(raw: String): TestSelectionHandleInfo {
     fun field(name: String): String =
         Regex("""$name=(\w+)""").find(raw)?.groupValues?.get(1)
             ?: error("Could not parse '$name' from SelectionHandleInfo: $raw")
 
-    val position = offsetRegex.find(raw)?.let { m ->
-        Offset(m.groupValues[1].toFloat(), m.groupValues[2].toFloat())
-    } ?: Offset.Unspecified
+    val position =
+        offsetRegex.find(raw)?.let { m ->
+            Offset(m.groupValues[1].toFloat(), m.groupValues[2].toFloat())
+        } ?: Offset.Unspecified
 
     return TestSelectionHandleInfo(
         handle = TestHandle.valueOf(field("handle")),
@@ -112,12 +120,14 @@ internal fun UIKitInstrumentedTest.selectionHandles(): SelectionHandlePair? =
 
 private fun UIKitInstrumentedTest.composeSelectionHandles(): SelectionHandlePair? {
     waitForIdle()
-    val handles = allSemanticsNodes().mapNotNull { node ->
-        val raw = node.config.firstOrNull { it.key.name == SelectionHandleInfoKeyName }?.value
-            ?: return@mapNotNull null
-        val info = parseSelectionHandleInfo(raw.toString())
-        TestSelectionHandle(info = info, grabPoint = composeGrabPoint(node), node = node)
-    }
+    val handles =
+        allSemanticsNodes().mapNotNull { node ->
+            val raw =
+                node.config.firstOrNull { it.key.name == SelectionHandleInfoKeyName }?.value
+                    ?: return@mapNotNull null
+            val info = parseSelectionHandleInfo(raw.toString())
+            TestSelectionHandle(info = info, grabPoint = composeGrabPoint(node), node = node)
+        }
     val start = handles.singleOrNull { it.info.handle == TestHandle.SelectionStart } ?: return null
     val end = handles.singleOrNull { it.info.handle == TestHandle.SelectionEnd } ?: return null
     return SelectionHandlePair(start, end)
@@ -131,8 +141,9 @@ private fun UIKitInstrumentedTest.composeGrabPoint(node: SemanticsNode): DpOffse
 
 /**
  * Selection handles drawn by UIKit for a native text field, read off the private
- * `_UITextSelectionLollipopView` views under the focused `UITextInput`. UIKit shows both of them only
- * for a ranged selection: for a caret they stay in the view tree but hidden, so this returns null.
+ * `_UITextSelectionLollipopView` views under the focused `UITextInput`. UIKit shows both of them
+ * only for a ranged selection: for a caret they stay in the view tree but hidden, so this returns
+ * null.
  */
 private fun UIKitInstrumentedTest.nativeSelectionHandles(): SelectionHandlePair? {
     waitForIdle()
@@ -143,32 +154,36 @@ private fun UIKitInstrumentedTest.nativeSelectionHandles(): SelectionHandlePair?
 }
 
 private fun UIKitInstrumentedTest.nativeHandleViews(): List<UIView> =
-    (findFocusedUITextInput() as? UIView)?.descendants()
+    (findFocusedUITextInput() as? UIView)
+        ?.descendants()
         ?.filter { it.isNativeSelectionHandle && !it.hidden && it.alpha > 0.0 }
         .orEmpty()
 
-/** The stem covering the line at the selection edge and the blob to grab, or null for other views. */
+/**
+ * The stem covering the line at the selection edge and the blob to grab, or null for other views.
+ */
 private fun UIView.nativeHandleParts(): Pair<DpRect, DpRect>? {
     val parts = subviews.map { (it as UIView).dpRectInWindow() }
     if (parts.size != 2) return null
     return parts.minBy { it.width } to parts.maxBy { it.width }
 }
 
-/**
- * Builds a native [TestSelectionHandle] out of a handle view.
- */
+/** Builds a native [TestSelectionHandle] out of a handle view. */
 private fun nativeHandle(handleView: UIView): TestSelectionHandle? {
     val (stem, blob) = handleView.nativeHandleParts() ?: return null
 
     val leading = blob.center().y < stem.center().y
     val edge = if (leading) stem.topCenter() else stem.bottomCenter()
     return TestSelectionHandle(
-        info = TestSelectionHandleInfo(
-            handle = if (leading) TestHandle.SelectionStart else TestHandle.SelectionEnd,
-            position = Offset(edge.x.value, edge.y.value),
-            anchor = if (leading) TestSelectionHandleAnchor.Left else TestSelectionHandleAnchor.Right,
-            visible = true,
-        ),
+        info =
+            TestSelectionHandleInfo(
+                handle = if (leading) TestHandle.SelectionStart else TestHandle.SelectionEnd,
+                position = Offset(edge.x.value, edge.y.value),
+                anchor =
+                    if (leading) TestSelectionHandleAnchor.Left
+                    else TestSelectionHandleAnchor.Right,
+                visible = true,
+            ),
         grabPoint = blob.center(),
     )
 }
@@ -177,7 +192,10 @@ private val UIView.isNativeSelectionHandle: Boolean
     get() = objcClassName(this)?.contains("_UITextSelectionLollipopView") == true
 
 private fun UIView.descendants(): List<UIView> =
-    subviews.flatMap { val view = it as UIView; listOf(view) + view.descendants() }
+    subviews.flatMap {
+        val view = it as UIView
+        listOf(view) + view.descendants()
+    }
 
 /**
  * Drags the [handle] selection handle to character [toOffset] of the text [node]. Called through
@@ -195,9 +213,9 @@ private fun UIView.descendants(): List<UIView> =
  * is nothing to correct against. It is stepped towards its destination instead, see [stepHandleTo].
  *
  * The edge does not always land on [toOffset]. A Compose drag that expands the selection snaps to
- * word boundaries (`SelectionAdjustment.CharacterWithWordAccelerate`) — always when it changes line,
- * and within a line whenever the edge already sits on a boundary — so an offset inside a word is
- * reachable only while shrinking. UIKit does not snap and lands on the requested offset.
+ * word boundaries (`SelectionAdjustment.CharacterWithWordAccelerate`) — always when it changes
+ * line, and within a line whenever the edge already sits on a boundary — so an offset inside a word
+ * is reachable only while shrinking. UIKit does not snap and lands on the requested offset.
  */
 internal fun UIKitInstrumentedTest.dragSelectionHandleImpl(
     node: AccessibilityTestNode,
@@ -221,7 +239,8 @@ internal fun UIKitInstrumentedTest.dragSelectionHandleImpl(
     } else if (isNative) {
         failure = stepHandleTo(touch, from = grabPoint, aim = target)
     } else {
-        val vector = (target - node.characterPosition(selection.edgeOf(handle))).clearingLineBoundary()
+        val vector =
+            (target - node.characterPosition(selection.edgeOf(handle))).clearingLineBoundary()
         touch.dragBy(offset = vector, duration = duration)
         waitForIdle()
     }
@@ -246,9 +265,9 @@ internal fun UIKitInstrumentedTest.dragSelectionHandleImpl(
  * null once it does, or why it did not.
  *
  * UIKit holds a dragged handle on its line until the finger has travelled far past the next one, by
- * an amount it never publishes, so the travel is discovered rather than computed: every step re-reads
- * where the edge actually is and aims the next one at what is left. The handle views are also the
- * only feedback there is, the selection being published only once the touch is lifted.
+ * an amount it never publishes, so the travel is discovered rather than computed: every step
+ * re-reads where the edge actually is and aims the next one at what is left. The handle views are
+ * also the only feedback there is, the selection being published only once the touch is lifted.
  */
 private fun UIKitInstrumentedTest.stepHandleTo(
     touch: UITouch,
@@ -260,22 +279,26 @@ private fun UIKitInstrumentedTest.stepHandleTo(
     var motionless = 0
 
     repeat(NativeHandleDrag.MaxSteps) {
-        val edge = draggedSelectionEdge(underPosition = finger)
-            ?: return "Lost the native handle at $finger."
+        val edge =
+            draggedSelectionEdge(underPosition = finger)
+                ?: return "Lost the native handle at $finger."
         val dx = aim.x.value - edge.x.value
         val dy = aim.y.value - edge.y.value
         // Vertical first and alone: UIKit obeys horizontal movement at once while still holding the
         // line change back, so a diagonal step would slide the handle far along its current line.
-        val move = when {
-            abs(dy) > NativeHandleDrag.Tolerance -> DpOffset(0.dp, dy.clampedToStep().dp)
-            abs(dx) > NativeHandleDrag.Tolerance -> DpOffset(dx.clampedToStep().dp, 0.dp)
-            else -> return null
-        }
+        val move =
+            when {
+                abs(dy) > NativeHandleDrag.Tolerance -> DpOffset(0.dp, dy.clampedToStep().dp)
+                abs(dx) > NativeHandleDrag.Tolerance -> DpOffset(dx.clampedToStep().dp, 0.dp)
+                else -> return null
+            }
 
         // Standing still is normal while UIKit holds a line change back; standing still for longer
         // than that hysteresis means the edge is against something and will not move at all.
-        val stillness = previous?.let { abs(edge.x.value - it.x.value) + abs(edge.y.value - it.y.value) }
-        motionless = if (stillness != null && stillness <= NativeHandleDrag.Tolerance) motionless + 1 else 0
+        val stillness =
+            previous?.let { abs(edge.x.value - it.x.value) + abs(edge.y.value - it.y.value) }
+        motionless =
+            if (stillness != null && stillness <= NativeHandleDrag.Tolerance) motionless + 1 else 0
         if (motionless > NativeHandleDrag.MotionlessSteps) {
             return "Native selection edge stuck at $edge, aiming for $aim."
         }
@@ -288,9 +311,9 @@ private fun UIKitInstrumentedTest.stepHandleTo(
 }
 
 /**
- * The line center at the selection edge of the handle whose blob is closest to [underPosition] — the
- * one the finger holds. Handles are told apart by side, not by role, and a drag past the other one
- * swaps the sides, so the finger is what to follow.
+ * The line center at the selection edge of the handle whose blob is closest to [underPosition] —
+ * the one the finger holds. Handles are told apart by side, not by role, and a drag past the other
+ * one swaps the sides, so the finger is what to follow.
  */
 private fun UIKitInstrumentedTest.draggedSelectionEdge(underPosition: DpOffset): DpOffset? {
     waitForIdle()
@@ -298,12 +321,15 @@ private fun UIKitInstrumentedTest.draggedSelectionEdge(underPosition: DpOffset):
         .mapNotNull { it.nativeHandleParts() }
         .minByOrNull { (_, blob) ->
             val center = blob.center()
-            abs(center.x.value - underPosition.x.value) + abs(center.y.value - underPosition.y.value)
+            abs(center.x.value - underPosition.x.value) +
+                abs(center.y.value - underPosition.y.value)
         }
-        ?.first?.center()
+        ?.first
+        ?.center()
 }
 
 /** The shape of a native handle drag, measured against the simulator rather than derived. */
+@Suppress("ConstPropertyName")
 private object NativeHandleDrag {
     /** Finger travel per step, short enough to catch the line snap within one step. */
     const val Step = 4f
@@ -323,7 +349,9 @@ private object NativeHandleDrag {
 
 private fun Float.clampedToStep(): Float = coerceIn(-NativeHandleDrag.Step, NativeHandleDrag.Step)
 
-/** Makes the vertical travel 1.5x longer, so touch slop does not stop the drag before the next line. */
+/**
+ * Makes the vertical travel 1.5x longer, so touch slop does not stop the drag before the next line.
+ */
 private fun DpOffset.clearingLineBoundary(): DpOffset = DpOffset(x, y * 1.5f)
 
 private fun UIKitInstrumentedTest.selectionRange(node: AccessibilityTestNode): TextRange? =

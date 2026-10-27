@@ -39,30 +39,24 @@ value class TextDecorationLineStyle internal constructor(val value: Int) {
     }
 
     companion object {
-        /**
-         * Solid line.
-         */
-        val Solid = TextDecorationLineStyle(1)
+        /** Solid line. */
+        val Solid: TextDecorationLineStyle
+            get() = TextDecorationLineStyle(1)
 
-        /**
-         * Double line.
-         */
-        val Double = TextDecorationLineStyle(2)
+        /** Double line. */
+        val Double: TextDecorationLineStyle
+            get() = TextDecorationLineStyle(2)
 
-        /**
-         * Dotted line.
-         */
-        val Dotted = TextDecorationLineStyle(3)
+        /** Dotted line. */
+        val Dotted: TextDecorationLineStyle
+            get() = TextDecorationLineStyle(3)
 
-        /**
-         * Dashed line.
-         */
-        val Dashed = TextDecorationLineStyle(4)
+        /** Dashed line. */
+        val Dashed: TextDecorationLineStyle
+            get() = TextDecorationLineStyle(4)
 
-        /**
-         * Wavy line.
-         */
-        val Wavy = TextDecorationLineStyle(5)
+        /** Wavy line. */
+        val Wavy: TextDecorationLineStyle
+            get() = TextDecorationLineStyle(5)
     }
-
 }

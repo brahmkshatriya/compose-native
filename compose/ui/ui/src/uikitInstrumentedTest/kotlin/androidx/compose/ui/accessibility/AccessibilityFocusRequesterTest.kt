@@ -23,7 +23,6 @@ import androidx.compose.material.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.AccessibilityNotification
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.findNodeWithLabel
 import androidx.compose.ui.test.getAccessibilityTree
@@ -41,16 +40,8 @@ class AccessibilityFocusRequesterTest {
 
         setContent {
             Column {
-                Text(
-                    "Text A", modifier = Modifier
-                        .focusRequester(focusRequesterA)
-                        .focusable()
-                )
-                Text(
-                    "Text B", modifier = Modifier
-                        .focusRequester(focusRequesterB)
-                        .focusable()
-                )
+                Text("Text A", modifier = Modifier.focusRequester(focusRequesterA).focusable())
+                Text("Text B", modifier = Modifier.focusRequester(focusRequesterB).focusable())
             }
         }
 
@@ -63,7 +54,7 @@ class AccessibilityFocusRequesterTest {
 
         assertEquals(
             expected = findNodeWithLabel("Text B").element,
-            actual = lastAccessibilityNotification?.elementToFocus?.value
+            actual = lastAccessibilityNotification?.elementToFocus?.value,
         )
 
         focusRequesterA.requestFocus()
@@ -71,7 +62,7 @@ class AccessibilityFocusRequesterTest {
 
         assertEquals(
             expected = findNodeWithLabel("Text A").element,
-            actual = lastAccessibilityNotification?.elementToFocus?.value
+            actual = lastAccessibilityNotification?.elementToFocus?.value,
         )
     }
 
@@ -81,14 +72,9 @@ class AccessibilityFocusRequesterTest {
 
         setContent {
             Column(
-                modifier = Modifier
-                    .testTag("ContentBox")
-                    .focusRequester(focusRequester)
-                    .focusable()
+                modifier = Modifier.testTag("ContentBox").focusRequester(focusRequester).focusable()
             ) {
-                Box {
-                    Text("Text 1")
-                }
+                Box { Text("Text 1") }
                 Text("Text 2")
             }
         }
@@ -102,7 +88,7 @@ class AccessibilityFocusRequesterTest {
 
         assertEquals(
             expected = findNodeWithLabel("Text 1").element,
-            actual = lastAccessibilityNotification?.elementToFocus?.value
+            actual = lastAccessibilityNotification?.elementToFocus?.value,
         )
     }
 }

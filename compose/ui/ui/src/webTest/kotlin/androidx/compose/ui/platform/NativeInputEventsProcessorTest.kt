@@ -16,6 +16,13 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.ui.events.beforeInput
+import androidx.compose.ui.events.compositionEnd
+import androidx.compose.ui.events.compositionStart
+import androidx.compose.ui.events.keyEvent
+import androidx.compose.ui.events.setFirstRange
+import androidx.compose.ui.input.key.InternalKeyEvent
+import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.text.input.BackspaceCommand
@@ -25,13 +32,6 @@ import androidx.compose.ui.text.input.EditingBuffer
 import androidx.compose.ui.text.input.SetComposingTextCommand
 import androidx.compose.ui.text.input.SetSelectionCommand
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.input.key.InternalKeyEvent
-import androidx.compose.ui.input.key.KeyEvent
-import androidx.compose.ui.events.beforeInput
-import androidx.compose.ui.events.compositionEnd
-import androidx.compose.ui.events.compositionStart
-import androidx.compose.ui.events.keyEvent
-import androidx.compose.ui.events.setFirstRange
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -41,23 +41,23 @@ import org.w3c.dom.events.KeyboardEvent
 
 // There is a helper for testing:
 // - Run the mpp demo in a browser
-// - then open http://localhost:8080/input-events/ - you can type in the input and see the events received by it.
+// - then open http://localhost:8080/input-events/ - you can type in the input and see the events
+// received by it.
 // The events logs can be helpful when writing the tests.
 // Note: the order of events is different in different browsers (at least for Composite input).
 // So try in all of them, and also in mobile browsers :D
 class NativeInputEventsProcessorTest {
 
-    /**
-     * A mock implementation of ComposeCommandCommunicator for testing
-     */
+    /** A mock implementation of ComposeCommandCommunicator for testing */
     private open class MockComposeCommandCommunicator(
         startingTextFieldValue: TextFieldValue = TextFieldValue("")
     ) : ComposeCommandCommunicator {
 
-        private val editingBuffer = EditingBuffer(
-            text = startingTextFieldValue.annotatedString,
-            selection = startingTextFieldValue.selection
-        )
+        private val editingBuffer =
+            EditingBuffer(
+                text = startingTextFieldValue.annotatedString,
+                selection = startingTextFieldValue.selection,
+            )
 
         val editCommands = mutableListOf<EditCommand>()
         val keyboardEvents = mutableListOf<KeyEvent>()
@@ -78,17 +78,17 @@ class NativeInputEventsProcessorTest {
         fun currentTextFieldValue(): TextFieldValue {
             return TextFieldValue(
                 text = editingBuffer.toString(),
-                selection = TextRange(editingBuffer.selectionStart, editingBuffer.selectionEnd)
+                selection = TextRange(editingBuffer.selectionStart, editingBuffer.selectionEnd),
             )
         }
     }
 
     /**
-     * A test implementation of NativeInputEventsProcessor that allows controlling when checkpoints are run
+     * A test implementation of NativeInputEventsProcessor that allows controlling when checkpoints
+     * are run
      */
-    private class TestNativeInputEventsProcessor(
-        composeSender: ComposeCommandCommunicator
-    ) : NativeInputEventsProcessor(composeSender) {
+    private class TestNativeInputEventsProcessor(composeSender: ComposeCommandCommunicator) :
+        NativeInputEventsProcessor(composeSender) {
 
         override fun scheduleCheckpoint() {
             isCheckpointScheduled = true
@@ -153,9 +153,8 @@ class NativeInputEventsProcessorTest {
 
     @Test
     fun testInsertText() {
-        val communicator = MockComposeCommandCommunicator(
-            TextFieldValue("qwerty", selection = TextRange( 6))
-        )
+        val communicator =
+            MockComposeCommandCommunicator(TextFieldValue("qwerty", selection = TextRange(6)))
         val processor = TestNativeInputEventsProcessor(communicator)
 
         processor.registerEvent(beforeInput("insertText", "a") as InputEvent)
@@ -171,15 +170,12 @@ class NativeInputEventsProcessorTest {
 
     @Test
     fun testInsertText_with_deleteContentBackward() {
-        val communicator = MockComposeCommandCommunicator(
-            TextFieldValue("test", selection = TextRange( 4))
-        )
+        val communicator =
+            MockComposeCommandCommunicator(TextFieldValue("test", selection = TextRange(4)))
         val processor = TestNativeInputEventsProcessor(communicator)
 
         processor.registerEvent(
-            beforeInput("insertText", "a").asInputEventExt().apply {
-                setFirstRange(3, 4)
-            }
+            beforeInput("insertText", "a").asInputEventExt().apply { setFirstRange(3, 4) }
         )
         processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
 
@@ -198,15 +194,12 @@ class NativeInputEventsProcessorTest {
 
     @Test
     fun testDeleteContentBackward() {
-        val communicator = MockComposeCommandCommunicator(
-            TextFieldValue("test", selection = TextRange( 4))
-        )
+        val communicator =
+            MockComposeCommandCommunicator(TextFieldValue("test", selection = TextRange(4)))
         val processor = TestNativeInputEventsProcessor(communicator)
 
         processor.registerEvent(
-            beforeInput("deleteContentBackward", "").asInputEventExt().apply {
-                setFirstRange(3, 4)
-            }
+            beforeInput("deleteContentBackward", "").asInputEventExt().apply { setFirstRange(3, 4) }
         )
         processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
 
@@ -217,6 +210,37 @@ class NativeInputEventsProcessorTest {
         assertEquals(4, command.end)
 
         assertEquals("tes", communicator.currentTextFieldValue().text)
+    }
+
+    @Test
+    fun testInsertText_collapsed_target_range_pins_the_insertion_point() {
+        // see https://youtrack.jetbrains.com/issue/CMP-10753
+        // The browser applies the edit natively and moves the DOM caret, which could reach Compose
+        // as a selection change before the collected events are processed.
+        // The collapsed target range reported by the browser must win over the drifted caret.
+        val communicator =
+            MockComposeCommandCommunicator(
+                TextFieldValue("Text line 0 \nText line 1", selection = TextRange(12))
+            )
+        val processor = TestNativeInputEventsProcessor(communicator)
+
+        processor.registerEvent(
+            beforeInput("insertText", "is").asInputEventExt().apply { setFirstRange(12, 12) }
+        )
+
+        // the caret has drifted while the event was waiting for the checkpoint
+        communicator.sendEditCommand(listOf(SetSelectionCommand(14, 14)))
+        communicator.editCommands.clear()
+
+        processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
+
+        assertEquals(2, communicator.editCommands.size)
+        val selectionCommand = communicator.editCommands[0]
+        assertTrue(selectionCommand is SetSelectionCommand)
+        assertEquals(12, selectionCommand.start)
+        assertEquals(12, selectionCommand.end)
+
+        assertEquals("Text line 0 is\nText line 1", communicator.currentTextFieldValue().text)
     }
 
     @Test
@@ -241,11 +265,7 @@ class NativeInputEventsProcessorTest {
         val communicator = MockComposeCommandCommunicator()
         val processor = TestNativeInputEventsProcessor(communicator)
 
-        val backspaceEvent = keyEvent(
-            key = "Backspace",
-            code = "Backspace",
-            type = "keydown"
-        )
+        val backspaceEvent = keyEvent(key = "Backspace", code = "Backspace", type = "keydown")
         processor.registerEvent(backspaceEvent)
 
         processor.registerEvent(
@@ -261,9 +281,8 @@ class NativeInputEventsProcessorTest {
 
     @Test
     fun testInsertReplacementText() {
-        val communicator = MockComposeCommandCommunicator(
-            TextFieldValue("test text", selection = TextRange( 9))
-        )
+        val communicator =
+            MockComposeCommandCommunicator(TextFieldValue("test text", selection = TextRange(9)))
         val processor = TestNativeInputEventsProcessor(communicator)
 
         processor.registerEvent(
@@ -294,9 +313,7 @@ class NativeInputEventsProcessorTest {
 
         // 1. Simulate a key being long-pressed (e.g., 'e' key)
         // First keydown without repeat
-        processor.registerEvent(
-            event = keyEvent(key = "e", type = "keydown", repeat = false)
-        )
+        processor.registerEvent(event = keyEvent(key = "e", type = "keydown", repeat = false))
         // the first keydown is followed by the insertText
         processor.registerEvent(beforeInput("insertText", "e") as InputEvent)
         processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
@@ -306,9 +323,7 @@ class NativeInputEventsProcessorTest {
 
         // Several keydown events with repeat=true to simulate long press
         repeat(3) {
-            processor.registerEvent(
-                event = keyEvent(key = "e", type = "keydown", repeat = true)
-            )
+            processor.registerEvent(event = keyEvent(key = "e", type = "keydown", repeat = true))
             processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
         }
 
@@ -326,9 +341,7 @@ class NativeInputEventsProcessorTest {
 
         // 3. Simulate the input event for the accented character
         processor.registerEvent(
-            beforeInput("insertText", "é").asInputEventExt().apply {
-                setFirstRange(0, 1)
-            }
+            beforeInput("insertText", "é").asInputEventExt().apply { setFirstRange(0, 1) }
         )
 
         // Process the events
@@ -362,9 +375,7 @@ class NativeInputEventsProcessorTest {
 
         // 1. Simulate a key being long-pressed (e.g., 'e' key)
         // First keydown without repeat
-        processor.registerEvent(
-            event = keyEvent(key = "e", type = "keydown", repeat = false)
-        )
+        processor.registerEvent(event = keyEvent(key = "e", type = "keydown", repeat = false))
         // the first keydown is followed by the insertText
         processor.registerEvent(beforeInput("insertText", "e") as InputEvent)
         processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
@@ -374,9 +385,7 @@ class NativeInputEventsProcessorTest {
 
         // Several keydown events with repeat=true to simulate long press
         repeat(3) {
-            processor.registerEvent(
-                event = keyEvent(key = "e", type = "keydown", repeat = true)
-            )
+            processor.registerEvent(event = keyEvent(key = "e", type = "keydown", repeat = true))
             processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
         }
 
@@ -390,12 +399,13 @@ class NativeInputEventsProcessorTest {
         assertEquals(1, communicator.editCommands.size)
         assertEquals(0, communicator.keyboardEvents.size)
 
-        // 2. Simulate choosing 'é' from the accent dialogues using a mouse, so no keydown events here
+        // 2. Simulate choosing 'é' from the accent dialogues using a mouse, so no keydown events
+        // here
         processor.registerEvent(
             beforeInput("insertText", "è").asInputEventExt().apply {
                 // to replace `e`
                 setFirstRange(0, 1)
-            },
+            }
         )
 
         processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
@@ -426,9 +436,7 @@ class NativeInputEventsProcessorTest {
 
         // 1. Simulate a key being long-pressed (e.g., 'e' key)
         // First keydown without repeat
-        processor.registerEvent(
-            event = keyEvent(key = "e", type = "keydown", repeat = false)
-        )
+        processor.registerEvent(event = keyEvent(key = "e", type = "keydown", repeat = false))
         // the first keydown is followed by the insertText
         processor.registerEvent(beforeInput("insertText", "e") as InputEvent)
         processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
@@ -438,9 +446,7 @@ class NativeInputEventsProcessorTest {
 
         // Several keydown events with repeat=true to simulate long press
         repeat(3) {
-            processor.registerEvent(
-                event = keyEvent(key = "e", type = "keydown", repeat = true)
-            )
+            processor.registerEvent(event = keyEvent(key = "e", type = "keydown", repeat = true))
             processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
         }
 
@@ -455,7 +461,9 @@ class NativeInputEventsProcessorTest {
         assertEquals(0, communicator.keyboardEvents.size)
 
         // 2. Simulate arrow navigation through accent options
-        processor.registerEvent(keyEvent(key = "ArrowRight", code = "ArrowRight", isComposing = true))
+        processor.registerEvent(
+            keyEvent(key = "ArrowRight", code = "ArrowRight", isComposing = true)
+        )
         processor.registerEvent(
             beforeInput("insertText", "è", isComposing = true).asInputEventExt().apply {
                 setFirstRange(0, 1)
@@ -465,7 +473,9 @@ class NativeInputEventsProcessorTest {
         assertEquals(3, communicator.editCommands.size)
         assertEquals(0, communicator.keyboardEvents.size)
 
-        processor.registerEvent(keyEvent(key = "ArrowRight", code = "ArrowRight", isComposing = true))
+        processor.registerEvent(
+            keyEvent(key = "ArrowRight", code = "ArrowRight", isComposing = true)
+        )
         processor.registerEvent(
             beforeInput("insertCompositionText", "é").asInputEventExt().apply {
                 setFirstRange(0, 1)
@@ -476,7 +486,9 @@ class NativeInputEventsProcessorTest {
         assertEquals(5, communicator.editCommands.size)
         assertEquals(0, communicator.keyboardEvents.size)
 
-        processor.registerEvent(keyEvent(key = "ArrowRight", code = "ArrowRight", isComposing = true))
+        processor.registerEvent(
+            keyEvent(key = "ArrowRight", code = "ArrowRight", isComposing = true)
+        )
         processor.registerEvent(
             beforeInput("insertCompositionText", "ê").asInputEventExt().apply {
                 setFirstRange(0, 1)
@@ -530,18 +542,17 @@ class NativeInputEventsProcessorTest {
     @Test
     fun testDeleteContentBackward_with_non_collapsed_selection() {
         // Create a TextFieldValue with a non-collapsed selection
-        val textFieldValue = TextFieldValue(
-            text = "example text",
-            selection = TextRange(2, 7) // Selection from "a" to "e" in "example"
-        )
+        val textFieldValue =
+            TextFieldValue(
+                text = "example text",
+                selection = TextRange(2, 7), // Selection from "a" to "e" in "example"
+            )
         val communicator = MockComposeCommandCommunicator(textFieldValue)
         val processor = TestNativeInputEventsProcessor(communicator)
 
         // Add deleteContentBackward event
         processor.registerEvent(
-            beforeInput("deleteContentBackward", "").asInputEventExt().apply {
-                setFirstRange(2, 7)
-            }
+            beforeInput("deleteContentBackward", "").asInputEventExt().apply { setFirstRange(2, 7) }
         )
 
         // Process the event with a non-collapsed selection
@@ -557,19 +568,18 @@ class NativeInputEventsProcessorTest {
     @Test
     fun testDeleteContentBackward_with_collapsed_selection() {
         // Create a TextFieldValue with a collapsed selection
-        val textFieldValue = TextFieldValue(
-            text = "example text",
-            selection = TextRange(5) // Cursor after "p" in "example"
-        )
+        val textFieldValue =
+            TextFieldValue(
+                text = "example text",
+                selection = TextRange(5), // Cursor after "p" in "example"
+            )
 
         val communicator = MockComposeCommandCommunicator(textFieldValue)
         val processor = TestNativeInputEventsProcessor(communicator)
 
         // Add deleteContentBackward event
         processor.registerEvent(
-            beforeInput("deleteContentBackward", "").asInputEventExt().apply {
-                setFirstRange(3, 5)
-            },
+            beforeInput("deleteContentBackward", "").asInputEventExt().apply { setFirstRange(3, 5) }
         )
 
         // Process the event with a collapsed selection
@@ -589,24 +599,19 @@ class NativeInputEventsProcessorTest {
         val communicator = MockComposeCommandCommunicator()
         val processor = TestNativeInputEventsProcessor(communicator)
 
-        val backspaceEvent = keyEvent(
-            key = "Backspace",
-            code = "Backspace",
-            type = "keydown"
-        )
+        val backspaceEvent = keyEvent(key = "Backspace", code = "Backspace", type = "keydown")
         processor.registerEvent(backspaceEvent)
 
         processor.registerEvent(
-            beforeInput("deleteContentBackward", "").asInputEventExt().apply {
-                setFirstRange(2, 7)
-            }
+            beforeInput("deleteContentBackward", "").asInputEventExt().apply { setFirstRange(2, 7) }
         )
 
         // With a non-collapsed selection
-        val textFieldValue = TextFieldValue(
-            text = "example text",
-            selection = TextRange(2, 7) // Selection from "a" to "e" in "example"
-        )
+        val textFieldValue =
+            TextFieldValue(
+                text = "example text",
+                selection = TextRange(2, 7), // Selection from "a" to "e" in "example"
+            )
 
         processor.manuallyRunCheckpoint(textFieldValue)
 
@@ -617,25 +622,22 @@ class NativeInputEventsProcessorTest {
 
     @Test
     fun testDeleteContentBackward_with_collapsed_selection_and_Backspace_key_pressed_same_frame() {
-        val textFieldValue = TextFieldValue(
-            text = "example text",
-            selection = TextRange(12) // collapsed selection at the very end
-        )
+        val textFieldValue =
+            TextFieldValue(
+                text = "example text",
+                selection = TextRange(12), // collapsed selection at the very end
+            )
 
         val communicator = MockComposeCommandCommunicator(textFieldValue)
         val processor = TestNativeInputEventsProcessor(communicator)
 
-        val backspaceEvent = keyEvent(
-            key = "Backspace",
-            code = "Backspace",
-            type = "keydown"
-        )
+        val backspaceEvent = keyEvent(key = "Backspace", code = "Backspace", type = "keydown")
         processor.registerEvent(backspaceEvent)
 
         processor.registerEvent(
             beforeInput("deleteContentBackward", "").asInputEventExt().apply {
                 setFirstRange(8, 12)
-            },
+            }
         )
 
         processor.manuallyRunCheckpoint(communicator.currentTextFieldValue())
@@ -657,26 +659,21 @@ class NativeInputEventsProcessorTest {
         val processor = TestNativeInputEventsProcessor(communicator)
 
         // With a non-collapsed selection
-        val textFieldValue = TextFieldValue(
-            text = "example text",
-            selection = TextRange(2, 7) // Selection from "a" to "e" in "example"
-        )
+        val textFieldValue =
+            TextFieldValue(
+                text = "example text",
+                selection = TextRange(2, 7), // Selection from "a" to "e" in "example"
+            )
 
         // First add a keydown event for Backspace
-        val backspaceEvent = keyEvent(
-            key = "Backspace",
-            code = "Backspace",
-            type = "keydown"
-        )
+        val backspaceEvent = keyEvent(key = "Backspace", code = "Backspace", type = "keydown")
         processor.registerEvent(backspaceEvent)
 
         processor.manuallyRunCheckpoint(textFieldValue)
 
         // Then add a deleteContentBackward event
         processor.registerEvent(
-            beforeInput("deleteContentBackward", "").asInputEventExt().apply {
-                setFirstRange(2, 7)
-            },
+            beforeInput("deleteContentBackward", "").asInputEventExt().apply { setFirstRange(2, 7) }
         )
 
         processor.manuallyRunCheckpoint(textFieldValue)
@@ -684,5 +681,4 @@ class NativeInputEventsProcessorTest {
         assertEquals(0, communicator.keyboardEvents.size, "Backspace is not processed by compose")
         assertEquals(2, communicator.editCommands.size)
     }
-
 }

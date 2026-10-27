@@ -31,13 +31,17 @@ import platform.UIKit.UITraitEnvironmentLayoutDirectionLeftToRight
 import platform.UIKit.UITraitEnvironmentLayoutDirectionRightToLeft
 import platform.UIKit.UIViewController
 
-internal class ModalContainerSwipeBackInHostingViewTest : ModalContainerSwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
-)
+@Suppress("unused")
+internal class ModalContainerSwipeBackInHostingViewTest :
+    ModalContainerSwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
+    )
 
-internal class ModalContainerSwipeBackInHostingViewControllerTest : ModalContainerSwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
-)
+@Suppress("unused")
+internal class ModalContainerSwipeBackInHostingViewControllerTest :
+    ModalContainerSwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
+    )
 
 internal abstract class ModalContainerSwipeBackTest(
     private val runUIKitInstrumentedTest: (UIKitInstrumentedTest.() -> Unit) -> Unit
@@ -47,9 +51,10 @@ internal abstract class ModalContainerSwipeBackTest(
         var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
         var backCompletedCount = -1
 
-        val rootViewController = UIViewController().apply {
-            setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight)
-        }
+        val rootViewController =
+            UIViewController().apply {
+                setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight)
+            }
         setupWindow { rootViewController }
 
         waitUntil("root view controller should be attached before presenting modal") {
@@ -58,16 +63,18 @@ internal abstract class ModalContainerSwipeBackTest(
 
         var presented = false
         rootViewController.presentViewController(
-            viewControllerToPresent = createViewControllerHostingCompose {
-                SwipeBackTestContent(
-                    onTransitionStateChanged = { transitionState = it },
-                    onBackCompletedCountChanged = { backCompletedCount = it }
-                )
-            }.apply {
-                modalPresentationStyle = UIModalPresentationFullScreen
-                setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight)
-            },
-            animated = false
+            viewControllerToPresent =
+                createViewControllerHostingCompose {
+                        SwipeBackTestContent(
+                            onTransitionStateChanged = { transitionState = it },
+                            onBackCompletedCountChanged = { backCompletedCount = it },
+                        )
+                    }
+                    .apply {
+                        modalPresentationStyle = UIModalPresentationFullScreen
+                        setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight)
+                    },
+            animated = false,
         ) {
             presented = true
         }
@@ -83,19 +90,17 @@ internal abstract class ModalContainerSwipeBackTest(
         assertEquals(
             expected = NavigationEvent.EDGE_LEFT,
             actual = (transitionState as InProgress).latestEvent.swipeEdge,
-            message = "back swipe should report the expected edge in a modal container"
+            message = "back swipe should report the expected edge in a modal container",
         )
         assertEquals(
             expected = 0,
             actual = backCompletedCount,
-            message = "back swipe should not complete before release in a modal container"
+            message = "back swipe should not complete before release in a modal container",
         )
 
         swipeBack.up()
 
-        waitUntil("back swipe should complete in a modal container") {
-            backCompletedCount == 1
-        }
+        waitUntil("back swipe should complete in a modal container") { backCompletedCount == 1 }
     }
 
     @Test
@@ -103,9 +108,10 @@ internal abstract class ModalContainerSwipeBackTest(
         var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
         var backCompletedCount = -1
 
-        val rootViewController = UIViewController().apply {
-            setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft)
-        }
+        val rootViewController =
+            UIViewController().apply {
+                setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft)
+            }
         setupWindow { rootViewController }
 
         waitUntil("root view controller should be attached before presenting modal") {
@@ -114,16 +120,18 @@ internal abstract class ModalContainerSwipeBackTest(
 
         var presented = false
         rootViewController.presentViewController(
-            viewControllerToPresent = createViewControllerHostingCompose {
-                SwipeBackTestContent(
-                    onTransitionStateChanged = { transitionState = it },
-                    onBackCompletedCountChanged = { backCompletedCount = it }
-                )
-            }.apply {
-                modalPresentationStyle = UIModalPresentationFullScreen
-                setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft)
-            },
-            animated = false
+            viewControllerToPresent =
+                createViewControllerHostingCompose {
+                        SwipeBackTestContent(
+                            onTransitionStateChanged = { transitionState = it },
+                            onBackCompletedCountChanged = { backCompletedCount = it },
+                        )
+                    }
+                    .apply {
+                        modalPresentationStyle = UIModalPresentationFullScreen
+                        setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft)
+                    },
+            animated = false,
         ) {
             presented = true
         }
@@ -139,18 +147,16 @@ internal abstract class ModalContainerSwipeBackTest(
         assertEquals(
             expected = NavigationEvent.EDGE_RIGHT,
             actual = (transitionState as InProgress).latestEvent.swipeEdge,
-            message = "back swipe should report the expected edge in a modal container"
+            message = "back swipe should report the expected edge in a modal container",
         )
         assertEquals(
             expected = 0,
             actual = backCompletedCount,
-            message = "back swipe should not complete before release in a modal container"
+            message = "back swipe should not complete before release in a modal container",
         )
 
         swipeBack.up()
 
-        waitUntil("back swipe should complete in a modal container") {
-            backCompletedCount == 1
-        }
+        waitUntil("back swipe should complete in a modal container") { backCompletedCount == 1 }
     }
 }

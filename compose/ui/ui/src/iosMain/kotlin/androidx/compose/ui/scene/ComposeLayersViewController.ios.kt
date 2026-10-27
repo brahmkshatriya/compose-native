@@ -17,7 +17,7 @@
 package androidx.compose.ui.scene
 
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.graphics.SkiaCanvasHolder
 import androidx.compose.ui.platform.WindowContext
 import androidx.compose.ui.uikit.addLayoutConstraintsToMatch
 import androidx.compose.ui.uikit.embedSubview
@@ -48,55 +48,51 @@ import platform.UIKit.UIWindow
 import platform.UIKit.beginAppearanceTransition
 import platform.UIKit.endAppearanceTransition
 
-/**
- * A class responsible for managing and rendering [IosComposeSceneLayer]s.
- */
+/** A class responsible for managing and rendering [IosComposeSceneLayer]s. */
 internal class ComposeLayersViewController(
     useSeparateRenderThreadWhenPossible: Boolean,
     private val coroutineContext: CoroutineContext,
-    private val hostingComposeView: ComposeContainerView
-): UIViewController(nibName = null, bundle = null) {
+    private val hostingComposeView: ComposeContainerView,
+) : UIViewController(nibName = null, bundle = null) {
     val windowContext = WindowContext()
 
     private var hasViewAppeared = false
 
-    val metalView: MetalViewHolder = MetalView(
-        retrieveInteropTransaction = ::retrieveAndMergeInteropTransactions,
-        useSeparateRenderThreadWhenPossible = useSeparateRenderThreadWhenPossible,
-        draw = ::draw,
-    ).apply {
-        canBeOpaque = false
-    }
+    val metalView: MetalViewHolder =
+        MetalView(
+                retrieveInteropTransaction = ::retrieveAndMergeInteropTransactions,
+                useSeparateRenderThreadWhenPossible = useSeparateRenderThreadWhenPossible,
+                draw = ::draw,
+            )
+            .apply { canBeOpaque = false }
 
-    private val composeContainerView = ComposeContainerView(
-        useOpaqueConfiguration = false,
-        transparentForTouches = true
-    ).apply {
-        updateMetalView(
-            metalView = metalView,
-            onWillMoveToWindow = { beginAppearanceTransition(it != null, animated = false) },
-            onDidMoveToWindow = { endAppearanceTransition() },
-            onLayoutSubviews = ::measureAndLayoutLayers,
-            onDraw = { needsSynchronousDraw ->
-                metalView.redrawer.onDraw(
-                    needsSynchronousDraw = needsSynchronousDraw,
-                    needsComposeSceneDraw = needsComposeSceneDraw(),
-                    retrievePendingViewUpdatesInteropTransaction =
-                        ::retrieveAndMergePendingViewUpdatesInteropTransactions,
-                )
-            },
-        )
-    }
+    private val composeContainerView =
+        ComposeContainerView(useOpaqueConfiguration = false, transparentForTouches = true).apply {
+            updateMetalView(
+                metalView = metalView,
+                onWillMoveToWindow = { beginAppearanceTransition(it != null, animated = false) },
+                onDidMoveToWindow = { endAppearanceTransition() },
+                onLayoutSubviews = ::measureAndLayoutLayers,
+                onDraw = { needsSynchronousDraw ->
+                    metalView.redrawer.onDraw(
+                        needsSynchronousDraw = needsSynchronousDraw,
+                        needsDraw = needsLayerStackDraw || needsComposeSceneDraw(),
+                        retrievePendingViewUpdatesInteropTransaction =
+                            ::retrieveAndMergePendingViewUpdatesInteropTransactions,
+                    )
+                },
+            )
+        }
 
-    private val layoutInvalidationHandler = LayoutInvalidationHandler(coroutineContext) {
-        composeContainerView.setNeedsLayout()
-        composeContainerView.invalidateIntrinsicContentSize()
-    }
+    private val canvasHolder = SkiaCanvasHolder()
+    private val layoutInvalidationHandler =
+        LayoutInvalidationHandler(coroutineContext) {
+            composeContainerView.setNeedsLayout()
+            composeContainerView.invalidateIntrinsicContentSize()
+        }
 
     init {
-        coroutineContext.job.invokeOnCompletion {
-            dispose()
-        }
+        coroutineContext.job.invokeOnCompletion { dispose() }
     }
 
     fun invalidateLayout() {
@@ -111,10 +107,11 @@ internal class ComposeLayersViewController(
         super.viewDidLayoutSubviews()
 
         val initialSize = view.layer.presentationLayer()?.bounds?.dpSize()
-        if (initialSize != null &&
-            initialSize != DpSize.Zero &&
-            initialSize != view.bounds.dpSize() &&
-            !hasInteropViews
+        if (
+            initialSize != null &&
+                initialSize != DpSize.Zero &&
+                initialSize != view.bounds.dpSize() &&
+                !hasInteropViews
         ) {
             animateSizeTransition(initialSize = initialSize)
         }
@@ -123,6 +120,7 @@ internal class ComposeLayersViewController(
     }
 
     private var isAnimating = false
+
     private fun animateSizeTransition(initialSize: DpSize) {
         if (isAnimating || layers.isEmpty()) {
             return
@@ -131,7 +129,8 @@ internal class ComposeLayersViewController(
 
         val displayLinkListener = DisplayLinkListener()
         val job = Job()
-        val sizeTransitionScope = CoroutineScope(coroutineContext + displayLinkListener.frameClock + job)
+        val sizeTransitionScope =
+            CoroutineScope(coroutineContext + displayLinkListener.frameClock + job)
         displayLinkListener.start()
 
         val animationProgress: suspend ((Float) -> Unit) -> Unit = { onFrame ->
@@ -149,25 +148,23 @@ internal class ComposeLayersViewController(
             }
         }
 
-        val animations = listOf(
-            windowContext.prepareAndGetSizeTransitionAnimation(
-                initialDpSize = initialSize,
-                withProgress = animationProgress
-            )
-        ) + layers.map {
-            it.prepareAndGetSizeTransitionAnimation(animationProgress)
-        }
+        val animations =
+            listOf(
+                windowContext.prepareAndGetSizeTransitionAnimation(
+                    initialDpSize = initialSize,
+                    withProgress = animationProgress,
+                )
+            ) + layers.map { it.prepareAndGetSizeTransitionAnimation(animationProgress) }
 
         composeContainerView.animateSizeTransition(sizeTransitionScope) {
-            animations.map { animation ->
-                sizeTransitionScope.launch { animation.invoke() }
-            }.joinAll()
+            animations
+                .map { animation -> sizeTransitionScope.launch { animation.invoke() } }
+                .joinAll()
         }
     }
 
-    private fun measureAndLayoutLayers() = layersCache.withCopy { layers ->
-        layers.fastForEach { it.doMeasureAndLayout() }
-    }
+    private fun measureAndLayoutLayers() =
+        layersCache.withCopy { layers -> layers.fastForEach { it.doMeasureAndLayout() } }
 
     fun withLayers(block: (List<IosComposeSceneLayer>) -> Unit) = layersCache.withCopy(block)
 
@@ -176,13 +173,17 @@ internal class ComposeLayersViewController(
         this.view.addSubview(composeContainerView)
     }
 
-    val hasInvalidations: Boolean get() = this.layers.any { it.hasInvalidations }
+    val hasInvalidations: Boolean
+        get() =
+            composeContainerView.hasInvalidations ||
+                needsLayerStackDraw ||
+                this.layers.any { it.hasInvalidations }
 
     private val layers = mutableListOf<IosComposeSceneLayer>()
 
-    private val layersCache = CopiedList {
-        it.addAll(this.layers)
-    }
+    private var needsLayerStackDraw = false
+
+    private val layersCache = CopiedList(this.layers)
 
     /**
      * Transactions of the layers that were imperatively removed before their changes were applied.
@@ -215,6 +216,7 @@ internal class ComposeLayersViewController(
     }
 
     private fun hide() {
+        needsLayerStackDraw = false
         view.removeFromSuperview()
     }
 
@@ -256,7 +258,7 @@ internal class ComposeLayersViewController(
         if (hasViewAppeared) {
             layer.sceneDidAppear()
         }
-        invalidateDraw()
+        invalidateLayerStackDraw()
     }
 
     fun detach(layer: IosComposeSceneLayer) {
@@ -278,8 +280,7 @@ internal class ComposeLayersViewController(
             // It wasn't the last layer, pending transactions should be added to the list
             removedLayersTransactions.add(transaction)
 
-            // Redraw content with layer removed
-            invalidateDraw()
+            invalidateLayerStackDraw()
         }
     }
 
@@ -287,9 +288,7 @@ internal class ComposeLayersViewController(
         super.viewDidAppear(animated)
 
         hasViewAppeared = true
-        this.layers.fastForEach {
-            it.sceneDidAppear()
-        }
+        this.layers.fastForEach { it.sceneDidAppear() }
         invalidateDraw()
     }
 
@@ -297,9 +296,7 @@ internal class ComposeLayersViewController(
         super.viewWillDisappear(animated)
 
         hasViewAppeared = false
-        this.layers.fastForEach {
-            it.sceneWillDisappear()
-        }
+        this.layers.fastForEach { it.sceneWillDisappear() }
     }
 
     private val hasInteropViews: Boolean
@@ -323,12 +320,9 @@ internal class ComposeLayersViewController(
         val removedLayersTransactionsCopy = removedLayersTransactions.toList()
         removedLayersTransactions.clear()
 
-        val transactions = this.layers.map {
-            it.retrieveInteropTransaction()
-        } + removedLayersTransactionsCopy
-        return InteropSyncTransaction.merge(
-            transactions = transactions
-        )
+        val transactions =
+            this.layers.map { it.retrieveInteropTransaction() } + removedLayersTransactionsCopy
+        return InteropSyncTransaction.merge(transactions = transactions)
     }
 
     private fun retrieveAndMergePendingViewUpdatesInteropTransactions(): InteropSyncTransaction {
@@ -337,12 +331,13 @@ internal class ComposeLayersViewController(
             return InteropSyncTransaction.Empty
         }
 
-        val transactions = this.layers.map {
-            it.retrievePendingViewUpdatesInteropTransaction()
-        }
-        return InteropSyncTransaction.merge(
-            transactions = transactions
-        )
+        val transactions = this.layers.map { it.retrievePendingViewUpdatesInteropTransaction() }
+        return InteropSyncTransaction.merge(transactions = transactions)
+    }
+
+    private fun invalidateLayerStackDraw() {
+        needsLayerStackDraw = true
+        invalidateDraw()
     }
 
     private fun needsComposeSceneDraw(): Boolean {
@@ -353,21 +348,19 @@ internal class ComposeLayersViewController(
     }
 
     private fun draw(canvas: Canvas) {
+        needsLayerStackDraw = false
         layoutInvalidationHandler.postponeLayoutInvalidationCalls {
-            val composeCanvas = canvas.asComposeCanvas()
-
-            // Some layers may be removed during rendering, because recomposition will happen in the
-            // process, so we need to make a temporary copy of the list
-            layersCache.withCopy { layers ->
-                layers.fastForEach {
-                    it.draw(composeCanvas)
-                }
+            canvasHolder.drawInto(canvas) {
+                // Some layers may be removed during rendering, because recomposition will happen in
+                // the
+                // process, so we need to make a temporary copy of the list
+                layersCache.withCopy { layers -> layers.fastForEach { it.draw(this@drawInto) } }
             }
         }
     }
 }
 
-private class ComposeLayersView: UIView(frame = CGRectZero.readValue()) {
+private class ComposeLayersView : UIView(frame = CGRectZero.readValue()) {
     override fun hitTest(point: CValue<CGPoint>, withEvent: UIEvent?): UIView? {
         return super.hitTest(point, withEvent).takeUnless { it == this }
     }

@@ -53,10 +53,8 @@ internal class TrackpadPanTest {
 
         setContent {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.LightGray)
-                    .pointerInput(Unit) {
+                modifier =
+                    Modifier.fillMaxSize().background(Color.LightGray).pointerInput(Unit) {
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent(pass = PointerEventPass.Initial)
@@ -65,9 +63,10 @@ internal class TrackpadPanTest {
                                     PointerEventType.PanStart -> panStartCount++
                                     PointerEventType.PanMove -> {
                                         panMoveCount++
-                                        totalPan = event.changes.fold(totalPan) { acc, c ->
-                                            acc + c.panOffset
-                                        }
+                                        totalPan =
+                                            event.changes.fold(totalPan) { acc, c ->
+                                                acc + c.panOffset
+                                            }
                                     }
 
                                     PointerEventType.PanEnd -> panEndCount++
@@ -81,10 +80,7 @@ internal class TrackpadPanTest {
         trackpadPan(screenSize.center, 120.dp, dy = 75.dp)
 
         assertEquals(1, panStartCount)
-        assertTrue(
-            panMoveCount >= 1,
-            "Expected at least one PanMove, received ${panMoveCount}"
-        )
+        assertTrue(panMoveCount >= 1, "Expected at least one PanMove, received $panMoveCount")
         assertEquals(1, panEndCount)
 
         val totalPanDp = totalPan.toDpOffset(density)
@@ -98,17 +94,10 @@ internal class TrackpadPanTest {
 
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
+                Box(modifier = Modifier.fillMaxWidth().height(100.dp).background(Color.Red))
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                        .background(Color.Red)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(screenSize.height)
-                        .background(Color.Blue)
+                    modifier =
+                        Modifier.fillMaxWidth().height(screenSize.height).background(Color.Blue)
                 )
             }
         }
@@ -128,17 +117,10 @@ internal class TrackpadPanTest {
 
         setContent {
             Row(modifier = Modifier.fillMaxSize().horizontalScroll(state)) {
+                Box(modifier = Modifier.fillMaxHeight().width(100.dp).background(Color.Red))
                 Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(100.dp)
-                        .background(Color.Red)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .width(screenSize.width)
-                        .background(Color.Blue)
+                    modifier =
+                        Modifier.fillMaxHeight().width(screenSize.width).background(Color.Blue)
                 )
             }
         }
@@ -161,10 +143,8 @@ internal class TrackpadPanTest {
 
         setContent {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.LightGray)
-                    .pointerInput(Unit) {
+                modifier =
+                    Modifier.fillMaxSize().background(Color.LightGray).pointerInput(Unit) {
                         awaitPointerEventScope {
                             while (true) {
                                 val event = awaitPointerEvent(pass = PointerEventPass.Initial)
@@ -173,9 +153,10 @@ internal class TrackpadPanTest {
                                     PointerEventType.PanStart -> panStartCount++
                                     PointerEventType.PanMove -> {
                                         panMoveCount++
-                                        totalPan = event.changes.fold(totalPan) { acc, c ->
-                                            acc + c.panOffset
-                                        }
+                                        totalPan =
+                                            event.changes.fold(totalPan) { acc, c ->
+                                                acc + c.panOffset
+                                            }
                                     }
 
                                     PointerEventType.PanEnd -> panEndCount++
@@ -186,11 +167,7 @@ internal class TrackpadPanTest {
             )
         }
 
-        val deltas = listOf(
-            120.dp to 75.dp,
-            (-50).dp to 30.dp,
-            0.dp to (-90).dp,
-        )
+        val deltas = listOf(120.dp to 75.dp, (-50).dp to 30.dp, 0.dp to (-90).dp)
         for ((dx, dy) in deltas) {
             trackpadPan(screenSize.center, dx = dx, dy = dy)
         }
@@ -200,7 +177,7 @@ internal class TrackpadPanTest {
         assertEquals(deltas.size, panEndCount)
         assertTrue(
             panMoveCount >= deltas.size,
-            "Expected at least ${deltas.size} PanMove events, received $panMoveCount"
+            "Expected at least ${deltas.size} PanMove events, received $panMoveCount",
         )
 
         val expectedDx = deltas.sumOf { it.first.value.toDouble() }.toFloat()

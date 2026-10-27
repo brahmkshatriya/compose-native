@@ -49,9 +49,12 @@ class GesturesTest : OnCanvasTests {
 
         createComposeWindow {
             currentDensity = LocalDensity.current
-            Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-                detectTransformGestures { _, pan, _, _ -> pans.add(pan) }
-            })
+            Box(
+                modifier =
+                    Modifier.fillMaxSize().pointerInput(Unit) {
+                        detectTransformGestures { _, pan, _, _ -> pans.add(pan) }
+                    }
+            )
         }
 
         dispatchEvents(
@@ -59,7 +62,7 @@ class GesturesTest : OnCanvasTests {
             // first move to exceed the touch slop
             WebPointerEvent("pointermove", touch(0, 10, 10)),
             WebPointerEvent("pointermove", touch(0, 10, 20)),
-            WebPointerEvent("pointermove", touch(0, 20, 20))
+            WebPointerEvent("pointermove", touch(0, 20, 20)),
         )
 
         val actualPan = 10f * currentDensity.density
@@ -75,12 +78,9 @@ class GesturesTest : OnCanvasTests {
 
         createComposeWindow {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, _, zoom, _ ->
-                            zooms.add(zoom)
-                        }
+                modifier =
+                    Modifier.fillMaxSize().pointerInput(Unit) {
+                        detectTransformGestures { _, _, zoom, _ -> zooms.add(zoom) }
                     }
             )
         }
@@ -117,36 +117,37 @@ class GesturesTest : OnCanvasTests {
         var lastPointerEvent: PointerEvent? = null
 
         createComposeWindow {
-            Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (coroutineContext.isActive) {
-                        lastPointerEvent = awaitPointerEvent()
+            Box(
+                modifier =
+                    Modifier.fillMaxSize().pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (coroutineContext.isActive) {
+                                lastPointerEvent = awaitPointerEvent()
+                            }
+                        }
                     }
-                }
-            })
+            )
         }
 
         assertNull(lastPointerEvent)
 
         dispatchEvents(
             WebPointerEvent("pointerdown", touch(0, 50, 50)),
-            WebPointerEvent("pointermove", touch(0, 60, 60))
+            WebPointerEvent("pointermove", touch(0, 60, 60)),
         )
 
         awaitIdle()
 
         assertNotNull(lastPointerEvent)
-        assertEquals(1, lastPointerEvent.changes.size)
-        assertEquals(PointerEventType.Move, lastPointerEvent.type)
+        assertEquals(1, lastPointerEvent!!.changes.size)
+        assertEquals(PointerEventType.Move, lastPointerEvent!!.type)
 
-        dispatchEvents(
-            WebPointerEvent("pointerup", touch(0, 60, 60))
-        )
+        dispatchEvents(WebPointerEvent("pointerup", touch(0, 60, 60)))
         lastPointerEvent = null
 
         dispatchEvents(
             WebPointerEvent("pointerdown", touch(1, 10, 10)),
-            WebPointerEvent("pointermove", touch(1, 20, 20))
+            WebPointerEvent("pointermove", touch(1, 20, 20)),
         )
 
         awaitIdle()
@@ -161,13 +162,16 @@ class GesturesTest : OnCanvasTests {
         val pointerEvents = mutableListOf<PointerEvent>()
 
         createComposeWindow {
-            Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (coroutineContext.isActive) {
-                        pointerEvents.add(awaitPointerEvent())
+            Box(
+                modifier =
+                    Modifier.fillMaxSize().pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (coroutineContext.isActive) {
+                                pointerEvents.add(awaitPointerEvent())
+                            }
+                        }
                     }
-                }
-            })
+            )
         }
 
         assertTrue(pointerEvents.isEmpty())
@@ -184,29 +188,34 @@ class GesturesTest : OnCanvasTests {
             // -2
             WebPointerEvent("pointerup", touch(2, 20, 20)),
             // -1
-            WebPointerEvent("pointerup", touch(1, 10, 10))
+            WebPointerEvent("pointerup", touch(1, 10, 10)),
         )
 
         awaitIdle()
 
-        val expected = """
+        val expected =
+            """
             + 1
             + 1; + 2
             + 1; + 2; + 3
             + 1; + 2; - 3
             + 1; - 2
             - 1
-        """.trimIndent()
+            """
+                .trimIndent()
 
-        val actual = pointerEvents.joinToString("\n") { event ->
-            event.changes.sortedBy { it.id.value }.joinToString("; ") {
-                if (it.pressed) {
-                    "+ ${it.id.value}"
-                } else {
-                    "- ${it.id.value}"
-                }
+        val actual =
+            pointerEvents.joinToString("\n") { event ->
+                event.changes
+                    .sortedBy { it.id.value }
+                    .joinToString("; ") {
+                        if (it.pressed) {
+                            "+ ${it.id.value}"
+                        } else {
+                            "- ${it.id.value}"
+                        }
+                    }
             }
-        }
         assertEquals(expected, actual)
     }
 
@@ -214,14 +223,12 @@ class GesturesTest : OnCanvasTests {
     fun pointerCancelDoesNotTriggerClick() = runApplicationTest {
         var clicksCount = 0
 
-        createComposeWindow {
-            Box(modifier = Modifier.fillMaxSize().clickable { clicksCount++ })
-        }
+        createComposeWindow { Box(modifier = Modifier.fillMaxSize().clickable { clicksCount++ }) }
 
         // Normal click should fire
         dispatchEvents(
             WebPointerEvent("pointerdown", touch(0, 50, 50)),
-            WebPointerEvent("pointerup", touch(0, 50, 50))
+            WebPointerEvent("pointerup", touch(0, 50, 50)),
         )
         awaitIdle()
         assertEquals(1, clicksCount)
@@ -229,7 +236,7 @@ class GesturesTest : OnCanvasTests {
         // pointercancel should NOT fire click (browser took over the gesture)
         dispatchEvents(
             WebPointerEvent("pointerdown", touch(1, 50, 50)),
-            WebPointerEvent("pointercancel", touch(1, 50, 50))
+            WebPointerEvent("pointercancel", touch(1, 50, 50)),
         )
         awaitIdle()
         assertEquals(1, clicksCount) // still 1 — click was cancelled
@@ -240,22 +247,25 @@ class GesturesTest : OnCanvasTests {
         val moveDeltas = mutableListOf<Offset>()
 
         createComposeWindow {
-            Box(modifier = Modifier.fillMaxSize().pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (coroutineContext.isActive) {
-                        val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Move) {
-                            moveDeltas.add(event.changes[0].positionChange())
+            Box(
+                modifier =
+                    Modifier.fillMaxSize().pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (coroutineContext.isActive) {
+                                val event = awaitPointerEvent()
+                                if (event.type == PointerEventType.Move) {
+                                    moveDeltas.add(event.changes[0].positionChange())
+                                }
+                            }
                         }
                     }
-                }
-            })
+            )
         }
 
         dispatchEvents(
             fractionalTouchEvent("pointerdown", 0, 10.0, 10.0),
             fractionalTouchEvent("pointermove", 0, 10.25, 10.0),
-            fractionalTouchEvent("pointermove", 0, 10.5, 10.0)
+            fractionalTouchEvent("pointermove", 0, 10.5, 10.0),
         )
 
         awaitIdle()
@@ -263,16 +273,12 @@ class GesturesTest : OnCanvasTests {
         assertEquals(2, moveDeltas.size, "sub-pixel moves were dropped: $moveDeltas")
         assertTrue(
             moveDeltas.all { it.x > 0f },
-            "sub-pixel moves must report a non-zero delta: $moveDeltas"
+            "sub-pixel moves must report a non-zero delta: $moveDeltas",
         )
     }
 
-    private fun touch(id: Int, x: Int, y: Int) = PointerEventInit(
-        pointerId = id,
-        clientX = x,
-        clientY = y,
-        pointerType = "touch"
-    )
+    private fun touch(id: Int, x: Int, y: Int) =
+        PointerEventInit(pointerId = id, clientX = x, clientY = y, pointerType = "touch")
 }
 
 /**

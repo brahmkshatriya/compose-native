@@ -35,11 +35,11 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.test.utils.DpRectZero
 import androidx.compose.ui.unit.DpRect
 import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.toDpRect
-import androidx.compose.ui.unit.toDpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.height
 import androidx.compose.ui.unit.size
+import androidx.compose.ui.unit.toDpRect
+import androidx.compose.ui.unit.toDpSize
 import androidx.compose.ui.unit.width
 import androidx.compose.ui.viewinterop.UIKitInteropProperties
 import androidx.compose.ui.viewinterop.UIKitView
@@ -54,100 +54,116 @@ import platform.UIKit.UIColor
 import platform.UIKit.UILabel
 
 class UIKitInteropUILabelSizingTest {
-    private val SHORT_TEXT: String = "TEXT"
-    private val LONG_TEXT: String = List(100) { "TEXT" }.joinToString(" ")
+    private val ShortText: String = "TEXT"
+    private val LongText: String = List(100) { "TEXT" }.joinToString(" ")
 
     @Test
     @OptIn(ExperimentalForeignApi::class)
-    fun testUILabelFrameMatchesInteropBoundsShortTextSingleLine() = runUIKitInstrumentedTestWithInterop { overlay ->
-        var interopRect = DpRectZero()
-        var uiLabelRect: () -> DpRect = { DpRectZero() }
+    fun testUILabelFrameMatchesInteropBoundsShortTextSingleLine() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            var interopRect = DpRectZero()
+            var uiLabelRect: () -> DpRect = { DpRectZero() }
 
-        setContent {
-            UIKitView(
-                factory = {
-                    UILabel().apply {
-                        numberOfLines = 1
-                        text = SHORT_TEXT
-                        uiLabelRect = { frame.toDpRect() }
-                    }
-                },
-                modifier = Modifier.onGloballyPositioned { interopRect = it.boundsInRoot().toDpRect(density) },
-                properties = UIKitInteropProperties(placedAsOverlay = overlay)
-            )
+            setContent {
+                UIKitView(
+                    factory = {
+                        UILabel().apply {
+                            numberOfLines = 1
+                            text = ShortText
+                            uiLabelRect = { frame.toDpRect() }
+                        }
+                    },
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            interopRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                )
+            }
+
+            assertEquals(interopRect, uiLabelRect())
         }
-
-        assertEquals(interopRect, uiLabelRect())
-    }
 
     @Test
     @OptIn(ExperimentalForeignApi::class)
-    fun testUILabelFrameMatchesInteropBoundsShortTextMultiLine() = runUIKitInstrumentedTestWithInterop { overlay ->
-        var interopRect = DpRectZero()
-        var uiLabelRect: () -> DpRect = { DpRectZero() }
+    fun testUILabelFrameMatchesInteropBoundsShortTextMultiLine() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            var interopRect = DpRectZero()
+            var uiLabelRect: () -> DpRect = { DpRectZero() }
 
-        setContent {
-            UIKitView(
-                factory = {
-                    UILabel().apply {
-                        numberOfLines = 0
-                        text = SHORT_TEXT
-                        uiLabelRect = { frame.toDpRect() }
-                    }
-                },
-                modifier = Modifier.onGloballyPositioned { interopRect = it.boundsInRoot().toDpRect(density) },
-                properties = UIKitInteropProperties(placedAsOverlay = overlay)
-            )
+            setContent {
+                UIKitView(
+                    factory = {
+                        UILabel().apply {
+                            numberOfLines = 0
+                            text = ShortText
+                            uiLabelRect = { frame.toDpRect() }
+                        }
+                    },
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            interopRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                )
+            }
+
+            assertEquals(interopRect, uiLabelRect())
         }
-
-        assertEquals(interopRect, uiLabelRect())
-    }
 
     @Test
     @OptIn(ExperimentalForeignApi::class)
-    fun testUILabelFrameMatchesInteropBoundsLongTextSingleLine() = runUIKitInstrumentedTestWithInterop { overlay ->
-        var interopRect = DpRectZero()
-        var uiLabelRect: () -> DpRect = { DpRectZero() }
+    fun testUILabelFrameMatchesInteropBoundsLongTextSingleLine() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            var interopRect = DpRectZero()
+            var uiLabelRect: () -> DpRect = { DpRectZero() }
 
-        setContent {
-            UIKitView(
-                factory = {
-                    UILabel().apply {
-                        numberOfLines = 1
-                        text = LONG_TEXT
-                        uiLabelRect = { frame.toDpRect() }
-                    }
-                },
-                modifier = Modifier.onGloballyPositioned { interopRect = it.boundsInRoot().toDpRect(density) },
-                properties = UIKitInteropProperties(placedAsOverlay = overlay)
-            )
+            setContent {
+                UIKitView(
+                    factory = {
+                        UILabel().apply {
+                            numberOfLines = 1
+                            text = LongText
+                            uiLabelRect = { frame.toDpRect() }
+                        }
+                    },
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            interopRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                )
+            }
+
+            assertEquals(interopRect, uiLabelRect())
         }
-
-        assertEquals(interopRect, uiLabelRect())
-    }
 
     @Test
     @OptIn(ExperimentalForeignApi::class)
-    fun testUILabelFrameMatchesInteropBoundsLongTextMultiLine() = runUIKitInstrumentedTestWithInterop { overlay ->
-        var interopRect = DpRectZero()
-        var uiLabelRect: () -> DpRect = { DpRectZero() }
+    fun testUILabelFrameMatchesInteropBoundsLongTextMultiLine() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            var interopRect = DpRectZero()
+            var uiLabelRect: () -> DpRect = { DpRectZero() }
 
-        setContent {
-            UIKitView(
-                factory = {
-                    UILabel().apply {
-                        numberOfLines = 0
-                        text = LONG_TEXT
-                        uiLabelRect = { frame.toDpRect() }
-                    }
-                },
-                modifier = Modifier.onGloballyPositioned { interopRect = it.boundsInRoot().toDpRect(density) },
-                properties = UIKitInteropProperties(placedAsOverlay = overlay)
-            )
+            setContent {
+                UIKitView(
+                    factory = {
+                        UILabel().apply {
+                            numberOfLines = 0
+                            text = LongText
+                            uiLabelRect = { frame.toDpRect() }
+                        }
+                    },
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            interopRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                )
+            }
+
+            assertEquals(interopRect, uiLabelRect())
         }
-
-        assertEquals(interopRect, uiLabelRect())
-    }
 
     @Test
     fun testUILabelShortText() = runUIKitInstrumentedTestWithInterop { overlay ->
@@ -160,21 +176,27 @@ class UIKitInteropUILabelSizingTest {
                     factory = {
                         UILabel().apply {
                             numberOfLines = 1
-                            text = SHORT_TEXT
+                            text = ShortText
                         }
                     },
-                    modifier = Modifier.onGloballyPositioned { singleLineLabel = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            singleLineLabel = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
                 UIKitView(
                     factory = {
                         UILabel().apply {
                             numberOfLines = 0
-                            text = SHORT_TEXT
+                            text = ShortText
                         }
                     },
-                    modifier = Modifier.onGloballyPositioned { multiLineLabel = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            multiLineLabel = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
         }
@@ -198,21 +220,27 @@ class UIKitInteropUILabelSizingTest {
                     factory = {
                         UILabel().apply {
                             numberOfLines = 1
-                            text = LONG_TEXT
+                            text = LongText
                         }
                     },
-                    modifier = Modifier.onGloballyPositioned { singleLineText = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            singleLineText = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
                 UIKitView(
                     factory = {
                         UILabel().apply {
                             numberOfLines = 0
-                            text = LONG_TEXT
+                            text = LongText
                         }
                     },
-                    modifier = Modifier.onGloballyPositioned { multiLineText = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            multiLineText = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
         }
@@ -223,76 +251,86 @@ class UIKitInteropUILabelSizingTest {
     }
 
     @Test
-    fun testUILabelSingleLineShortTextFixedWidth() = runUIKitInstrumentedTestWithInterop { overlay ->
-        var referenceViewRect = DpRectZero()
-        var fixedWidthViewRect = DpRectZero()
+    fun testUILabelSingleLineShortTextFixedWidth() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            var referenceViewRect = DpRectZero()
+            var fixedWidthViewRect = DpRectZero()
 
-        setContent {
-            Column {
-                UIKitView(
-                    factory = {
-                        UILabel().apply {
-                            numberOfLines = 1
-                            text = SHORT_TEXT
-                        }
-                    },
-                    modifier = Modifier.onGloballyPositioned { referenceViewRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
-                )
-                UIKitView(
-                    factory = {
-                        UILabel().apply {
-                            numberOfLines = 1
-                            text = SHORT_TEXT
-                        }
-                    },
-                    modifier = Modifier
-                        .width(200.dp)
-                        .onGloballyPositioned { fixedWidthViewRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
-                )
+            setContent {
+                Column {
+                    UIKitView(
+                        factory = {
+                            UILabel().apply {
+                                numberOfLines = 1
+                                text = ShortText
+                            }
+                        },
+                        modifier =
+                            Modifier.onGloballyPositioned {
+                                referenceViewRect = it.boundsInRoot().toDpRect(density)
+                            },
+                        properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                    )
+                    UIKitView(
+                        factory = {
+                            UILabel().apply {
+                                numberOfLines = 1
+                                text = ShortText
+                            }
+                        },
+                        modifier =
+                            Modifier.width(200.dp).onGloballyPositioned {
+                                fixedWidthViewRect = it.boundsInRoot().toDpRect(density)
+                            },
+                        properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                    )
+                }
             }
-        }
 
-        assertEquals(200.dp, fixedWidthViewRect.width)
-        assertEquals(referenceViewRect.height, fixedWidthViewRect.height)
-    }
+            assertEquals(200.dp, fixedWidthViewRect.width)
+            assertEquals(referenceViewRect.height, fixedWidthViewRect.height)
+        }
 
     @Test
-    fun testUILabelSingleLineShortTextFixedHeight() = runUIKitInstrumentedTestWithInterop { overlay ->
-        var referenceViewRect = DpRectZero()
-        var fixedWidthViewRect = DpRectZero()
+    fun testUILabelSingleLineShortTextFixedHeight() =
+        runUIKitInstrumentedTestWithInterop { overlay ->
+            var referenceViewRect = DpRectZero()
+            var fixedWidthViewRect = DpRectZero()
 
-        setContent {
-            Column {
-                UIKitView(
-                    factory = {
-                        UILabel().apply {
-                            numberOfLines = 1
-                            text = SHORT_TEXT
-                        }
-                    },
-                    modifier = Modifier.onGloballyPositioned { referenceViewRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
-                )
-                UIKitView(
-                    factory = {
-                        UILabel().apply {
-                            numberOfLines = 1
-                            text = SHORT_TEXT
-                        }
-                    },
-                    modifier = Modifier
-                        .height(200.dp)
-                        .onGloballyPositioned { fixedWidthViewRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
-                )
+            setContent {
+                Column {
+                    UIKitView(
+                        factory = {
+                            UILabel().apply {
+                                numberOfLines = 1
+                                text = ShortText
+                            }
+                        },
+                        modifier =
+                            Modifier.onGloballyPositioned {
+                                referenceViewRect = it.boundsInRoot().toDpRect(density)
+                            },
+                        properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                    )
+                    UIKitView(
+                        factory = {
+                            UILabel().apply {
+                                numberOfLines = 1
+                                text = ShortText
+                            }
+                        },
+                        modifier =
+                            Modifier.height(200.dp).onGloballyPositioned {
+                                fixedWidthViewRect = it.boundsInRoot().toDpRect(density)
+                            },
+                        properties = UIKitInteropProperties(placedAsOverlay = overlay),
+                    )
+                }
             }
-        }
 
-        assertEquals(200.dp, fixedWidthViewRect.height)
-        assertEquals(referenceViewRect.width, fixedWidthViewRect.width)
-    }
+            assertEquals(200.dp, fixedWidthViewRect.height)
+            assertEquals(referenceViewRect.width, fixedWidthViewRect.width)
+        }
 
     @Test
     fun testUILabelSingleLineShortTextFixedSize() = runUIKitInstrumentedTestWithInterop { overlay ->
@@ -305,23 +343,27 @@ class UIKitInteropUILabelSizingTest {
                     factory = {
                         UILabel().apply {
                             numberOfLines = 1
-                            text = SHORT_TEXT
+                            text = ShortText
                         }
                     },
-                    modifier = Modifier.onGloballyPositioned { referenceViewRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            referenceViewRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
                 UIKitView(
                     factory = {
                         UILabel().apply {
                             numberOfLines = 1
-                            text = SHORT_TEXT
+                            text = ShortText
                         }
                     },
-                    modifier = Modifier
-                        .size(width = 200.dp, height = 400.dp)
-                        .onGloballyPositioned { fixedSizeViewRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.size(width = 200.dp, height = 400.dp).onGloballyPositioned {
+                            fixedSizeViewRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
         }
@@ -341,23 +383,27 @@ class UIKitInteropUILabelSizingTest {
                     factory = {
                         UILabel().apply {
                             numberOfLines = 0
-                            text = LONG_TEXT
+                            text = LongText
                         }
                     },
-                    modifier = Modifier.onGloballyPositioned { unboundedTextRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            unboundedTextRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
                 UIKitView(
                     factory = {
                         UILabel().apply {
                             numberOfLines = 0
-                            text = LONG_TEXT
+                            text = LongText
                         }
                     },
-                    modifier = Modifier
-                        .width(width = 200.dp)
-                        .onGloballyPositioned { boundedWidthTextRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.width(width = 200.dp).onGloballyPositioned {
+                            boundedWidthTextRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
         }
@@ -378,27 +424,27 @@ class UIKitInteropUILabelSizingTest {
                     factory = {
                         UILabel().apply {
                             numberOfLines = 0
-                            text = LONG_TEXT
+                            text = LongText
                         }
                     },
-                    modifier = Modifier.onGloballyPositioned {
-                        unboundedTextSize = it.boundsInRoot().size.toDpSize(density)
-                    },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            unboundedTextSize = it.boundsInRoot().size.toDpSize(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
                 UIKitView(
                     factory = {
                         UILabel().apply {
                             numberOfLines = 0
-                            text = LONG_TEXT
+                            text = LongText
                         }
                     },
-                    modifier = Modifier
-                        .height(100.dp)
-                        .onGloballyPositioned {
+                    modifier =
+                        Modifier.height(100.dp).onGloballyPositioned {
                             boundedHeightTextSize = it.boundsInRoot().size.toDpSize(density)
                         },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
         }
@@ -416,17 +462,19 @@ class UIKitInteropUILabelSizingTest {
         setContent {
             Row {
                 Text(
-                    SHORT_TEXT,
-                    modifier = Modifier.onGloballyPositioned { composeRect = it.boundsInRoot().toDpRect(density) }
+                    ShortText,
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            composeRect = it.boundsInRoot().toDpRect(density)
+                        },
                 )
                 UIKitView(
-                    factory = {
-                        UILabel().apply {
-                            text = LONG_TEXT
-                        }
-                    },
-                    modifier = Modifier.onGloballyPositioned { uiKitRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    factory = { UILabel().apply { text = LongText } },
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            uiKitRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
         }
@@ -445,17 +493,19 @@ class UIKitInteropUILabelSizingTest {
         setContent {
             Column {
                 Text(
-                    SHORT_TEXT,
-                    modifier = Modifier.onGloballyPositioned { composeRect = it.boundsInRoot().toDpRect(density) }
+                    ShortText,
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            composeRect = it.boundsInRoot().toDpRect(density)
+                        },
                 )
                 UIKitView(
-                    factory = {
-                        UILabel().apply {
-                            text = LONG_TEXT
-                        }
-                    },
-                    modifier = Modifier.onGloballyPositioned { uiKitRect = it.boundsInRoot().toDpRect(density) },
-                    properties = UIKitInteropProperties(placedAsOverlay = overlay)
+                    factory = { UILabel().apply { text = LongText } },
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                            uiKitRect = it.boundsInRoot().toDpRect(density)
+                        },
+                    properties = UIKitInteropProperties(placedAsOverlay = overlay),
                 )
             }
         }
@@ -469,25 +519,24 @@ class UIKitInteropUILabelSizingTest {
     @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testUIKitLabelInInteropWithFillMaxSize() = runUIKitInstrumentedTestWithInterop { overlay ->
-        val uiKitView = UILabel().apply {
-            text = LONG_TEXT
-            numberOfLines = 0
-            backgroundColor = UIColor.blueColor
-        }
+        val uiKitView =
+            UILabel().apply {
+                text = LongText
+                numberOfLines = 0
+                backgroundColor = UIColor.blueColor
+            }
         var composeRect = DpRectZero()
 
         setContent {
-            Box(
-                Modifier
-                    .background(Color.Red)
-                    .fillMaxSize()
-            ) {
+            Box(Modifier.background(Color.Red).fillMaxSize()) {
                 UIKitView(
                     factory = { uiKitView },
                     properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                    modifier = Modifier
-                        .onGloballyPositioned { composeRect = it.boundsInRoot().toDpRect(density) }
-                        .fillMaxSize()
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                                composeRect = it.boundsInRoot().toDpRect(density)
+                            }
+                            .fillMaxSize(),
                 )
             }
         }
@@ -504,7 +553,7 @@ class UIKitInteropUILabelSizingTest {
             val fixedWidth = 50.dp
             val uiKitViewFactory = {
                 UILabel().apply {
-                    text = LONG_TEXT
+                    text = LongText
                     numberOfLines = 0
                     backgroundColor = UIColor.blueColor
                 }
@@ -512,31 +561,30 @@ class UIKitInteropUILabelSizingTest {
 
             setContent {
                 Box(
-                    Modifier
-                        .background(Color.Red)
-                        .size(boxSize),
-                    contentAlignment = Alignment.Center
+                    Modifier.background(Color.Red).size(boxSize),
+                    contentAlignment = Alignment.Center,
                 ) {
                     UIKitView(
                         factory = uiKitViewFactory,
                         properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                        modifier = Modifier
-                            .onGloballyPositioned {
-                                composeInteropSize = it.boundsInRoot().size.toDpSize(density)
-                            }
-                            .width(fixedWidth)
+                        modifier =
+                            Modifier.onGloballyPositioned {
+                                    composeInteropSize = it.boundsInRoot().size.toDpSize(density)
+                                }
+                                .width(fixedWidth),
                     )
                 }
             }
 
-            val expectedSize = uiKitViewFactory()
-                .also { it.translatesAutoresizingMaskIntoConstraints = false }
-                .measureFittingSize(
-                    fixedWidth = fixedWidth,
-                    maxWidth = fixedWidth,
-                    maxHeight = boxSize.height,
-                    minWidth = fixedWidth
-                )
+            val expectedSize =
+                uiKitViewFactory()
+                    .also { it.translatesAutoresizingMaskIntoConstraints = false }
+                    .measureFittingSize(
+                        fixedWidth = fixedWidth,
+                        maxWidth = fixedWidth,
+                        maxHeight = boxSize.height,
+                        minWidth = fixedWidth,
+                    )
 
             assertEquals(expectedSize, composeInteropSize)
         }
@@ -550,7 +598,7 @@ class UIKitInteropUILabelSizingTest {
             val fixedHeight = 80.dp
             val uiKitViewFactory = {
                 UILabel().apply {
-                    text = LONG_TEXT
+                    text = LongText
                     numberOfLines = 0
                     backgroundColor = UIColor.blueColor
                 }
@@ -558,31 +606,30 @@ class UIKitInteropUILabelSizingTest {
 
             setContent {
                 Box(
-                    Modifier
-                        .background(Color.Red)
-                        .size(boxSize),
-                    contentAlignment = Alignment.Center
+                    Modifier.background(Color.Red).size(boxSize),
+                    contentAlignment = Alignment.Center,
                 ) {
                     UIKitView(
                         factory = uiKitViewFactory,
                         properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                        modifier = Modifier
-                            .onGloballyPositioned {
-                                composeInteropSize = it.boundsInRoot().size.toDpSize(density)
-                            }
-                            .height(fixedHeight)
+                        modifier =
+                            Modifier.onGloballyPositioned {
+                                    composeInteropSize = it.boundsInRoot().size.toDpSize(density)
+                                }
+                                .height(fixedHeight),
                     )
                 }
             }
 
-            val expectedSize = uiKitViewFactory()
-                .also { it.translatesAutoresizingMaskIntoConstraints = false }
-                .measureFittingSize(
-                    fixedHeight = fixedHeight,
-                    maxWidth = boxSize.width,
-                    maxHeight = boxSize.height,
-                    minHeight = fixedHeight
-                )
+            val expectedSize =
+                uiKitViewFactory()
+                    .also { it.translatesAutoresizingMaskIntoConstraints = false }
+                    .measureFittingSize(
+                        fixedHeight = fixedHeight,
+                        maxWidth = boxSize.width,
+                        maxHeight = boxSize.height,
+                        minHeight = fixedHeight,
+                    )
 
             assertEquals(expectedSize, composeInteropSize)
         }
@@ -596,27 +643,22 @@ class UIKitInteropUILabelSizingTest {
         val fixedHeight = 80.dp
         val uiKitViewFactory = {
             UILabel().apply {
-                text = LONG_TEXT
+                text = LongText
                 numberOfLines = 0
                 backgroundColor = UIColor.blueColor
             }
         }
 
         setContent {
-            Box(
-                Modifier
-                    .background(Color.Red)
-                    .size(boxSize),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(Modifier.background(Color.Red).size(boxSize), contentAlignment = Alignment.Center) {
                 UIKitView(
                     factory = uiKitViewFactory,
                     properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                    modifier = Modifier
-                        .onGloballyPositioned {
-                            composeInteropSize = it.boundsInRoot().size.toDpSize(density)
-                        }
-                        .size(fixedWidth, fixedHeight)
+                    modifier =
+                        Modifier.onGloballyPositioned {
+                                composeInteropSize = it.boundsInRoot().size.toDpSize(density)
+                            }
+                            .size(fixedWidth, fixedHeight),
                 )
             }
         }
@@ -631,36 +673,29 @@ class UIKitInteropUILabelSizingTest {
 
         val uiKitViewFactory = {
             UILabel().apply {
-                text = LONG_TEXT
+                text = LongText
                 numberOfLines = 0
                 backgroundColor = UIColor.blueColor
             }
         }
 
         setContent {
-            Box(
-                Modifier
-                    .background(Color.Red)
-                    .size(boxSize),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(Modifier.background(Color.Red).size(boxSize), contentAlignment = Alignment.Center) {
                 UIKitView(
                     factory = uiKitViewFactory,
                     properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                    modifier = Modifier
-                        .onGloballyPositioned {
+                    modifier =
+                        Modifier.onGloballyPositioned {
                             composeInteropSize = it.boundsInRoot().size.toDpSize(density)
-                        }
+                        },
                 )
             }
         }
 
-        val expectedSize = uiKitViewFactory()
-            .also { it.translatesAutoresizingMaskIntoConstraints = false }
-            .measureFittingSize(
-                maxWidth = boxSize.width,
-                maxHeight = boxSize.height
-            )
+        val expectedSize =
+            uiKitViewFactory()
+                .also { it.translatesAutoresizingMaskIntoConstraints = false }
+                .measureFittingSize(maxWidth = boxSize.width, maxHeight = boxSize.height)
 
         assertEquals(expectedSize, composeInteropSize)
     }
@@ -674,33 +709,35 @@ class UIKitInteropUILabelSizingTest {
 
             val fixedWidth = 120.dp
             val fixedHeight = 120.dp
-            val label = UILabel().apply {
-                text = SHORT_TEXT
-                numberOfLines = 0
-                backgroundColor = UIColor.blueColor
-            }
+            val label =
+                UILabel().apply {
+                    text = ShortText
+                    numberOfLines = 0
+                    backgroundColor = UIColor.blueColor
+                }
 
             setContent {
                 Box(
-                    Modifier
-                        .background(Color.Red)
-                        .size(boxSize),
-                    contentAlignment = Alignment.Center
+                    Modifier.background(Color.Red).size(boxSize),
+                    contentAlignment = Alignment.Center,
                 ) {
                     UIKitView(
                         factory = { label },
                         properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                        modifier = Modifier
-                            .onGloballyPositioned {
-                                composeInteropSize = it.boundsInRoot().size.toDpSize(density)
-                            }
-                            .size(fixedWidth, fixedHeight)
+                        modifier =
+                            Modifier.onGloballyPositioned {
+                                    composeInteropSize = it.boundsInRoot().size.toDpSize(density)
+                                }
+                                .size(fixedWidth, fixedHeight),
                     )
                 }
             }
 
             assertEquals(DpSize(fixedWidth, fixedHeight), composeInteropSize)
-            assertEquals(DpSize(fixedWidth, fixedHeight), label.frame.useContents { size.toDpSize() })
+            assertEquals(
+                DpSize(fixedWidth, fixedHeight),
+                label.frame.useContents { size.toDpSize() },
+            )
         }
 
     @Test
@@ -712,7 +749,7 @@ class UIKitInteropUILabelSizingTest {
             val boxWidth = mutableStateOf(0.dp)
             val uiKitViewFactory = {
                 UILabel().apply {
-                    text = LONG_TEXT
+                    text = LongText
                     numberOfLines = 0
                 }
             }
@@ -720,19 +757,16 @@ class UIKitInteropUILabelSizingTest {
             setContent {
                 Row(modifier = Modifier.size(rowSize)) {
                     Box(
-                        modifier = Modifier
-                            .background(Color.Green)
-                            .width(boxWidth.value)
-                            .fillMaxHeight()
+                        modifier =
+                            Modifier.background(Color.Green).width(boxWidth.value).fillMaxHeight()
                     )
                     UIKitView(
                         factory = uiKitViewFactory,
                         properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                        modifier = Modifier
-                            .background(Color.Cyan)
-                            .onGloballyPositioned {
+                        modifier =
+                            Modifier.background(Color.Cyan).onGloballyPositioned {
                                 composeInteropSize = it.boundsInRoot().size.toDpSize(density)
-                            }
+                            },
                     )
                 }
             }
@@ -742,12 +776,13 @@ class UIKitInteropUILabelSizingTest {
 
                 waitForIdle()
 
-                val expectedSize = uiKitViewFactory()
-                    .also { it.translatesAutoresizingMaskIntoConstraints = false }
-                    .measureFittingSize(
-                        maxWidth = (rowSize.width - boxWidth.value).coerceAtLeast(0.dp),
-                        maxHeight = rowSize.height
-                    )
+                val expectedSize =
+                    uiKitViewFactory()
+                        .also { it.translatesAutoresizingMaskIntoConstraints = false }
+                        .measureFittingSize(
+                            maxWidth = (rowSize.width - boxWidth.value).coerceAtLeast(0.dp),
+                            maxHeight = rowSize.height,
+                        )
 
                 assertEquals(expectedSize, composeInteropSize)
             }
@@ -762,7 +797,7 @@ class UIKitInteropUILabelSizingTest {
             val boxWidth = mutableStateOf(10.dp)
             val uiKitViewFactory = {
                 UILabel().apply {
-                    text = LONG_TEXT
+                    text = LongText
                     numberOfLines = 0
                 }
             }
@@ -770,20 +805,16 @@ class UIKitInteropUILabelSizingTest {
             setContent {
                 Row(modifier = Modifier.background(Color.Black).size(rowSize)) {
                     Box(
-                        modifier = Modifier
-                            .background(Color.Green)
-                            .width(boxWidth.value)
-                            .fillMaxHeight()
+                        modifier =
+                            Modifier.background(Color.Green).width(boxWidth.value).fillMaxHeight()
                     )
                     UIKitView(
                         factory = uiKitViewFactory,
                         properties = UIKitInteropProperties(placedAsOverlay = overlay),
-                        modifier = Modifier
-                            .background(Color.Cyan)
-                            .fillMaxSize()
-                            .onGloballyPositioned {
+                        modifier =
+                            Modifier.background(Color.Cyan).fillMaxSize().onGloballyPositioned {
                                 composeInteropSize = it.boundsInRoot().size.toDpSize(density)
-                            }
+                            },
                     )
                 }
             }
@@ -791,14 +822,15 @@ class UIKitInteropUILabelSizingTest {
             for (i in 0..10) {
                 boxWidth.value = (i * 10).dp
 
-                val expectedSize = uiKitViewFactory()
-                    .also { it.translatesAutoresizingMaskIntoConstraints = false }
-                    .measureFittingSize(
-                        fixedWidth = (rowSize.width - boxWidth.value).coerceAtLeast(0.dp),
-                        fixedHeight = rowSize.height,
-                        maxWidth = rowSize.width,
-                        maxHeight = rowSize.height
-                    )
+                val expectedSize =
+                    uiKitViewFactory()
+                        .also { it.translatesAutoresizingMaskIntoConstraints = false }
+                        .measureFittingSize(
+                            fixedWidth = (rowSize.width - boxWidth.value).coerceAtLeast(0.dp),
+                            fixedHeight = rowSize.height,
+                            maxWidth = rowSize.width,
+                            maxHeight = rowSize.height,
+                        )
 
                 waitForIdle()
 

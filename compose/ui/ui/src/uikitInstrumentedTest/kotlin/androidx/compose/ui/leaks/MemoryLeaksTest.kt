@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.TextField
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -31,11 +32,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.node.WeakReference
 import androidx.compose.ui.scene.ComposeHostingView
 import androidx.compose.ui.scene.ComposeHostingViewController
-import androidx.compose.ui.window.ComposeUIView
 import androidx.compose.ui.test.MockAppDelegate
 import androidx.compose.ui.test.findLayersViewController
 import androidx.compose.ui.test.waitForIdle
 import androidx.compose.ui.uikit.embedSubview
+import androidx.compose.ui.window.ComposeUIView
 import androidx.compose.ui.window.ComposeUIViewController
 import androidx.compose.ui.window.Dialog
 import kotlin.native.runtime.GC
@@ -70,14 +71,12 @@ class MemoryLeaksTest {
         var composeLoaded = false
 
         run {
-            val controller = ComposeUIViewController({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
-                SideEffect {
-                    composeLoaded = true
+            val controller =
+                ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
+                    SideEffect { composeLoaded = true }
                 }
-            } as ComposeHostingViewController
+                    as ComposeHostingViewController
             composeViewControllerRef = WeakReference(controller)
             appDelegate.setUpWindow(controller)
 
@@ -98,11 +97,11 @@ class MemoryLeaksTest {
         val subviewsReferences = mutableListOf<WeakReference<UIView>>()
 
         run {
-            val controller = ComposeUIViewController({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
-            } as ComposeHostingViewController
+            val controller =
+                ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
+                }
+                    as ComposeHostingViewController
 
             appDelegate.setUpWindow(controller)
 
@@ -111,18 +110,19 @@ class MemoryLeaksTest {
 
         collectComposeSubviewsRecursively(
             appDelegate.window?.rootViewController?.view!!,
-            subviewsReferences
+            subviewsReferences,
         )
 
         assertEquals(
             expected = 4,
             actual = subviewsReferences.count(),
-            message = "Expected 4 subviews: [ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView]" +
-                ", but given: ${
+            message =
+                "Expected 4 subviews: [ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView]" +
+                    ", but given: ${
                     subviewsReferences.mapNotNull { ref ->
                         ref.get()?.let { it::class.simpleName }
                     }
-                }"
+                }",
         )
 
         appDelegate.cleanUp()
@@ -136,19 +136,18 @@ class MemoryLeaksTest {
         var composeViewControllerRef: WeakReference<UIViewController>? = null
 
         run {
-            val controller = ComposeUIViewController({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                val focusRequester = FocusRequester()
-                TextField(
-                    value = "",
-                    onValueChange = {},
-                    modifier = Modifier.focusRequester(focusRequester)
-                )
-                LaunchedEffect(Unit) {
-                    focusRequester.requestFocus()
+            val controller =
+                ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                    val focusRequester = FocusRequester()
+                    @Suppress("DEPRECATION")
+                    TextField(
+                        value = "",
+                        onValueChange = {},
+                        modifier = Modifier.focusRequester(focusRequester),
+                    )
+                    LaunchedEffect(Unit) { focusRequester.requestFocus() }
                 }
-            } as ComposeHostingViewController
+                    as ComposeHostingViewController
 
             composeViewControllerRef = WeakReference(controller)
             appDelegate.setUpWindow(controller)
@@ -170,19 +169,18 @@ class MemoryLeaksTest {
             val subviewsReferences = mutableListOf<WeakReference<UIView>>()
 
             run {
-                val controller = ComposeUIViewController({
-                    enforceStrictPlistSanityCheck = false
-                }) {
-                    val focusRequester = FocusRequester()
-                    TextField(
-                        value = "",
-                        onValueChange = {},
-                        modifier = Modifier.focusRequester(focusRequester)
-                    )
-                    LaunchedEffect(Unit) {
-                        focusRequester.requestFocus()
+                val controller =
+                    ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                        val focusRequester = FocusRequester()
+                        @Suppress("DEPRECATION")
+                        TextField(
+                            value = "",
+                            onValueChange = {},
+                            modifier = Modifier.focusRequester(focusRequester),
+                        )
+                        LaunchedEffect(Unit) { focusRequester.requestFocus() }
                     }
-                } as ComposeHostingViewController
+                        as ComposeHostingViewController
 
                 appDelegate.setUpWindow(controller)
 
@@ -191,18 +189,19 @@ class MemoryLeaksTest {
 
             collectComposeSubviewsRecursively(
                 appDelegate.window?.rootViewController?.view!!,
-                subviewsReferences
+                subviewsReferences,
             )
 
             assertEquals(
                 expected = 5,
                 actual = subviewsReferences.count(),
-                message = "Expected 5 subviews: [ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView, ComposeTextInputView]" +
-                    ", but given: ${
+                message =
+                    "Expected 5 subviews: [ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView, ComposeTextInputView]" +
+                        ", but given: ${
                         subviewsReferences.mapNotNull { ref ->
                             ref.get()?.let { it::class.simpleName }
                         }
-                    }"
+                    }",
             )
 
             appDelegate.cleanUp()
@@ -222,19 +221,18 @@ class MemoryLeaksTest {
             val subviewsReferences = mutableListOf<WeakReference<UIView>>()
 
             run {
-                val controller = ComposeUIViewController({
-                    enforceStrictPlistSanityCheck = false
-                }) {
-                    val focusRequester = FocusRequester()
-                    TextField(
-                        value = "",
-                        onValueChange = {},
-                        modifier = Modifier.focusRequester(focusRequester)
-                    )
-                    LaunchedEffect(Unit) {
-                        focusRequester.requestFocus()
+                val controller =
+                    ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                        val focusRequester = FocusRequester()
+                        @Suppress("DEPRECATION")
+                        TextField(
+                            value = "",
+                            onValueChange = {},
+                            modifier = Modifier.focusRequester(focusRequester),
+                        )
+                        LaunchedEffect(Unit) { focusRequester.requestFocus() }
                     }
-                } as ComposeHostingViewController
+                        as ComposeHostingViewController
 
                 appDelegate.setUpWindow(controller)
 
@@ -243,18 +241,19 @@ class MemoryLeaksTest {
 
             collectComposeSubviewsRecursively(
                 appDelegate.window?.rootViewController?.view!!,
-                subviewsReferences
+                subviewsReferences,
             )
 
             assertEquals(
                 expected = 5,
                 actual = subviewsReferences.count(),
-                message = "Expected 5 subviews: [ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView, ComposeTextInputView]" +
-                    ", but given: ${
+                message =
+                    "Expected 5 subviews: [ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView, ComposeTextInputView]" +
+                        ", but given: ${
                         subviewsReferences.mapNotNull { ref ->
                             ref.get()?.let { it::class.simpleName }
                         }
-                    }"
+                    }",
             )
 
             appDelegate.cleanUp()
@@ -274,14 +273,12 @@ class MemoryLeaksTest {
         var composeLoaded = false
 
         run {
-            val view = ComposeUIView({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
-                SideEffect {
-                    composeLoaded = true
+            val view =
+                ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
+                    SideEffect { composeLoaded = true }
                 }
-            } as ComposeHostingView
+                    as ComposeHostingView
             composeViewRef = WeakReference(view)
             val controller = UIViewController()
             controller.view.embedSubview(view)
@@ -304,11 +301,11 @@ class MemoryLeaksTest {
         val subviewsReferences = mutableListOf<WeakReference<UIView>>()
 
         run {
-            val view = ComposeUIView({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
-            } as ComposeHostingView
+            val view =
+                ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
+                    Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
+                }
+                    as ComposeHostingView
             val controller = UIViewController()
             controller.view.embedSubview(view)
             appDelegate.setUpWindow(controller)
@@ -318,18 +315,19 @@ class MemoryLeaksTest {
 
         collectComposeSubviewsRecursively(
             appDelegate.window?.rootViewController?.view!!,
-            subviewsReferences
+            subviewsReferences,
         )
 
         assertEquals(
             expected = 5,
             actual = subviewsReferences.count(),
-            message = "Expected 5 subviews: [ComposeHostingView, ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView]" +
-                ", but given: ${
+            message =
+                "Expected 5 subviews: [ComposeHostingView, ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView]" +
+                    ", but given: ${
                     subviewsReferences.mapNotNull { ref ->
                         ref.get()?.let { it::class.simpleName }
                     }
-                }"
+                }",
         )
 
         appDelegate.cleanUp()
@@ -343,19 +341,18 @@ class MemoryLeaksTest {
         var composeViewRef: WeakReference<UIView>? = null
 
         run {
-            val view = ComposeUIView({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                val focusRequester = FocusRequester()
-                TextField(
-                    value = "",
-                    onValueChange = {},
-                    modifier = Modifier.focusRequester(focusRequester)
-                )
-                LaunchedEffect(Unit) {
-                    focusRequester.requestFocus()
+            val view =
+                ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
+                    val focusRequester = FocusRequester()
+                    @Suppress("DEPRECATION")
+                    TextField(
+                        value = "",
+                        onValueChange = {},
+                        modifier = Modifier.focusRequester(focusRequester),
+                    )
+                    LaunchedEffect(Unit) { focusRequester.requestFocus() }
                 }
-            } as ComposeHostingView
+                    as ComposeHostingView
             composeViewRef = WeakReference(view)
             val controller = UIViewController()
             controller.view.embedSubview(view)
@@ -378,19 +375,18 @@ class MemoryLeaksTest {
             val subviewsReferences = mutableListOf<WeakReference<UIView>>()
 
             run {
-                val view = ComposeUIView({
-                    enforceStrictPlistSanityCheck = false
-                }) {
-                    val focusRequester = FocusRequester()
-                    TextField(
-                        value = "",
-                        onValueChange = {},
-                        modifier = Modifier.focusRequester(focusRequester)
-                    )
-                    LaunchedEffect(Unit) {
-                        focusRequester.requestFocus()
+                val view =
+                    ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
+                        val focusRequester = FocusRequester()
+                        @Suppress("DEPRECATION")
+                        TextField(
+                            value = "",
+                            onValueChange = {},
+                            modifier = Modifier.focusRequester(focusRequester),
+                        )
+                        LaunchedEffect(Unit) { focusRequester.requestFocus() }
                     }
-                } as ComposeHostingView
+                        as ComposeHostingView
                 val controller = UIViewController()
                 controller.view.embedSubview(view)
                 appDelegate.setUpWindow(controller)
@@ -400,18 +396,19 @@ class MemoryLeaksTest {
 
             collectComposeSubviewsRecursively(
                 appDelegate.window?.rootViewController?.view!!,
-                subviewsReferences
+                subviewsReferences,
             )
 
             assertEquals(
                 expected = 6,
                 actual = subviewsReferences.count(),
-                message = "Expected 6 subviews: [ComposeHostingView, ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView, ComposeTextInputView]" +
-                    ", but given: ${
+                message =
+                    "Expected 6 subviews: [ComposeHostingView, ComposeContainerView, BackgroundInputView, MetalView, OverlayInputView, ComposeTextInputView]" +
+                        ", but given: ${
                         subviewsReferences.mapNotNull { ref ->
                             ref.get()?.let { it::class.simpleName }
                         }
-                    }"
+                    }",
             )
 
             appDelegate.cleanUp()
@@ -431,16 +428,14 @@ class MemoryLeaksTest {
         var dialogLoaded = false
 
         run {
-            val controller = ComposeUIViewController({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                Dialog({}) {
-                    Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
-                    SideEffect {
-                        dialogLoaded = true
+            val controller =
+                ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                    Dialog({}) {
+                        Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
+                        SideEffect { dialogLoaded = true }
                     }
                 }
-            } as ComposeHostingViewController
+                    as ComposeHostingViewController
 
             appDelegate.setUpWindow(controller)
 
@@ -465,13 +460,11 @@ class MemoryLeaksTest {
             val subviewsReferences = mutableListOf<WeakReference<UIView>>()
 
             run {
-                val controller = ComposeUIViewController({
-                    enforceStrictPlistSanityCheck = false
-                }) {
-                    Dialog({}) {
-                        Box(modifier = Modifier.fillMaxSize().background(Color.Blue))
+                val controller =
+                    ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                        Dialog({}) { Box(modifier = Modifier.fillMaxSize().background(Color.Blue)) }
                     }
-                } as ComposeHostingViewController
+                        as ComposeHostingViewController
 
                 appDelegate.setUpWindow(controller)
 
@@ -479,20 +472,18 @@ class MemoryLeaksTest {
             }
 
             val layersViewController = appDelegate.findLayersViewController()
-            collectComposeSubviewsRecursively(
-                layersViewController.view,
-                subviewsReferences
-            )
+            collectComposeSubviewsRecursively(layersViewController.view, subviewsReferences)
 
             assertEquals(
                 expected = 6,
                 actual = subviewsReferences.count(),
-                message = "Expected 6 subviews: [ComposeLayersView, ComposeContainerView, ComposeSceneLayerView, BackgroundInputView, MetalView, OverlayInputView]" +
-                    ", but given: ${
+                message =
+                    "Expected 6 subviews: [ComposeLayersView, ComposeContainerView, ComposeSceneLayerView, BackgroundInputView, MetalView, OverlayInputView]" +
+                        ", but given: ${
                         subviewsReferences.mapNotNull { ref ->
                             ref.get()?.let { it::class.simpleName }
                         }
-                    }"
+                    }",
             )
 
             appDelegate.cleanUp()
@@ -506,11 +497,14 @@ class MemoryLeaksTest {
         val duration = 100.milliseconds
         repeat((5.seconds / duration).toInt()) {
             runApplicationLoop(duration)
+            Snapshot.sendApplyNotifications()
             GC.collect()
             if (reference.all { it.get() == null }) return
         }
 
-        fail("Memory leak detected: references ${reference.mapNotNull { it.get() }} were not collected")
+        fail(
+            "Memory leak detected: references ${reference.mapNotNull { it.get() }} were not collected"
+        )
     }
 
     internal suspend fun assertDeallocated(reference: WeakReference<*>) {
@@ -519,7 +513,7 @@ class MemoryLeaksTest {
 
     private fun collectComposeSubviewsRecursively(
         view: UIView,
-        result: MutableList<WeakReference<UIView>>
+        result: MutableList<WeakReference<UIView>>,
     ) {
         if (view::class != UIView::class) {
             result.add(WeakReference(view))
@@ -530,11 +524,13 @@ class MemoryLeaksTest {
     }
 
     private suspend fun runApplicationLoop(duration: Duration) {
-        NSRunLoop.currentRunLoop().runUntilDate(
-            limitDate = NSDate.dateWithTimeIntervalSinceNow(
-                secs = duration.toDouble(DurationUnit.SECONDS)
+        NSRunLoop.currentRunLoop()
+            .runUntilDate(
+                limitDate =
+                    NSDate.dateWithTimeIntervalSinceNow(
+                        secs = duration.toDouble(DurationUnit.SECONDS)
+                    )
             )
-        )
         delay(duration)
     }
 

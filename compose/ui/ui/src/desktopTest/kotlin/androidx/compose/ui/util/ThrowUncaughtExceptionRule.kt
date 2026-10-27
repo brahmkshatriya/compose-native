@@ -25,12 +25,10 @@ import org.junit.runners.model.Statement
  *
  * It is needed in cases, where exceptions are thrown outside testing thread.
  *
- * For example, AWT Event Thread can fire event independently,
- * and its handler can throw an exception without failing the test.
+ * For example, AWT Event Thread can fire event independently, and its handler can throw an
+ * exception without failing the test.
  *
- * Usage:
- *     @get:Rule
- *     val throwUncaughtExceptionRule = ThrowUncaughtExceptionRule()
+ * Usage: @get:Rule val throwUncaughtExceptionRule = ThrowUncaughtExceptionRule()
  */
 class ThrowUncaughtExceptionRule : TestRule {
     override fun apply(base: Statement, description: Description): Statement {
@@ -40,7 +38,7 @@ class ThrowUncaughtExceptionRule : TestRule {
                 val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
                 var exception: Throwable? = null
 
-                Thread.setDefaultUncaughtExceptionHandler { t, e ->
+                Thread.setDefaultUncaughtExceptionHandler { _, e ->
                     if (exception != null) {
                         exception!!.addSuppressed(e)
                     } else {

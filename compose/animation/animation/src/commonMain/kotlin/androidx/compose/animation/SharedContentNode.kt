@@ -51,8 +51,10 @@ import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalLocaleList
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.intl.LocaleList
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -247,6 +249,7 @@ internal class SharedBoundsNode(entry: SharedElementEntry) :
     private var textMeasurer: TextMeasurer? = null
     private var lookaheadAnimationVisualDebugHelper: LookaheadAnimationVisualDebugHelper? = null
     private var currentResolver: FontFamily.Resolver? = null
+    private var currentLocaleList: LocaleList? = null
     private var currentDensity: Density? = null
     private var currentLayoutDirection: LayoutDirection? = null
 
@@ -345,9 +348,8 @@ internal class SharedBoundsNode(entry: SharedElementEntry) :
 
         val animatedBounds = boundsAnimation.value
         val topLeft: Offset
-        val animatedTopLeft = animatedBounds?.let {
-            targetData.calculateOffsetFromDirectManipulation(it)
-        }
+        val animatedTopLeft =
+            animatedBounds?.let { targetData.calculateOffsetFromDirectManipulation(it) }
 
         if (boundsAnimation.target || activeMatchRemoved) {
             // The visible shared element defines the current bounds, either through animation
@@ -618,7 +620,7 @@ internal class SharedBoundsNode(entry: SharedElementEntry) :
         }
         val strokeWeight = 2.5.dp.toPx()
         val targetData = sharedElement.state.targetData
-        updateTextMeasurer(currentValueOf(LocalFontFamilyResolver))
+        updateTextMeasurer(currentValueOf(LocalFontFamilyResolver), currentValueOf(LocalLocaleList))
 
         fun drawDebug(drawScope: ContentDrawScope) {
             if (!sharedElementEntry.isEnabled) return
@@ -705,11 +707,24 @@ internal class SharedBoundsNode(entry: SharedElementEntry) :
         observeReads(sharedElementEntry.observationBlock)
     }
 
-    private fun updateTextMeasurer(fontFamilyResolver: FontFamily.Resolver) {
-        if (textMeasurer == null || currentResolver != fontFamilyResolver) {
+    private fun updateTextMeasurer(
+        fontFamilyResolver: FontFamily.Resolver,
+        localeList: LocaleList,
+    ) {
+        if (
+            textMeasurer == null ||
+                currentResolver != fontFamilyResolver ||
+                currentLocaleList != localeList
+        ) {
             textMeasurer =
-                TextMeasurer(fontFamilyResolver, currentDensity!!, currentLayoutDirection!!)
+                TextMeasurer(
+                    defaultFontFamilyResolver = fontFamilyResolver,
+                    defaultLocaleList = localeList,
+                    defaultDensity = currentDensity!!,
+                    defaultLayoutDirection = currentLayoutDirection!!,
+                )
             currentResolver = fontFamilyResolver
+            currentLocaleList = localeList
         }
     }
 }

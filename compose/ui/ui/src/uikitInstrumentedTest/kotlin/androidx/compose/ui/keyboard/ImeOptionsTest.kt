@@ -75,129 +75,126 @@ import platform.UIKit.inputView
 internal class ImeOptionsTest {
     @Test
     fun testKeyboardTypeDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
         assertEquals(UIKeyboardTypeDefault, input.keyboardType)
     }
 
     @Test
     fun testKeyboardType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { keyboardType(UIKeyboardTypeURL) }
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions = PlatformImeOptions { keyboardType(UIKeyboardTypeURL) }
+            )
         assertEquals(UIKeyboardTypeURL, input.keyboardType)
     }
 
     @Test
     fun testKeyboardAppearanceDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
         assertEquals(UIKeyboardAppearanceDefault, input.keyboardAppearance)
     }
 
     @Test
     fun testKeyboardAppearance() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { keyboardAppearance(UIKeyboardAppearanceDark) }
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions = PlatformImeOptions { keyboardAppearance(UIKeyboardAppearanceDark) }
+            )
         assertEquals(UIKeyboardAppearanceDark, input.keyboardAppearance)
     }
 
     @Test
     fun testReturnKeyTypeDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
         assertEquals(UIReturnKeyType.UIReturnKeyDefault, input.returnKeyType)
     }
 
     @Test
     fun testReturnKeyType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { returnKeyType(UIReturnKeyType.UIReturnKeyGo) }
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions = PlatformImeOptions { returnKeyType(UIReturnKeyType.UIReturnKeyGo) }
+            )
         assertEquals(UIReturnKeyType.UIReturnKeyGo, input.returnKeyType)
     }
 
     @Test
     fun testContentTypeDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
         assertNull(input.textContentType)
     }
 
     @Test
     fun testContentType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { textContentType(UITextContentTypeDateTime) }
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions = PlatformImeOptions { textContentType(UITextContentTypeDateTime) }
+            )
         assertEquals(UITextContentTypeDateTime, input.textContentType)
     }
 
     @Test
     fun testContentTypeForCommonKeyboardTypePassword() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
+        val input =
+            setContentAndFindInput(
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+            )
         assertEquals(UITextContentTypePassword, input.textContentType)
     }
 
     @Test
     fun testContentTypeForCommonKeyboardTypeEmail() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
-        )
+        val input =
+            setContentAndFindInput(
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+            )
         assertEquals(UITextContentTypeEmailAddress, input.textContentType)
     }
 
     @Test
     fun testContentTypeForCommonKeyboardTypePhone() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-        )
+        val input =
+            setContentAndFindInput(
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
+            )
         assertEquals(UITextContentTypeTelephoneNumber, input.textContentType)
     }
 
     @Test
     fun testIsSecureTextEntryDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
         assertFalse(input.isSecureTextEntry())
     }
 
     @Test
     fun testIsSecureTextEntryFalse() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { isSecureTextEntry(false) }
-        )
+        val input =
+            setContentAndFindInput(imeOptions = PlatformImeOptions { isSecureTextEntry(false) })
         assertFalse(input.isSecureTextEntry())
     }
 
     @Test
     fun testIsSecureTextEntryTrue() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { isSecureTextEntry(true) }
-        )
+        val input =
+            setContentAndFindInput(imeOptions = PlatformImeOptions { isSecureTextEntry(true) })
         assertTrue(input.isSecureTextEntry())
     }
 
     @Test
     fun testIsSecureTextEntryForCommonKeyboardTypePassword() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
+        val input =
+            setContentAndFindInput(
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+            )
         assertTrue(input.isSecureTextEntry())
     }
 
     @Test
     fun testIsSecureTextEntryForCommonKeyboardTypeNumberPassword() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
-        )
+        val input =
+            setContentAndFindInput(
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword)
+            )
         assertTrue(input.isSecureTextEntry())
     }
 
@@ -209,131 +206,157 @@ internal class ImeOptionsTest {
 
     @Test
     fun testEnablesReturnKeyAutomaticallyFalse() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { enablesReturnKeyAutomatically(false) }
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions = PlatformImeOptions { enablesReturnKeyAutomatically(false) }
+            )
         assertFalse(input.enablesReturnKeyAutomatically)
     }
 
     @Test
     fun testEnablesReturnKeyAutomaticallyTrue() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { enablesReturnKeyAutomatically(true) }
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions = PlatformImeOptions { enablesReturnKeyAutomatically(true) }
+            )
         assertTrue(input.enablesReturnKeyAutomatically)
     }
 
     @Test
     fun testAutocapitalizationTypeDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
         assertEquals(
             UITextAutocapitalizationType.UITextAutocapitalizationTypeNone,
-            input.autocapitalizationType
+            input.autocapitalizationType,
         )
     }
 
     @Test
     fun testAutocapitalizationType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions {
-                autocapitalizationType(UITextAutocapitalizationType.UITextAutocapitalizationTypeWords)
-            }
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions =
+                    PlatformImeOptions {
+                        autocapitalizationType(
+                            UITextAutocapitalizationType.UITextAutocapitalizationTypeWords
+                        )
+                    }
+            )
         assertEquals(
             UITextAutocapitalizationType.UITextAutocapitalizationTypeWords,
-            input.autocapitalizationType
+            input.autocapitalizationType,
         )
     }
 
     @Test
     fun testAutocorrectionTypeDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
-        assertEquals(
-            UITextAutocorrectionType.UITextAutocorrectionTypeYes,
-            input.autocorrectionType
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
+        assertEquals(UITextAutocorrectionType.UITextAutocorrectionTypeYes, input.autocorrectionType)
     }
 
     @Test
     fun testAutocorrectionType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions {
-                autocorrectionType(UITextAutocorrectionType.UITextAutocorrectionTypeNo)
-            }
-        )
-        assertEquals(
-            UITextAutocorrectionType.UITextAutocorrectionTypeNo,
-            input.autocorrectionType
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions =
+                    PlatformImeOptions {
+                        autocorrectionType(UITextAutocorrectionType.UITextAutocorrectionTypeNo)
+                    }
+            )
+        assertEquals(UITextAutocorrectionType.UITextAutocorrectionTypeNo, input.autocorrectionType)
     }
 
     @Test
     fun testPlatformOverridesCommonKeyboardType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Decimal,
-                platformImeOptions = PlatformImeOptions { keyboardType(UIKeyboardTypeEmailAddress) }
+        val input =
+            setContentAndFindInput(
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        platformImeOptions =
+                            PlatformImeOptions { keyboardType(UIKeyboardTypeEmailAddress) },
+                    )
             )
-        )
         assertEquals(UIKeyboardTypeEmailAddress, input.keyboardType)
     }
 
     @Test
     fun testPlatformOverridesCommonReturnKeyType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(
-                imeAction = ImeAction.Search,
-                platformImeOptions = PlatformImeOptions { returnKeyType(UIReturnKeyType.UIReturnKeyGo) }
+        val input =
+            setContentAndFindInput(
+                keyboardOptions =
+                    KeyboardOptions(
+                        imeAction = ImeAction.Search,
+                        platformImeOptions =
+                            PlatformImeOptions { returnKeyType(UIReturnKeyType.UIReturnKeyGo) },
+                    )
             )
-        )
         assertEquals(UIReturnKeyType.UIReturnKeyGo, input.returnKeyType)
     }
 
     @Test
     fun testPlatformOverridesCommonContentType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                platformImeOptions = PlatformImeOptions { textContentType(UITextContentTypeDateTime) }
+        val input =
+            setContentAndFindInput(
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        platformImeOptions =
+                            PlatformImeOptions { textContentType(UITextContentTypeDateTime) },
+                    )
             )
-        )
         assertEquals(UITextContentTypeDateTime, input.textContentType)
     }
 
     @Test
     fun testPlatformOverridesCommonIsSecureTextEntry() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                platformImeOptions = PlatformImeOptions { isSecureTextEntry(false) }
+        val input =
+            setContentAndFindInput(
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        platformImeOptions = PlatformImeOptions { isSecureTextEntry(false) },
+                    )
             )
-        )
         assertFalse(input.isSecureTextEntry())
     }
 
     @Test
     fun testPlatformOverridesCommonAutocapitalizationType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.Characters,
-                platformImeOptions = PlatformImeOptions { autocapitalizationType(UITextAutocapitalizationType.UITextAutocapitalizationTypeWords) }
+        val input =
+            setContentAndFindInput(
+                keyboardOptions =
+                    KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Characters,
+                        platformImeOptions =
+                            PlatformImeOptions {
+                                autocapitalizationType(
+                                    UITextAutocapitalizationType.UITextAutocapitalizationTypeWords
+                                )
+                            },
+                    )
             )
+        assertEquals(
+            UITextAutocapitalizationType.UITextAutocapitalizationTypeWords,
+            input.autocapitalizationType,
         )
-        assertEquals(UITextAutocapitalizationType.UITextAutocapitalizationTypeWords, input.autocapitalizationType)
     }
 
     @Test
     fun testPlatformOverridesCommonAutocorrectionType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(
-                autoCorrectEnabled = false,
-                platformImeOptions = PlatformImeOptions { autocorrectionType(UITextAutocorrectionType.UITextAutocorrectionTypeYes) }
+        val input =
+            setContentAndFindInput(
+                keyboardOptions =
+                    KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        platformImeOptions =
+                            PlatformImeOptions {
+                                autocorrectionType(
+                                    UITextAutocorrectionType.UITextAutocorrectionTypeYes
+                                )
+                            },
+                    )
             )
-        )
         assertEquals(UITextAutocorrectionType.UITextAutocorrectionTypeYes, input.autocorrectionType)
     }
 
@@ -348,11 +371,20 @@ internal class ImeOptionsTest {
     @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testInputViewCustom() = runUIKitInstrumentedTest {
-        val customInputView = object: UIInputView(frame = CGRectZero.readValue(), inputViewStyle = UIInputViewStyle.UIInputViewStyleKeyboard) {}
+        val customInputView =
+            object :
+                UIInputView(
+                    frame = CGRectZero.readValue(),
+                    inputViewStyle = UIInputViewStyle.UIInputViewStyleKeyboard,
+                ) {}
 
-        val input = setContentAndFindInputView(keyboardOptions = KeyboardOptions(
-            platformImeOptions = PlatformImeOptions { inputView(customInputView) }
-        ))
+        val input =
+            setContentAndFindInputView(
+                keyboardOptions =
+                    KeyboardOptions(
+                        platformImeOptions = PlatformImeOptions { inputView(customInputView) }
+                    )
+            )
 
         assertNull(input.inputAccessoryView)
         assertSame(customInputView, input.inputView)
@@ -369,11 +401,16 @@ internal class ImeOptionsTest {
     @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testInputAccessoryViewCustom() = runUIKitInstrumentedTest {
-        val customInputAccessoryView = object: UIView(frame = CGRectZero.readValue()) {}
+        val customInputAccessoryView = object : UIView(frame = CGRectZero.readValue()) {}
 
-        val input = setContentAndFindInputView(keyboardOptions = KeyboardOptions(
-            platformImeOptions = PlatformImeOptions { inputAccessoryView(customInputAccessoryView) }
-        ))
+        val input =
+            setContentAndFindInputView(
+                keyboardOptions =
+                    KeyboardOptions(
+                        platformImeOptions =
+                            PlatformImeOptions { inputAccessoryView(customInputAccessoryView) }
+                    )
+            )
 
         assertNull(input.inputView)
         assertSame(customInputAccessoryView, input.inputAccessoryView)
@@ -382,32 +419,42 @@ internal class ImeOptionsTest {
     @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testInputAccessoryViewCustomAndInputViewCustom() = runUIKitInstrumentedTest {
-        val customInputView = object: UIInputView(frame = CGRectZero.readValue(), inputViewStyle = UIInputViewStyle.UIInputViewStyleKeyboard) {}
-        val customInputAccessoryView = object: UIView(frame = CGRectZero.readValue()) {}
+        val customInputView =
+            object :
+                UIInputView(
+                    frame = CGRectZero.readValue(),
+                    inputViewStyle = UIInputViewStyle.UIInputViewStyleKeyboard,
+                ) {}
+        val customInputAccessoryView = object : UIView(frame = CGRectZero.readValue()) {}
 
-        val input = setContentAndFindInputView(keyboardOptions = KeyboardOptions(
-            platformImeOptions = PlatformImeOptions {
-                inputView(customInputView)
-                inputAccessoryView(customInputAccessoryView)
-            }
-        ))
+        val input =
+            setContentAndFindInputView(
+                keyboardOptions =
+                    KeyboardOptions(
+                        platformImeOptions =
+                            PlatformImeOptions {
+                                inputView(customInputView)
+                                inputAccessoryView(customInputAccessoryView)
+                            }
+                    )
+            )
 
         assertSame(customInputView, input.inputView)
         assertSame(customInputAccessoryView, input.inputAccessoryView)
     }
 
-    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testTextInputSessionDoesNotRestartWithChangedInput() = runUIKitInstrumentedTest {
         val inputState = mutableStateOf("")
         var startInputCount = 0
 
-        val testTextInputSession = object : PlatformTextInputSession {
+        val testTextInputSession =
+            object : PlatformTextInputSession {
                 override suspend fun startInputMethod(
                     request: PlatformTextInputMethodRequest
                 ): Nothing {
                     startInputCount++
-                    suspendCancellableCoroutine<Nothing> { }
+                    suspendCancellableCoroutine<Nothing> {}
                 }
             }
 
@@ -415,20 +462,23 @@ internal class ImeOptionsTest {
             var input by rememberSaveable { inputState }
 
             InterceptPlatformTextInput(
-                interceptor = { request, _ ->
-                    testTextInputSession.startInputMethod(request)
-                },
+                interceptor = { request, _ -> testTextInputSession.startInputMethod(request) },
                 content = {
+                    @Suppress("DEPRECATION")
                     TextField(
                         modifier = Modifier.testTag("TextField"),
                         value = input,
                         onValueChange = { input = it },
-                        keyboardOptions = KeyboardOptions(platformImeOptions = PlatformImeOptions {
-                            keyboardType(UIKeyboardTypeEmailAddress)
-                            textContentType(UITextContentTypeUsername)
-                        })
+                        keyboardOptions =
+                            KeyboardOptions(
+                                platformImeOptions =
+                                    PlatformImeOptions {
+                                        keyboardType(UIKeyboardTypeEmailAddress)
+                                        textContentType(UITextContentTypeUsername)
+                                    }
+                            ),
                     )
-                }
+                },
             )
         }
 
@@ -449,63 +499,60 @@ internal class ImeOptionsTest {
 
     @Test
     fun testWritingToolsBehaviorDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
         assertEquals(UIWritingToolsBehaviorDefault, input.writingToolsBehavior)
     }
 
     @Test
     fun testWritingToolsBehavior() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions { writingToolsBehavior(UIWritingToolsBehaviorLimited) }
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions =
+                    PlatformImeOptions { writingToolsBehavior(UIWritingToolsBehaviorLimited) }
+            )
         assertEquals(UIWritingToolsBehaviorLimited, input.writingToolsBehavior)
     }
 
     @Test
     fun testSpellCheckingTypeDefault() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions()
-        )
-        assertEquals(
-            UITextSpellCheckingType.UITextSpellCheckingTypeYes,
-            input.spellCheckingType
-        )
+        val input = setContentAndFindInput(imeOptions = PlatformImeOptions())
+        assertEquals(UITextSpellCheckingType.UITextSpellCheckingTypeYes, input.spellCheckingType)
     }
 
     @Test
     fun testSpellCheckingType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            imeOptions = PlatformImeOptions {
-                spellCheckingType(UITextSpellCheckingType.UITextSpellCheckingTypeNo)
-            }
-        )
-        assertEquals(
-            UITextSpellCheckingType.UITextSpellCheckingTypeNo,
-            input.spellCheckingType
-        )
+        val input =
+            setContentAndFindInput(
+                imeOptions =
+                    PlatformImeOptions {
+                        spellCheckingType(UITextSpellCheckingType.UITextSpellCheckingTypeNo)
+                    }
+            )
+        assertEquals(UITextSpellCheckingType.UITextSpellCheckingTypeNo, input.spellCheckingType)
     }
 
     @Test
     fun testSpellCheckingTypeFollowsDisabledAutoCorrect() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false)
-        )
-        assertEquals(
-            UITextSpellCheckingType.UITextSpellCheckingTypeNo,
-            input.spellCheckingType
-        )
+        val input =
+            setContentAndFindInput(keyboardOptions = KeyboardOptions(autoCorrectEnabled = false))
+        assertEquals(UITextSpellCheckingType.UITextSpellCheckingTypeNo, input.spellCheckingType)
     }
 
     @Test
     fun testPlatformOverridesCommonSpellCheckingType() = runUIKitInstrumentedTest {
-        val input = setContentAndFindInput(
-            keyboardOptions = KeyboardOptions(
-                autoCorrectEnabled = false,
-                platformImeOptions = PlatformImeOptions { spellCheckingType(UITextSpellCheckingType.UITextSpellCheckingTypeYes) }
+        val input =
+            setContentAndFindInput(
+                keyboardOptions =
+                    KeyboardOptions(
+                        autoCorrectEnabled = false,
+                        platformImeOptions =
+                            PlatformImeOptions {
+                                spellCheckingType(
+                                    UITextSpellCheckingType.UITextSpellCheckingTypeYes
+                                )
+                            },
+                    )
             )
-        )
         assertEquals(UITextSpellCheckingType.UITextSpellCheckingTypeYes, input.spellCheckingType)
     }
 
@@ -515,17 +562,16 @@ internal class ImeOptionsTest {
         val focusRequester = FocusRequester()
 
         setContent {
+            @Suppress("DEPRECATION")
             TextField(
                 value = "",
                 onValueChange = {},
                 keyboardOptions = keyboardOptions,
-                modifier = Modifier.focusRequester(focusRequester)
+                modifier = Modifier.focusRequester(focusRequester),
             )
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
         }
-        
+
         return assertNotNull(findFirstUITextInput())
     }
 
@@ -538,7 +584,8 @@ internal class ImeOptionsTest {
 
     private fun UIKitInstrumentedTest.setContentAndFindInput(
         imeOptions: PlatformImeOptions? = null
-    ): UITextInputProtocol = setContentAndFindInput(keyboardOptions = KeyboardOptions(platformImeOptions = imeOptions))
+    ): UITextInputProtocol =
+        setContentAndFindInput(keyboardOptions = KeyboardOptions(platformImeOptions = imeOptions))
 
     private fun UIKitInstrumentedTest.findFirstUITextInput(): UIView? =
         findAllUITextInputViews().firstOrNull()

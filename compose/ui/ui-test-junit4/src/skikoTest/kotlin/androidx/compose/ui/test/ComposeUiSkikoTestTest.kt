@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.ComposeUiFlags
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -46,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-
 @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 class ComposeUiSkikoTestTest {
     private val events = mutableListOf<PointerEvent>()
@@ -54,16 +54,13 @@ class ComposeUiSkikoTestTest {
     @Composable
     private fun TestEventBox() {
         Box(
-            Modifier
-                .size(100f.dp, 100f.dp)
-                .testTag("test")
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            events += awaitPointerEvent()
-                        }
+            Modifier.size(100f.dp, 100f.dp).testTag("test").pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        events += awaitPointerEvent()
                     }
                 }
+            }
         )
     }
 
@@ -76,7 +73,8 @@ class ComposeUiSkikoTestTest {
             moveTo(Offset(30f, 40f))
             moveTo(Offset(30f, 50f))
         }
-        assertThat(events).hasSize(2)
+        val extraMoves = if (hasExtraMove()) 1 else 0
+        assertThat(events).hasSize(2 + extraMoves)
         events[0].apply {
             assertThat(type).isEqualTo(Enter)
             assertThat(button).isEqualTo(null)
@@ -84,7 +82,15 @@ class ComposeUiSkikoTestTest {
             assertThat(changes[0].position).isEqualTo(Offset(30f, 40f))
             assertThat(changes[0].type).isEqualTo(Mouse)
         }
-        events[1].apply {
+        if (hasExtraMove()) {
+            // Move accompanying Enter, without position change
+            events[1].apply {
+                assertThat(type).isEqualTo(Move)
+                assertThat(buttons).isEqualTo(PointerButtons())
+                assertThat(changes[0].position).isEqualTo(Offset(30f, 40f))
+            }
+        }
+        events[1 + extraMoves].apply {
             assertThat(type).isEqualTo(Move)
             assertThat(button).isEqualTo(null)
             assertThat(buttons).isEqualTo(PointerButtons())
@@ -103,7 +109,8 @@ class ComposeUiSkikoTestTest {
             press()
             moveTo(Offset(10f, 20f))
         }
-        assertThat(events).hasSize(3)
+        val extraMoves = if (hasExtraMove()) 1 else 0
+        assertThat(events).hasSize(3 + extraMoves)
         events[0].apply {
             assertThat(type).isEqualTo(Enter)
             assertThat(button).isEqualTo(null)
@@ -111,14 +118,22 @@ class ComposeUiSkikoTestTest {
             assertThat(changes[0].position).isEqualTo(Offset(30f, 40f))
             assertThat(changes[0].type).isEqualTo(Mouse)
         }
-        events[1].apply {
+        if (hasExtraMove()) {
+            // Move accompanying Enter, without position change
+            events[1].apply {
+                assertThat(type).isEqualTo(Move)
+                assertThat(buttons).isEqualTo(PointerButtons())
+                assertThat(changes[0].position).isEqualTo(Offset(30f, 40f))
+            }
+        }
+        events[1 + extraMoves].apply {
             assertThat(type).isEqualTo(Press)
             assertThat(button).isEqualTo(PointerButton.Primary)
             assertThat(buttons).isEqualTo(PointerButtons(isPrimaryPressed = true))
             assertThat(changes[0].position).isEqualTo(Offset(30f, 40f))
             assertThat(changes[0].type).isEqualTo(Mouse)
         }
-        events[2].apply {
+        events[2 + extraMoves].apply {
             assertThat(type).isEqualTo(Move)
             assertThat(button).isEqualTo(null)
             assertThat(buttons).isEqualTo(PointerButtons(isPrimaryPressed = true))
@@ -132,9 +147,7 @@ class ComposeUiSkikoTestTest {
     fun mouse_press_primary() = runComposeUiTest {
         setContent { TestEventBox() }
 
-        onNodeWithTag("test").performMouseInput {
-            press()
-        }
+        onNodeWithTag("test").performMouseInput { press() }
         assertThat(events).hasSize(1)
         events[0].apply {
             assertThat(type).isEqualTo(Press)
@@ -181,9 +194,7 @@ class ComposeUiSkikoTestTest {
     fun mouse_click() = runComposeUiTest {
         setContent { TestEventBox() }
 
-        onNodeWithTag("test").performMouseInput {
-            click(Offset(10f, 20f))
-        }
+        onNodeWithTag("test").performMouseInput { click(Offset(10f, 20f)) }
         assertThat(events).hasSize(3)
         events[0].apply {
             assertThat(type).isEqualTo(Press)
@@ -230,7 +241,8 @@ class ComposeUiSkikoTestTest {
         events[1].apply {
             assertThat(type).isEqualTo(Press)
             assertThat(button).isEqualTo(PointerButton.Tertiary)
-            assertThat(buttons).isEqualTo(PointerButtons(isPrimaryPressed = true, isTertiaryPressed = true))
+            assertThat(buttons)
+                .isEqualTo(PointerButtons(isPrimaryPressed = true, isTertiaryPressed = true))
             assertThat(changes[0].position).isEqualTo(Offset(10f, 20f))
             assertThat(changes[0].type).isEqualTo(Mouse)
         }
@@ -324,9 +336,7 @@ class ComposeUiSkikoTestTest {
     fun touch_press() = runComposeUiTest {
         setContent { TestEventBox() }
 
-        onNodeWithTag("test").performTouchInput {
-            down(Offset.Zero)
-        }
+        onNodeWithTag("test").performTouchInput { down(Offset.Zero) }
         assertThat(events).hasSize(1)
         events[0].apply {
             assertThat(type).isEqualTo(Press)
@@ -362,16 +372,23 @@ class ComposeUiSkikoTestTest {
     fun touch_click() = runComposeUiTest {
         setContent { TestEventBox() }
 
-        onNodeWithTag("test").performTouchInput {
-            click(Offset(10f, 20f))
-        }
-        assertThat(events).hasSize(2)
+        onNodeWithTag("test").performTouchInput { click(Offset(10f, 20f)) }
+        val extraMoves = if (hasExtraMove()) 1 else 0
+        assertThat(events).hasSize(2 + extraMoves)
         events[0].apply {
             assertThat(type).isEqualTo(Press)
             assertThat(changes[0].position).isEqualTo(Offset(10f, 20f))
             assertThat(changes[0].type).isEqualTo(PointerType.Touch)
         }
-        events[1].apply {
+        if (hasExtraMove()) {
+            // Move sent by click() between down and up, without position change
+            events[1].apply {
+                assertThat(type).isEqualTo(Move)
+                assertThat(changes[0].position).isEqualTo(Offset(10f, 20f))
+                assertThat(changes[0].type).isEqualTo(PointerType.Touch)
+            }
+        }
+        events[1 + extraMoves].apply {
             assertThat(type).isEqualTo(Release)
             assertThat(changes[0].position).isEqualTo(Offset(10f, 20f))
             assertThat(changes[0].type).isEqualTo(PointerType.Touch)
@@ -420,9 +437,7 @@ class ComposeUiSkikoTestTest {
     fun text_input() = runComposeUiTest {
         var text by mutableStateOf(TextFieldValue(""))
 
-        setContent {
-            BasicTextField(text, { text = it }, modifier = Modifier.testTag("test"))
-        }
+        setContent { BasicTextField(text, { text = it }, modifier = Modifier.testTag("test")) }
 
         onNodeWithTag("test").performClick()
 
@@ -440,6 +455,13 @@ class ComposeUiSkikoTestTest {
     }
 }
 
+/**
+ * Whether Move events without position change are delivered, see
+ * [ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled]
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+private fun hasExtraMove() = ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled
+
 private class AssertThat<T>(val t: T)
 
 private fun <T> AssertThat<T>.isEqualTo(a: Any?) {
@@ -449,9 +471,9 @@ private fun <T> AssertThat<T>.isEqualTo(a: Any?) {
 private fun <T : Collection<*>> AssertThat<T>.hasSize(size: Int) {
     assertEquals(size, t.size, "Expected size = $size, but was ${t.size}")
 }
+
 private fun <T> assertThat(t: T): AssertThat<T> {
     return AssertThat(t)
 }
 
-private fun List<PointerInputChange>.find(id: Int) =
-    this.first { it.id.value.toInt() == id }
+private fun List<PointerInputChange>.find(id: Int) = this.first { it.id.value.toInt() == id }

@@ -16,7 +16,6 @@
 
 package androidx.compose.foundation.text.selection
 
-import androidx.compose.foundation.text.InternalFoundationTextApi
 import androidx.compose.foundation.text.LegacyTextFieldState
 import androidx.compose.foundation.text.TextLayoutResultProxy
 import androidx.compose.ui.focus.FocusRequester
@@ -54,7 +53,7 @@ import org.mockito.kotlin.whenever
 class DesktopTextFieldSelectionManagerTest {
     private val text = "Hello World"
     private val density = Density(density = 1f)
-    private val offsetMapping = OffsetMapping.Identity
+    @Suppress("DEPRECATION") private val offsetMapping = OffsetMapping.Identity
     private var value = TextFieldValue(text)
     private val lambda: (TextFieldValue) -> Unit = { value = it }
     private lateinit var state: LegacyTextFieldState
@@ -72,7 +71,6 @@ class DesktopTextFieldSelectionManagerTest {
     private val hapticFeedback = mock<HapticFeedback>()
     private val focusRequester = mock<FocusRequester>()
 
-    @OptIn(InternalFoundationTextApi::class)
     @Before
     fun setup() {
         manager = TextFieldSelectionManager()
@@ -84,34 +82,33 @@ class DesktopTextFieldSelectionManagerTest {
         manager.hapticFeedBack = hapticFeedback
         manager.focusRequester = focusRequester
 
-        whenever(layoutResult.layoutInput).thenReturn(
-            TextLayoutInput(
-                text = AnnotatedString(text),
-                style = TextStyle.Default,
-                placeholders = mock(),
-                maxLines = 2,
-                softWrap = true,
-                overflow = TextOverflow.Ellipsis,
-                density = density,
-                layoutDirection = LayoutDirection.Ltr,
-                fontFamilyResolver = mock(),
-                constraints = Constraints()
+        whenever(layoutResult.layoutInput)
+            .thenReturn(
+                @Suppress("DEPRECATION")
+                TextLayoutInput(
+                    text = AnnotatedString(text),
+                    style = TextStyle.Default,
+                    placeholders = mock(),
+                    maxLines = 2,
+                    softWrap = true,
+                    overflow = TextOverflow.Ellipsis,
+                    density = density,
+                    layoutDirection = LayoutDirection.Ltr,
+                    fontFamilyResolver = mock(),
+                    constraints = Constraints(),
+                )
             )
-        )
 
         whenever(layoutResult.getBoundingBox(any())).thenReturn(Rect.Zero)
         whenever(layoutResult.getOffsetForPosition(dragBeginPosition)).thenReturn(beginOffset)
         whenever(layoutResult.getOffsetForPosition(dragBeginPosition + dragDistance))
             .thenReturn(dragOffset)
-        whenever(
-            layoutResultProxy.getOffsetForPosition(dragBeginPosition, false)
-        ).thenReturn(beginOffset)
-        whenever(
-            layoutResultProxy.getOffsetForPosition(dragBeginPosition + dragDistance, false)
-        ).thenReturn(dragOffset)
-        whenever(
-            layoutResultProxy.getOffsetForPosition(dragBeginPosition + dragDistance)
-        ).thenReturn(dragOffset)
+        whenever(layoutResultProxy.getOffsetForPosition(dragBeginPosition, false))
+            .thenReturn(beginOffset)
+        whenever(layoutResultProxy.getOffsetForPosition(dragBeginPosition + dragDistance, false))
+            .thenReturn(dragOffset)
+        whenever(layoutResultProxy.getOffsetForPosition(dragBeginPosition + dragDistance))
+            .thenReturn(dragOffset)
 
         whenever(layoutResultProxy.value).thenReturn(layoutResult)
 
@@ -131,7 +128,7 @@ class DesktopTextFieldSelectionManagerTest {
         manager.mouseSelectionObserver.onStart(
             dragBeginPosition + dragDistance,
             SelectionAdjustment.None,
-            1
+            1,
         )
         assertThat(value.selection).isEqualTo(TextRange(8, 8))
     }

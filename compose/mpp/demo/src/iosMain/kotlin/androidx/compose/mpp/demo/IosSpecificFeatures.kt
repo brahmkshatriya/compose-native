@@ -16,20 +16,22 @@
 
 package androidx.compose.mpp.demo
 
-val IosSpecificFeatures = Screen.Selection(
-    "iOS Features",
-    NativeModalWithNavigationExample,
-    NativePopupWithComposePopupExample,
-    HapticFeedbackExample,
-    IosPredictiveBackExample,
-    LazyColumnWithInteropViewsExample,
-    AccessibilityLiveRegionExample,
-    InteropViewAndSemanticsConfigMerge,
-    InteropExample,
-    ReusableMapsExample,
-    UpdatableInteropPropertiesExample,
-    IosImeOptionsExample,
-    NativeTextInputTextFields,
-    AutoSaveLoginPasswordExample,
-    PanPinchCircleExample,
-)
+val IosSpecificFeatures =
+    Screen.Selection(
+        "iOS Features",
+        WindowInsetsDemos,
+        NativeModalWithNavigationExample,
+        NativePopupWithComposePopupExample,
+        HapticFeedbackExample,
+        IosPredictiveBackExample,
+        LazyColumnWithInteropViewsExample,
+        AccessibilityLiveRegionExample,
+        InteropViewAndSemanticsConfigMerge,
+        InteropExample,
+        ReusableMapsExample,
+        UpdatableInteropPropertiesExample,
+        IosImeOptionsExample,
+        NativeTextInputTextFields,
+        AutoSaveLoginPasswordExample,
+        PanPinchCircleExample,
+    )

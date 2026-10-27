@@ -18,13 +18,16 @@ package androidx.compose.mpp.demo.components.text
 
 import androidx.compose.mpp.demo.Screen
 
-val TextDemos = Screen.Selection(
-    "Text",
-    Screen.Example("FontFamilies") { FontFamilies() },
-    Screen.Example("VariableFonts") { VariableFonts() },
-    Screen.Example("FontRasterization") { FontRasterization() },
-    Screen.Example("LineHeightStyle") { LineHeightStyleDemo() },
-    Screen.Example("TextDirection") { TextDirection() },
-    Screen.Example("TextOverflow") { TextOverflow() },
-    Screen.Example("LinkAnnotation") { AttributedStringDemo() },
-)
+val TextDemos =
+    Screen.Selection(
+        "Text",
+        Screen.Example("FontFamilies") { FontFamilies() },
+        Screen.Example("VariableFonts") { VariableFonts() },
+        Screen.Example("FontRasterization") { FontRasterization() },
+        Screen.Example("LineHeightStyle") { LineHeightStyleDemo() },
+        Screen.Example("TextDirection") { TextDirection() },
+        Screen.Example("TextOverflow") { TextOverflow() },
+        Screen.Example("LinkAnnotation") { AttributedStringDemo() },
+        Screen.Example("TextAutoSize") { TextAutoSizeDemo() },
+        Screen.Example("Annotations (Bullets)") { BulletListDemo() },
+    )

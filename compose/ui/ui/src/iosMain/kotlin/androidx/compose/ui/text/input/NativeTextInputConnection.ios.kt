@@ -21,16 +21,16 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.DpInsets
 import androidx.compose.ui.platform.NativeTextEditingDelegate
-import androidx.compose.ui.platform.TextLayoutDirection
-import androidx.compose.ui.platform.TextInputSelectionRect
 import androidx.compose.ui.platform.NativeTextInputContextMenuCustomAction
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
-import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.ui.platform.toUIColor
+import androidx.compose.ui.platform.TextInputSelectionRect
+import androidx.compose.ui.platform.TextLayoutDirection
 import androidx.compose.ui.platform.detachedCopy
+import androidx.compose.ui.platform.toUIColor
 import androidx.compose.ui.scene.ComposeSceneFocusManager
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.uikit.density
 import androidx.compose.ui.uikit.utils.CMPEditMenuCustomAction
 import androidx.compose.ui.unit.DpOffset
@@ -45,29 +45,32 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlinx.coroutines.CoroutineScope
 import platform.UIKit.UIView
-import platform.UIKit.reloadInputViews
 
 internal class NativeTextInputConnection(
     private var inactiveTextInputDelegate: NativeTextEditingDelegate,
     updateView: () -> Unit,
     coroutineScope: CoroutineScope,
     focusedViewsList: FocusedViewsList?,
-    focusManager: () -> ComposeSceneFocusManager?
-) : TextInputConnection(
-    updateView = updateView,
-    coroutineScope = coroutineScope,
-    focusedViewsList = focusedViewsList,
-    focusManager = focusManager
-), NativeTextEditingDelegate {
+    focusManager: () -> ComposeSceneFocusManager?,
+) :
+    TextInputConnection(
+        updateView = updateView,
+        coroutineScope = coroutineScope,
+        focusedViewsList = focusedViewsList,
+        focusManager = focusManager,
+    ),
+    NativeTextEditingDelegate {
     override val isInteractive: Boolean = true
 
     private val scrollView by lazy { NativeTextInputScrollView() }
 
-    override val textInputView = NativeTextInputView(input = inactiveTextInputDelegate).also {
-        scrollView.textView = it
-    }
+    override val textInputView =
+        NativeTextInputView(initialInput = inactiveTextInputDelegate).also {
+            scrollView.textView = it
+        }
 
-    override val rootView: UIView get() = scrollView
+    override val rootView: UIView
+        get() = scrollView
 
     override fun start(request: PlatformTextInputMethodRequest) {
         super.start(request)
@@ -139,16 +142,25 @@ internal class NativeTextInputConnection(
         scrollView.setFrame(
             rect.toDpRect(rootView.density),
             contentBounds.toDpRect(rootView.density),
-            contentInsets
+            contentInsets,
         )
     }
 
-    private fun calculateContentBounds(textLayoutResult: TextLayoutResult, textFieldFrame: Rect, unclippedTextPosition: Offset): Rect {
+    private fun calculateContentBounds(
+        textLayoutResult: TextLayoutResult,
+        textFieldFrame: Rect,
+        unclippedTextPosition: Offset,
+    ): Rect {
         val textSize = textLayoutResult.size.toSize()
-        val contentBounds = Rect(
-            offset = Offset(x = textFieldFrame.left - unclippedTextPosition.x, y = textFieldFrame.top - unclippedTextPosition.y),
-            size = textSize
-        )
+        val contentBounds =
+            Rect(
+                offset =
+                    Offset(
+                        x = textFieldFrame.left - unclippedTextPosition.x,
+                        y = textFieldFrame.top - unclippedTextPosition.y,
+                    ),
+                size = textSize,
+            )
         return contentBounds
     }
 
@@ -157,14 +169,10 @@ internal class NativeTextInputConnection(
             DpInsets(
                 left = max(0f, -contentBounds.left).toDp(),
                 top = max(0f, -contentBounds.top).toDp(),
-                right = max(
-                    0f,
-                    textFieldFrame.width - contentBounds.width + contentBounds.left
-                ).toDp(),
-                bottom = max(
-                    0f,
-                    textFieldFrame.height - contentBounds.height + contentBounds.top
-                ).toDp()
+                right =
+                    max(0f, textFieldFrame.width - contentBounds.width + contentBounds.left).toDp(),
+                bottom =
+                    max(0f, textFieldFrame.height - contentBounds.height + contentBounds.top).toDp(),
             )
         }
 
@@ -187,15 +195,18 @@ internal class NativeTextInputConnection(
 
     override fun selectionDpRectsForRange(range: TextRange): List<TextInputSelectionRect> {
         // Native selection rects are required for correct work of the text editing menu
-        // Without them, it will be impossible to call the text editing menu by tapping on the selected area
+        // Without them, it will be impossible to call the text editing menu by tapping on the
+        // selected area
         if (range.collapsed || isIncorrect(range)) {
             return emptyList()
         }
         val currentTextLayoutResult = textLayoutResult ?: return emptyList()
 
-        // Layout in native text input mode may be outdated, so not checking this may cause OOB error
+        // Layout in native text input mode may be outdated, so not checking this may cause OOB
+        // error
         // This workaround should be deleted after https://youtrack.jetbrains.com/issue/CMP-9767/
-        if (range.end > currentTextLayoutResult.multiParagraph.intrinsics.annotatedString.length) return emptyList()
+        if (range.end > currentTextLayoutResult.multiParagraph.intrinsics.annotatedString.length)
+            return emptyList()
 
         val startSelectionHandleRect = currentTextLayoutResult.getCursorRect(range.start)
         val endSelectionHandleRect = currentTextLayoutResult.getCursorRect(range.end)
@@ -206,76 +217,85 @@ internal class NativeTextInputConnection(
         return if (firstLineNumber == lastLineNumber) {
             listOf(
                 TextInputSelectionRect(
-                    dpRect = Rect(
-                        topLeft = startSelectionHandleRect.topLeft,
-                        bottomRight = endSelectionHandleRect.bottomRight
-                    ).toDpRect(rootView.density),
+                    dpRect =
+                        Rect(
+                                topLeft = startSelectionHandleRect.topLeft,
+                                bottomRight = endSelectionHandleRect.bottomRight,
+                            )
+                            .toDpRect(rootView.density),
                     writingDirection = TextDirection.Content,
                     containsStart = true,
                     containsEnd = true,
-                    isVertical = false
+                    isVertical = false,
                 )
             )
         } else {
             // TODO Consider RTL Layout
             // We require separate rects for start line, end line and everything in between them
             val contentInsets = currentContentInsets ?: return emptyList()
-            val contentRect = currentContentBounds?.let {
-                with(rootView.density) {
-                    Rect(
-                        top = it.top + contentInsets.top.toPx(),
-                        left = it.left + contentInsets.left.toPx(),
-                        right = it.right + contentInsets.right.toPx(),
-                        bottom = it.bottom + contentInsets.bottom.toPx()
-                    )
-                }
-            } ?: return emptyList()
+            val contentRect =
+                currentContentBounds?.let {
+                    with(rootView.density) {
+                        Rect(
+                            top = it.top + contentInsets.top.toPx(),
+                            left = it.left + contentInsets.left.toPx(),
+                            right = it.right + contentInsets.right.toPx(),
+                            bottom = it.bottom + contentInsets.bottom.toPx(),
+                        )
+                    }
+                } ?: return emptyList()
 
-            val firstLineSelectionRect = TextInputSelectionRect(
-                dpRect = Rect(
-                    top = startSelectionHandleRect.top,
-                    left = startSelectionHandleRect.left,
-                    right = contentRect.right,
-                    bottom = startSelectionHandleRect.bottom
-                ).toDpRect(rootView.density),
-                writingDirection = TextDirection.Content,
-                containsStart = true,
-                containsEnd = false,
-                isVertical = false
-            )
+            val firstLineSelectionRect =
+                TextInputSelectionRect(
+                    dpRect =
+                        Rect(
+                                top = startSelectionHandleRect.top,
+                                left = startSelectionHandleRect.left,
+                                right = contentRect.right,
+                                bottom = startSelectionHandleRect.bottom,
+                            )
+                            .toDpRect(rootView.density),
+                    writingDirection = TextDirection.Content,
+                    containsStart = true,
+                    containsEnd = false,
+                    isVertical = false,
+                )
 
-            val middleAreaSelectionRect = TextInputSelectionRect(
-                dpRect = Rect(
-                    top = startSelectionHandleRect.bottom,
-                    left = contentRect.left,
-                    right = contentRect.right,
-                    bottom = endSelectionHandleRect.top
-                ).toDpRect(rootView.density),
-                writingDirection = TextDirection.Content,
-                containsStart = false,
-                containsEnd = false,
-                isVertical = false
-            )
+            val middleAreaSelectionRect =
+                TextInputSelectionRect(
+                    dpRect =
+                        Rect(
+                                top = startSelectionHandleRect.bottom,
+                                left = contentRect.left,
+                                right = contentRect.right,
+                                bottom = endSelectionHandleRect.top,
+                            )
+                            .toDpRect(rootView.density),
+                    writingDirection = TextDirection.Content,
+                    containsStart = false,
+                    containsEnd = false,
+                    isVertical = false,
+                )
 
-            val lastLineStartRect = currentTextLayoutResult.getCursorRect(
-                currentTextLayoutResult.getLineStart(lastLineNumber)
-            )
-            val lastLineRect = TextInputSelectionRect(
-                dpRect = Rect(
-                    topLeft = lastLineStartRect.topLeft,
-                    bottomRight = endSelectionHandleRect.bottomRight
-                ).toDpRect(rootView.density),
-                writingDirection = TextDirection.Content,
-                containsStart = false,
-                containsEnd = true,
-                isVertical = false
-            )
+            val lastLineStartRect =
+                currentTextLayoutResult.getCursorRect(
+                    currentTextLayoutResult.getLineStart(lastLineNumber)
+                )
+            val lastLineRect =
+                TextInputSelectionRect(
+                    dpRect =
+                        Rect(
+                                topLeft = lastLineStartRect.topLeft,
+                                bottomRight = endSelectionHandleRect.bottomRight,
+                            )
+                            .toDpRect(rootView.density),
+                    writingDirection = TextDirection.Content,
+                    containsStart = false,
+                    containsEnd = true,
+                    isVertical = false,
+                )
 
-            listOf(
-                firstLineSelectionRect,
-                middleAreaSelectionRect,
-                lastLineRect
-            )
+            listOf(firstLineSelectionRect, middleAreaSelectionRect, lastLineRect)
         }
     }
 
@@ -285,9 +305,11 @@ internal class NativeTextInputConnection(
         }
         val currentTextLayoutResult = textLayoutResult ?: return null
 
-        // Layout in native text input mode may be outdated, so not checking this may cause OOB error
+        // Layout in native text input mode may be outdated, so not checking this may cause OOB
+        // error
         // This workaround should be deleted after https://youtrack.jetbrains.com/issue/CMP-9767/
-        if (range.end > currentTextLayoutResult.multiParagraph.intrinsics.annotatedString.length) return null
+        if (range.end > currentTextLayoutResult.multiParagraph.intrinsics.annotatedString.length)
+            return null
 
         val startHandleLineNumber = currentTextLayoutResult.getLineForOffset(range.start)
         val endHandleLineNumber = currentTextLayoutResult.getLineForOffset(range.end)
@@ -296,18 +318,15 @@ internal class NativeTextInputConnection(
 
         return if (startHandleLineNumber == endHandleLineNumber) {
             Rect(
-                topLeft = startHandleRect.topLeft,
-                bottomRight = currentTextLayoutResult.getCursorRect(range.end).bottomRight
-            ).toDpRect(rootView.density)
+                    topLeft = startHandleRect.topLeft,
+                    bottomRight = currentTextLayoutResult.getCursorRect(range.end).bottomRight,
+                )
+                .toDpRect(rootView.density)
         } else {
             val startLineNumber = currentTextLayoutResult.getLineForOffset(range.start)
             val startLineRight = currentTextLayoutResult.getLineRight(startLineNumber)
-            Rect(
-                startHandleRect.left,
-                startHandleRect.top,
-                startLineRight,
-                startHandleRect.bottom
-            ).toDpRect(rootView.density)
+            Rect(startHandleRect.left, startHandleRect.top, startLineRight, startHandleRect.bottom)
+                .toDpRect(rootView.density)
         }
     }
 
@@ -317,21 +336,19 @@ internal class NativeTextInputConnection(
 
     override fun closestPositionToPoint(point: DpOffset, withinRange: TextRange): Int? {
         val pointOffset =
-            textLayoutResult?.getOffsetForPosition(point.toOffset(rootView.density))
-                ?: return null
+            textLayoutResult?.getOffsetForPosition(point.toOffset(rootView.density)) ?: return null
         return pointOffset.coerceIn(withinRange.start, withinRange.end)
     }
 
     override fun characterRangeAtPoint(point: DpOffset): TextRange? {
         val pointOffset =
-            textLayoutResult?.getOffsetForPosition(point.toOffset(rootView.density))
-                ?: return null
+            textLayoutResult?.getOffsetForPosition(point.toOffset(rootView.density)) ?: return null
         return textLayoutResult?.getWordBoundary(pointOffset)
     }
 
     override fun positionWithinRange(
         range: TextRange,
-        farthestInDirection: TextLayoutDirection
+        farthestInDirection: TextLayoutDirection,
     ): Int? {
         if (isIncorrect(range)) return null
         return when (farthestInDirection) {
@@ -365,6 +382,7 @@ internal class NativeTextInputConnection(
 
     // If not specified, iOS would use the default system tint color
     private var selectionTintColor: Color? = null
+
     private fun setupTintColor() {
         textInputView.setTintColor(selectionTintColor?.toUIColor())
     }
@@ -374,16 +392,15 @@ internal class NativeTextInputConnection(
         paste: (() -> Unit)?,
         cut: (() -> Unit)?,
         selectAll: (() -> Unit)?,
-        customActions: List<NativeTextInputContextMenuCustomAction>?
+        customActions: List<NativeTextInputContextMenuCustomAction>?,
     ) {
         textInputView.updateMenuActions(
             copy,
             paste,
             cut,
             selectAll,
-            customActions?.map { action ->
-                CMPEditMenuCustomAction(action.title, action.action)
-            } ?: emptyList()
+            customActions?.map { action -> CMPEditMenuCustomAction(action.title, action.action) }
+                ?: emptyList(),
         )
     }
 

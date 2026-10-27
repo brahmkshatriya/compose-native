@@ -32,15 +32,14 @@ import kotlin.js.js
 import kotlin.js.unsafeCast
 import kotlinx.browser.document
 import kotlinx.browser.window
-import org.w3c.dom.HTMLElement
 import org.w3c.dom.EventInit
+import org.w3c.dom.HTMLElement
 import org.w3c.dom.Node
 import org.w3c.dom.events.CompositionEvent
 import org.w3c.dom.events.Event
-import org.w3c.dom.events.UIEvent
 import org.w3c.dom.events.InputEvent
 import org.w3c.dom.events.KeyboardEvent
-
+import org.w3c.dom.events.UIEvent
 
 internal class DomInputStrategy(
     imeOptions: ImeOptions,
@@ -52,29 +51,48 @@ internal class DomInputStrategy(
     private var isInCompositionMode = false
 
     // To avoid the re-triggering of the selection change
-    private var pauseSelectionChangeListener = false
+    internal var pauseSelectionChangeListener = false
     private var selectionChangeListener: ((Event) -> Unit)? = null
 
     init {
         initEvents()
     }
 
-    private val nativeInputEventsProcessor = object : NativeInputEventsProcessor(composeSender) {
-        override fun scheduleCheckpoint() {
-            window.requestAnimationFrame {
-                runCheckpoint(currentTextFieldValue = lastMeaningfulUpdate)
+    private val nativeInputEventsProcessor =
+        object : NativeInputEventsProcessor(composeSender) {
+            override fun scheduleCheckpoint() {
+                window.requestAnimationFrame {
+                    runCheckpoint(currentTextFieldValue = lastMeaningfulUpdate)
+                }
             }
         }
+
+    /**
+     * Restores the DOM selection to match the last known Compose selection. Used after re-focusing
+     * the contenteditable, which causes Safari to reset the DOM selection to (0,0). The
+     * [pauseSelectionChangeListener] flag must already be set before calling this method.
+     */
+    fun restoreSelectionFromState() {
+        val sel = lastMeaningfulUpdate.selection
+        setSelectionRange(htmlInput, sel.min, sel.max)
     }
 
     fun updateState(textFieldValue: TextFieldValue) {
-        val needsTextUpdate = (lastMeaningfulUpdate.text != textFieldValue.text) && !isInCompositionMode
-        val needsSelectionUpdate = !isInCompositionMode && (lastMeaningfulUpdate.selection != textFieldValue.selection)
+        val needsTextUpdate =
+            (lastMeaningfulUpdate.text != textFieldValue.text) && !isInCompositionMode
+        val needsSelectionUpdate =
+            !isInCompositionMode && (lastMeaningfulUpdate.selection != textFieldValue.selection)
         lastMeaningfulUpdate = textFieldValue
+
+        // Permanent opacity: 0 also suppresses Safari's keyboard avoidance when focusing a field.
+        // Keep the renderer opaque for a caret so Safari can reveal it above the keyboard.
+        // For a range, make it transparent before syncing DOM selection: iOS 27 Safari can
+        // otherwise take over a long press after Select All and omit pointerup, leaving the
+        // Compose gesture unfinished and its context menu hidden.
+        htmlInput.style.setProperty("opacity", if (textFieldValue.selection.collapsed) "1" else "0")
 
         if (needsTextUpdate) {
             htmlInput.textContent = textFieldValue.text
-
             htmlInput.focus()
         }
 
@@ -82,12 +100,12 @@ internal class DomInputStrategy(
             pauseSelectionChangeListener = true
             setSelectionRange(htmlInput, textFieldValue.selection.min, textFieldValue.selection.max)
 
-            // the selectionchange event listeners do not run synchronously - see ttps://www.w3.org/TR/selection-api/#scheduling-selectionchange-event
+            // the selectionchange event listeners do not run synchronously - see
+            // ttps://www.w3.org/TR/selection-api/#scheduling-selectionchange-event
             // Resetting `pauseSelectionChangeListener` synchronously right after is not enough
-            // TODO: this is the cheapest way to make sure that DOM <=> Compose sync won't self-trigger but we need to consider better possible options
-            window.requestAnimationFrame {
-                pauseSelectionChangeListener = false
-            }
+            // TODO: this is the cheapest way to make sure that DOM <=> Compose sync won't
+            // self-trigger but we need to consider better possible options
+            window.requestAnimationFrame { pauseSelectionChangeListener = false }
         }
     }
 
@@ -95,54 +113,98 @@ internal class DomInputStrategy(
 
     @OptIn(ExperimentalWasmJsInterop::class)
     private fun initEvents() {
-        // Whenever new type of event is processed, don't forget to sync the NativeInputEventsProcessor::runCheckpoint isIME check
-        htmlInput.addEventListener("keydown", { evt ->
-            nativeInputEventsProcessor.registerEvent(evt as KeyboardEvent)
+        // Whenever new type of event is processed, don't forget to sync the
+        // NativeInputEventsProcessor::runCheckpoint isIME check
+        htmlInput.addEventListener(
+            "keydown",
+            { evt ->
+                nativeInputEventsProcessor.registerEvent(evt as KeyboardEvent)
 
-            if (evt.keyCode == tabKeyCode) {
-                // Compose logic will handle the focus movement or insert Tabs if necessary
-                evt.preventDefault()
-            }
+                if (evt.keyCode == tabKeyCode) {
+                    // Compose logic will handle the focus movement or insert Tabs if necessary
+                    evt.preventDefault()
+                }
 
-            // Let Compose decide the selection right after a new key input
-            pauseSelectionChangeListener = true
-        })
+                // Let Compose decide the selection right after a new key input
+                pauseSelectionChangeListener = true
+            },
+        )
 
-        htmlInput.addEventListener("keyup", { evt ->
-            nativeInputEventsProcessor.registerEvent(evt as KeyboardEvent)
-        })
+        htmlInput.addEventListener(
+            "keyup",
+            { evt -> nativeInputEventsProcessor.registerEvent(evt as KeyboardEvent) },
+        )
 
-        htmlInput.addEventListener("beforeinput", { evt ->
-            if (evt is InputEvent) {
-                val inputExt = evt.asInputEventExt()
+        htmlInput.addEventListener(
+            "beforeinput",
+            { evt ->
+                if (evt is InputEvent) {
+                    val inputExt = evt.asInputEventExt()
 
-                inputExt.firstRange = inputExt.getTargetRanges()[0]
+                    inputExt.firstRange = inputExt.getTargetRanges()[0]
 
-                nativeInputEventsProcessor.registerEvent(evt)
-            }
-        })
+                    // Line breaks are already inserted by Compose from the "keydown" event.
+                    // If the browser applies them natively, it splits the contenteditable content
+                    // into several nodes (Safari inserts <br> and wraps the rest into a <div>),
+                    // which breaks the offset math relying on a single text node.
+                    if (
+                        inputExt.inputType == "insertParagraph" ||
+                            inputExt.inputType == "insertLineBreak"
+                    ) {
+                        evt.preventDefault()
+                    }
 
-        htmlInput.addEventListener("compositionstart", {evt ->
-            isInCompositionMode = true
-        })
+                    // The browser applies the edit to the contenteditable element natively and
+                    // moves
+                    // the DOM caret. That caret move must not be translated into a
+                    // SetSelectionCommand,
+                    // otherwise it would shift the insertion point before the command is processed.
+                    // Unlike typing, autocorrect/autosuggest insertions don't produce a "keydown"
+                    // event,
+                    // so the pause has to be set here as well.
+                    pauseSelectionChangeListener = true
 
-        htmlInput.addEventListener("compositionend", { evt ->
-            isInCompositionMode = false
-            nativeInputEventsProcessor.registerEvent(evt as CompositionEvent)
-        })
+                    nativeInputEventsProcessor.registerEvent(evt)
+                }
+            },
+        )
+
+        htmlInput.addEventListener("compositionstart", { evt -> isInCompositionMode = true })
+
+        htmlInput.addEventListener(
+            "compositionend",
+            { evt ->
+                isInCompositionMode = false
+                nativeInputEventsProcessor.registerEvent(evt as CompositionEvent)
+            },
+        )
 
         selectionChangeListener = listener@{ _ ->
-            if (pauseSelectionChangeListener || !isInputActive()) return@listener
+            // while there are collected but not yet processed events, the DOM selection is
+            // in an intermediate state and must not be propagated to Compose
+            if (
+                pauseSelectionChangeListener ||
+                    nativeInputEventsProcessor.isCheckpointScheduled ||
+                    !isInputActive()
+            )
+                return@listener
 
             val currentSelection = getSelectionRange(htmlInput)
-            val (start, end) = if (currentSelection != null) {
-                Pair(
-                    computeSelectionOffset(currentSelection.startContainer, currentSelection.startOffset),
-                    computeSelectionOffset(currentSelection.endContainer, currentSelection.endOffset)
-                )
-            } else {
-                Pair(0, 0)
-            }
+            val (start, end) =
+                if (currentSelection != null) {
+                    Pair(
+                        computeSelectionOffset(
+                            currentSelection.startContainer,
+                            currentSelection.startOffset,
+                        ),
+                        computeSelectionOffset(
+                            currentSelection.endContainer,
+                            currentSelection.endOffset,
+                        ),
+                    )
+                } else {
+                    Pair(0, 0)
+                }
 
             val selection = lastMeaningfulUpdate.selection
 
@@ -155,7 +217,8 @@ internal class DomInputStrategy(
         // In Chrome, we need to listen to the selection change on the document
         document.addEventListener("selectionchange", selectionChangeListener)
         // In Firefox and Safari we listen to the selection change on the input element.
-        // Chrome is expected to dispatch this event too (https://chromium-review.googlesource.com/c/chromium/src/+/5598393),
+        // Chrome is expected to dispatch this event too
+        // (https://chromium-review.googlesource.com/c/chromium/src/+/5598393),
         // but it doesn't: https://issuetracker.google.com/issues/518751607
         htmlInput.addEventListener("selectionchange", selectionChangeListener)
     }
@@ -167,7 +230,7 @@ internal class DomInputStrategy(
     }
 
     @OptIn(ExperimentalWasmJsInterop::class)
-    private fun isInputActive(): Boolean {
+    internal fun isInputActive(): Boolean {
         val root = htmlInput.unsafeCast<NodeWithRootNode>().getRootNode()
         val rootActive = root?.activeElement
         return rootActive == htmlInput
@@ -193,8 +256,8 @@ internal external class InputEventExt : UIEvent {
     constructor(type: String, eventInitDict: EventInit = definedExternally)
 
     /**
-     * Returns an array of static ranges that will be affected by a change to the DOM
-     * if the input event is not canceled.
+     * Returns an array of static ranges that will be affected by a change to the DOM if the input
+     * event is not canceled.
      *
      * See https://developer.mozilla.org/en-US/docs/Web/API/InputEvent/getTargetRanges
      */
@@ -202,8 +265,8 @@ internal external class InputEventExt : UIEvent {
 }
 
 /**
- * Represents a [StaticRange] - a range of content in a document that is not updated
- * when the underlying DOM tree is modified.
+ * Represents a [StaticRange] - a range of content in a document that is not updated when the
+ * underlying DOM tree is modified.
  *
  * See https://developer.mozilla.org/en-US/docs/Web/API/StaticRange
  */
@@ -216,13 +279,10 @@ internal external interface StaticRange : JsAny {
     val collapsed: Boolean
 }
 
-
-internal inline fun UIEvent.asInputEventExt(): InputEventExt =  unsafeCast<InputEventExt>()
+internal inline fun UIEvent.asInputEventExt(): InputEventExt = unsafeCast<InputEventExt>()
 
 private fun ImeOptions.createDomElement(): HTMLElement {
-    val htmlElement = document.createElement(
-        if (singleLine) "span" else "div"
-    ) as HTMLElement
+    val htmlElement = document.createElement(if (singleLine) "span" else "div") as HTMLElement
 
     // without autocorrect set "on" iOS virtual keyboard won't suggest
     // see https://youtrack.jetbrains.com/issue/CMP-8807
@@ -232,31 +292,39 @@ private fun ImeOptions.createDomElement(): HTMLElement {
     htmlElement.setAttribute("spellcheck", "false")
 
     htmlElement.setAttribute("contenteditable", "true")
+    // The input remains opaque for a caret so Safari can reveal it above the keyboard.
+    // Exclude it from hit testing so a following tap is still delivered to the Compose canvas.
+    htmlElement.style.setProperty("pointer-events", "none")
+    // Without clipping, iOS Safari can paint the native caret outside the narrow backing input.
+    htmlElement.style.setProperty("clip-path", "inset(0)")
+    htmlElement.style.setProperty("-webkit-clip-path", "inset(0)")
 
-    val inputMode = when (keyboardType) {
-        KeyboardType.Text -> "text"
-        KeyboardType.Ascii -> "text"
-        KeyboardType.Number -> "number"
-        KeyboardType.Phone -> "tel"
-        KeyboardType.Uri -> "url"
-        KeyboardType.Email -> "email"
-        KeyboardType.Password -> "password"
-        KeyboardType.NumberPassword -> "number"
-        KeyboardType.Decimal -> "decimal"
-        else -> "text"
-    }
+    val inputMode =
+        when (keyboardType) {
+            KeyboardType.Text -> "text"
+            KeyboardType.Ascii -> "text"
+            KeyboardType.Number -> "number"
+            KeyboardType.Phone -> "tel"
+            KeyboardType.Uri -> "url"
+            KeyboardType.Email -> "email"
+            KeyboardType.Password -> "password"
+            KeyboardType.NumberPassword -> "number"
+            KeyboardType.Decimal -> "decimal"
+            else -> "text"
+        }
 
-    val enterKeyHint = when (imeAction) {
-        ImeAction.Default -> "enter"
-        ImeAction.None -> "enter"
-        ImeAction.Done -> "done"
-        ImeAction.Go -> "go"
-        ImeAction.Next -> "next"
-        ImeAction.Previous -> "previous"
-        ImeAction.Search -> "search"
-        ImeAction.Send -> "send"
-        else -> "enter"
-    }
+    val enterKeyHint =
+        when (imeAction) {
+            ImeAction.Default -> "enter"
+            ImeAction.None -> "enter"
+            ImeAction.Done -> "done"
+            ImeAction.Go -> "go"
+            ImeAction.Next -> "next"
+            ImeAction.Previous -> "previous"
+            ImeAction.Search -> "search"
+            ImeAction.Send -> "send"
+            else -> "enter"
+        }
 
     htmlElement.setAttribute("inputmode", inputMode)
     htmlElement.setAttribute("enterkeyhint", enterKeyHint)
@@ -271,7 +339,8 @@ private external interface HasDomSelection : JsAny {
 }
 
 /**
- * Represents a [Selection] - the range of text selected by the user or the current position of the caret.
+ * Represents a [Selection] - the range of text selected by the user or the current position of the
+ * caret.
  *
  * Minimal definition sufficient for [setSelectionRange] and [getSelectionOffsets].
  *
@@ -283,12 +352,17 @@ private external interface Selection : JsAny {
     fun setBaseAndExtent(anchorNode: Node, anchorOffset: Int, focusNode: Node, focusOffset: Int)
 }
 
-// getSelectionRange in browsers acts in two modes - if we are in a single text node, then actual offset is returned, nothing more to be done
-// but browser can decide that we need to return the indices of the child nodes [start, end) and we'll need to calculate the actual offsets
-// this happens only when we trigger selection via keyboard (Cmd + A) - Chrome and Firefox return (0, 1)
-// so, don't be put off by the complexity of logic, in our case n is always 1 and c.nodeType is always 3 (that is,  child is always a text node)
+// getSelectionRange in browsers acts in two modes - if we are in a single text node, then actual
+// offset is returned, nothing more to be done
+// but browser can decide that we need to return the indices of the child nodes [start, end) and
+// we'll need to calculate the actual offsets
+// this happens only when we trigger selection via keyboard (Cmd + A) - Chrome and Firefox return
+// (0, 1)
+// so, don't be put off by the complexity of logic, in our case n is always 1 and c.nodeType is
+// always 3 (that is,  child is always a text node)
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun computeSelectionOffset(container: JsAny, offset: Int): Int = js(
+private fun computeSelectionOffset(container: JsAny, offset: Int): Int =
+    js(
         """{          
     // container.nodeType stands for textNodes                   
     if (container.nodeType == 3) return offset;
@@ -301,11 +375,13 @@ private fun computeSelectionOffset(container: JsAny, offset: Int): Int = js(
             : ((c.textContent && c.textContent.length) || 0);
     }
     return chars;
-    }""")
+    }"""
+    )
 
 @OptIn(ExperimentalWasmJsInterop::class)
-private fun getSelectionRange(element: HTMLElement): StaticRange? = js(
-    """{
+private fun getSelectionRange(element: HTMLElement): StaticRange? =
+    js(
+        """{
         var selection = window.getSelection();
         if (selection == null) return null;
         var root = element.getRootNode();
@@ -343,7 +419,7 @@ private fun getSelectionRange(element: HTMLElement): StaticRange? = js(
         }
         return null;
     }"""
-)
+    )
 
 internal fun setSelectionRange(element: HTMLElement, startOffset: Int, endOffset: Int) {
     val selection = window.unsafeCast<HasDomSelection>().getSelection()
@@ -355,7 +431,6 @@ internal fun setSelectionRange(element: HTMLElement, startOffset: Int, endOffset
         selection?.setBaseAndExtent(element, 0, element, 0)
     }
 }
-
 
 private fun isTypedEvent(evt: KeyboardEvent): Boolean =
     js("!evt.metaKey && !evt.ctrlKey && evt.key.charAt(0) === evt.key")

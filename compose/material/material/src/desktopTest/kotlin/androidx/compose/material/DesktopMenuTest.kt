@@ -54,32 +54,21 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 import com.google.common.truth.Truth.assertThat
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlinx.coroutines.runBlocking
 
 @OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
 class DesktopMenuTest {
-
 
     private val windowSize = IntSize(200, 200)
 
     // Standard case: enough room to position below the anchor and align left
     @Test
     fun menu_positioning_alignLeft_belowAnchor() {
-        val anchorBounds = IntRect(
-            offset = IntOffset(10, 50),
-            size = IntSize(50, 20)
-        )
+        val anchorBounds = IntRect(offset = IntOffset(10, 50), size = IntSize(50, 20))
         val popupSize = IntSize(70, 70)
 
-        val position = DropdownMenuPositionProvider(
-            DpOffset.Zero,
-            Density(1f)
-        ).calculatePosition(
-            anchorBounds,
-            windowSize,
-            LayoutDirection.Ltr,
-            popupSize
-        )
+        val position =
+            DropdownMenuPositionProvider(DpOffset.Zero, Density(1f))
+                .calculatePosition(anchorBounds, windowSize, LayoutDirection.Ltr, popupSize)
 
         assertThat(position).isEqualTo(anchorBounds.bottomLeft)
     }
@@ -87,75 +76,45 @@ class DesktopMenuTest {
     // Standard RTL case: enough room to position below the anchor and align right
     @Test
     fun menu_positioning_rtl_alignRight_belowAnchor() {
-        val anchorBounds = IntRect(
-            offset = IntOffset(30, 50),
-            size = IntSize(50, 20)
-        )
+        val anchorBounds = IntRect(offset = IntOffset(30, 50), size = IntSize(50, 20))
         val popupSize = IntSize(70, 70)
 
-        val position = DropdownMenuPositionProvider(
-            DpOffset.Zero,
-            Density(1f)
-        ).calculatePosition(
-            anchorBounds,
-            windowSize,
-            LayoutDirection.Rtl,
-            popupSize
-        )
+        val position =
+            DropdownMenuPositionProvider(DpOffset.Zero, Density(1f))
+                .calculatePosition(anchorBounds, windowSize, LayoutDirection.Rtl, popupSize)
 
-        assertThat(position).isEqualTo(
-            IntOffset(
-                x = anchorBounds.right - popupSize.width,
-                y = anchorBounds.bottom
-            )
-        )
+        assertThat(position)
+            .isEqualTo(IntOffset(x = anchorBounds.right - popupSize.width, y = anchorBounds.bottom))
     }
 
     // Not enough room to position the popup below the anchor, but enough room above
     @Test
     fun menu_positioning_alignLeft_aboveAnchor() {
-        val anchorBounds = IntRect(
-            offset = IntOffset(10, 150),
-            size = IntSize(50, 30)
-        )
+        val anchorBounds = IntRect(offset = IntOffset(10, 150), size = IntSize(50, 30))
         val popupSize = IntSize(70, 30)
 
-        val position = DropdownMenuPositionProvider(
-            DpOffset.Zero,
-            Density(1f)
-        ).calculatePosition(
-            anchorBounds,
-            windowSize,
-            LayoutDirection.Ltr,
-            popupSize
-        )
+        val position =
+            DropdownMenuPositionProvider(DpOffset.Zero, Density(1f))
+                .calculatePosition(anchorBounds, windowSize, LayoutDirection.Ltr, popupSize)
 
-        assertThat(position).isEqualTo(
-            IntOffset(
-                x = anchorBounds.left,
-                y = anchorBounds.top - popupSize.height
-            )
-        )
+        assertThat(position)
+            .isEqualTo(IntOffset(x = anchorBounds.left, y = anchorBounds.top - popupSize.height))
     }
 
     // Anchor left is at negative coordinates, so align popup to the left of the window
     @Test
     fun menu_positioning_windowLeft_belowAnchor() {
-        val anchorBounds = IntRect(
-            offset = IntOffset(-10, 50),
-            size = IntSize(50, 20)
-        )
+        val anchorBounds = IntRect(offset = IntOffset(-10, 50), size = IntSize(50, 20))
         val popupSize = IntSize(70, 50)
 
-        val position = DropdownMenuPositionProvider(
-            DpOffset.Zero,
-            Density(1f)
-        ).calculatePosition(
-            anchorBounds = anchorBounds,
-            windowSize,
-            LayoutDirection.Ltr,
-            popupSize
-        )
+        val position =
+            DropdownMenuPositionProvider(DpOffset.Zero, Density(1f))
+                .calculatePosition(
+                    anchorBounds = anchorBounds,
+                    windowSize,
+                    LayoutDirection.Ltr,
+                    popupSize,
+                )
 
         assertThat(position).isEqualTo(IntOffset(0, anchorBounds.bottom))
     }
@@ -176,8 +135,7 @@ class DesktopMenuTest {
             }
         }
         val windowSize = onNodeWithTag("background").getBoundsInRoot().size
-        onNodeWithTag("box")
-            .assertLeftPositionInRootIsEqualTo(windowSize.width - 50.dp)
+        onNodeWithTag("box").assertLeftPositionInRootIsEqualTo(windowSize.width - 50.dp)
     }
 
     @Suppress("DEPRECATION")
@@ -188,12 +146,12 @@ class DesktopMenuTest {
         setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
                 val owner = LocalNavigationEventDispatcherOwner.current
-                LaunchedEffect(owner) {
-                    owner?.navigationEventDispatcher?.addInput(navEventInput)
-                }
-                DropdownMenu(true, onDismissRequest = {
-                    dismissCount++
-                }, modifier = Modifier.testTag("dropDownMenu")) {
+                LaunchedEffect(owner) { owner?.navigationEventDispatcher?.addInput(navEventInput) }
+                DropdownMenu(
+                    true,
+                    onDismissRequest = { dismissCount++ },
+                    modifier = Modifier.testTag("dropDownMenu"),
+                ) {
                     DropdownMenuItem({}) { Text("item1") }
                 }
             }
@@ -212,25 +170,23 @@ class DesktopMenuTest {
 
         setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
-                DropdownMenu(true, onDismissRequest = {},
-                    modifier = Modifier.testTag("dropDownMenu")) {
-                    DropdownMenuItem({
-                        item1Clicked++
-                    }) { Text("item1") }
-                    DropdownMenuItem({
-                        item2Clicked++
-                    }) { Text("item2") }
-                    DropdownMenuItem({
-                        item3Clicked++
-                    }) { Text("item3") }
+                DropdownMenu(
+                    true,
+                    onDismissRequest = {},
+                    modifier = Modifier.testTag("dropDownMenu"),
+                ) {
+                    DropdownMenuItem({ item1Clicked++ }) { Text("item1") }
+                    DropdownMenuItem({ item2Clicked++ }) { Text("item2") }
+                    DropdownMenuItem({ item3Clicked++ }) { Text("item3") }
                 }
             }
         }
 
-        fun performKeyDownAndUp(key: Key) = onNodeWithTag("dropDownMenu").apply {
-            performKeyPress(KeyEvent(key, KeyEventType.KeyDown))
-            performKeyPress(KeyEvent(key, KeyEventType.KeyUp))
-        }
+        fun performKeyDownAndUp(key: Key) =
+            onNodeWithTag("dropDownMenu").apply {
+                performKeyPress(KeyEvent(key, KeyEventType.KeyDown))
+                performKeyPress(KeyEvent(key, KeyEventType.KeyUp))
+            }
 
         fun assertClicksCount(i1: Int, i2: Int, i3: Int) {
             assertThat(item1Clicked).isEqualTo(i1)
@@ -270,18 +226,14 @@ class DesktopMenuTest {
         val state = DropdownMenuState(DropdownMenuState.Status.Closed)
         setContent {
             Box(
-                modifier = Modifier
-                    .testTag("box")
-                    .size(100.dp, 100.dp)
-                    .contextMenuOpenDetector(
-                        state = state
-                    )
+                modifier =
+                    Modifier.testTag("box")
+                        .size(100.dp, 100.dp)
+                        .contextMenuOpenDetector(state = state)
             )
         }
 
-        onNodeWithTag("box").performMouseInput {
-            rightClick(Offset(10f, 10f))
-        }
+        onNodeWithTag("box").performMouseInput { rightClick(Offset(10f, 10f)) }
 
         assertThat(state.status == DropdownMenuState.Status.Open(Offset(10f, 10f)))
     }
@@ -293,19 +245,14 @@ class DesktopMenuTest {
         val state = DropdownMenuState(DropdownMenuState.Status.Closed)
         setContent {
             Box(
-                modifier = Modifier
-                    .testTag("box")
-                    .size(100.dp, 100.dp)
-                    .contextMenuOpenDetector(
-                        state = state,
-                        enabled = false
-                    )
+                modifier =
+                    Modifier.testTag("box")
+                        .size(100.dp, 100.dp)
+                        .contextMenuOpenDetector(state = state, enabled = false)
             )
         }
 
-        onNodeWithTag("box").performMouseInput {
-            rightClick(Offset(10f, 10f))
-        }
+        onNodeWithTag("box").performMouseInput { rightClick(Offset(10f, 10f)) }
 
         assertThat(state.status == DropdownMenuState.Status.Closed)
     }
@@ -319,7 +266,7 @@ class DesktopMenuTest {
                 true,
                 onDismissRequest = {},
                 modifier = Modifier.testTag("menu"),
-                scrollState = scrollState
+                scrollState = scrollState,
             ) {
                 Box(Modifier.testTag("box").size(10000.dp, 10000.dp))
                 Box(Modifier.size(10000.dp, 10000.dp))
@@ -328,21 +275,13 @@ class DesktopMenuTest {
 
         val initialPosition = onNodeWithTag("box").getUnclippedBoundsInRoot().top
 
-        runBlocking {
-            scrollState.scroll {
-                scrollBy(10000f)
-            }
-        }
-        assertThat(
-            onNodeWithTag("box").getUnclippedBoundsInRoot().top
-        ).isLessThan(initialPosition)
+        scrollState.scroll { scrollBy(10000f) }
+        assertThat(onNodeWithTag("box").getUnclippedBoundsInRoot().top).isLessThan(initialPosition)
 
         onNodeWithTag("menu").performMouseInput {
             enter(center)
             scroll(-10000f)
         }
-        assertThat(
-            onNodeWithTag("box").getUnclippedBoundsInRoot().top
-        ).isEqualTo(initialPosition)
+        assertThat(onNodeWithTag("box").getUnclippedBoundsInRoot().top).isEqualTo(initialPosition)
     }
 }

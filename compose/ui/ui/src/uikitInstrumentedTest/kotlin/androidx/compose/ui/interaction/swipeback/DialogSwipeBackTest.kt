@@ -33,7 +33,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.UIKitInstrumentedTest
 import androidx.compose.ui.test.findNodeWithTag
-import androidx.compose.ui.test.findNodeWithTagOrNull
 import androidx.compose.ui.test.runUIKitInstrumentedTest
 import androidx.compose.ui.test.utils.hold
 import androidx.compose.ui.test.utils.up
@@ -50,176 +49,186 @@ import kotlin.test.assertFalse
 import platform.UIKit.UITraitEnvironmentLayoutDirectionLeftToRight
 import platform.UIKit.UITraitEnvironmentLayoutDirectionRightToLeft
 
-internal class DialogSwipeBackInHostingViewTest : DialogSwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
-)
+@Suppress("unused")
+internal class DialogSwipeBackInHostingViewTest :
+    DialogSwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
+    )
 
-internal class DialogSwipeBackInHostingViewControllerTest : DialogSwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
-)
+@Suppress("unused")
+internal class DialogSwipeBackInHostingViewControllerTest :
+    DialogSwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
+    )
 
 internal abstract class DialogSwipeBackTest(
     private val runUIKitInstrumentedTest: (UIKitInstrumentedTest.() -> Unit) -> Unit
 ) {
     @Test
-    fun testEdgeBackSwipeOverDialogDoesNotDispatchHorizontalDragToComposeLtr() = runUIKitInstrumentedTest {
-        var dragDistance = Float.NaN
-        var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
-        var backCompletedCount = -1
+    fun testEdgeBackSwipeOverDialogDoesNotDispatchHorizontalDragToComposeLtr() =
+        runUIKitInstrumentedTest {
+            var dragDistance = Float.NaN
+            var transitionState: NavigationEventTransitionState =
+                NavigationEventTransitionState.Idle
+            var backCompletedCount = -1
 
-        setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
-            DialogBackGestureContent(
-                onDragDistanceChanged = { dragDistance = it },
-                onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+            setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
+                DialogBackGestureContent(
+                    onDragDistanceChanged = { dragDistance = it },
+                    onTransitionStateChanged = { transitionState = it },
+                    onBackCompletedCountChanged = { backCompletedCount = it },
+                )
+            }
+
+            val backSwipe = swipeFromLeftEdge().hold()
+
+            waitForIdle()
+
+            assertFalse(
+                transitionState is InProgress,
+                "Edge swipe over Dialog should not start root back navigation",
+            )
+            assertEquals(
+                expected = 0f,
+                actual = dragDistance,
+                absoluteTolerance = 0.01f,
+                message =
+                    "Edge back swipe over Dialog should not dispatch horizontal drag deltas to Compose",
+            )
+            assertEquals(
+                expected = 0,
+                actual = backCompletedCount,
+                message = "Back gesture over Dialog should not complete before release",
+            )
+
+            backSwipe.up()
+
+            waitForIdle()
+
+            assertFalse(
+                transitionState is InProgress,
+                "Releasing edge swipe over Dialog should still not start root back navigation",
+            )
+            assertEquals(
+                expected = 0,
+                actual = backCompletedCount,
+                message = "Edge swipe over Dialog should not complete root back navigation",
             )
         }
-
-        val backSwipe = swipeFromLeftEdge().hold()
-
-        waitForIdle()
-
-        assertFalse(
-            transitionState is InProgress,
-            "Edge swipe over Dialog should not start root back navigation"
-        )
-        assertEquals(
-            expected = 0f,
-            actual = dragDistance,
-            absoluteTolerance = 0.01f,
-            message = "Edge back swipe over Dialog should not dispatch horizontal drag deltas to Compose"
-        )
-        assertEquals(
-            expected = 0,
-            actual = backCompletedCount,
-            message = "Back gesture over Dialog should not complete before release"
-        )
-
-        backSwipe.up()
-
-        waitForIdle()
-
-        assertFalse(
-            transitionState is InProgress,
-            "Releasing edge swipe over Dialog should still not start root back navigation"
-        )
-        assertEquals(
-            expected = 0,
-            actual = backCompletedCount,
-            message = "Edge swipe over Dialog should not complete root back navigation"
-        )
-    }
 
     @Test
-    fun testEdgeBackSwipeOverDialogDoesNotDispatchHorizontalDragToComposeRtl() = runUIKitInstrumentedTest {
-        var dragDistance = Float.NaN
-        var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
-        var backCompletedCount = -1
+    fun testEdgeBackSwipeOverDialogDoesNotDispatchHorizontalDragToComposeRtl() =
+        runUIKitInstrumentedTest {
+            var dragDistance = Float.NaN
+            var transitionState: NavigationEventTransitionState =
+                NavigationEventTransitionState.Idle
+            var backCompletedCount = -1
 
-        setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
-            DialogBackGestureContent(
-                onDragDistanceChanged = { dragDistance = it },
-                onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+            setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
+                DialogBackGestureContent(
+                    onDragDistanceChanged = { dragDistance = it },
+                    onTransitionStateChanged = { transitionState = it },
+                    onBackCompletedCountChanged = { backCompletedCount = it },
+                )
+            }
+
+            val backSwipe = swipeFromRightEdge().hold()
+
+            waitForIdle()
+
+            assertFalse(
+                transitionState is InProgress,
+                "Edge swipe over Dialog should not start root back navigation",
+            )
+            assertEquals(
+                expected = 0f,
+                actual = dragDistance,
+                absoluteTolerance = 0.01f,
+                message =
+                    "Edge back swipe over Dialog should not dispatch horizontal drag deltas to Compose",
+            )
+            assertEquals(
+                expected = 0,
+                actual = backCompletedCount,
+                message = "Back gesture over Dialog should not complete before release",
+            )
+
+            backSwipe.up()
+
+            waitForIdle()
+
+            assertFalse(
+                transitionState is InProgress,
+                "Releasing edge swipe over Dialog should still not start root back navigation",
+            )
+            assertEquals(
+                expected = 0,
+                actual = backCompletedCount,
+                message = "Edge swipe over Dialog should not complete root back navigation",
             )
         }
-
-        val backSwipe = swipeFromRightEdge().hold()
-
-        waitForIdle()
-
-        assertFalse(
-            transitionState is InProgress,
-            "Edge swipe over Dialog should not start root back navigation"
-        )
-        assertEquals(
-            expected = 0f,
-            actual = dragDistance,
-            absoluteTolerance = 0.01f,
-            message = "Edge back swipe over Dialog should not dispatch horizontal drag deltas to Compose"
-        )
-        assertEquals(
-            expected = 0,
-            actual = backCompletedCount,
-            message = "Back gesture over Dialog should not complete before release"
-        )
-
-        backSwipe.up()
-
-        waitForIdle()
-
-        assertFalse(
-            transitionState is InProgress,
-            "Releasing edge swipe over Dialog should still not start root back navigation"
-        )
-        assertEquals(
-            expected = 0,
-            actual = backCompletedCount,
-            message = "Edge swipe over Dialog should not complete root back navigation"
-        )
-    }
 
     @Test
-    fun testInnerSwipeOverDialogDispatchesHorizontalDragWithoutStartingBackLtr() = runUIKitInstrumentedTest {
-        var dragDistance = Float.NaN
-        var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
-        var backCompletedCount = -1
+    fun testInnerSwipeOverDialogDispatchesHorizontalDragWithoutStartingBackLtr() =
+        runUIKitInstrumentedTest {
+            var dragDistance = Float.NaN
+            var transitionState: NavigationEventTransitionState =
+                NavigationEventTransitionState.Idle
+            var backCompletedCount = -1
 
-        setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
-            DialogBackGestureContent(
-                onDragDistanceChanged = { dragDistance = it },
-                onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+            setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
+                DialogBackGestureContent(
+                    onDragDistanceChanged = { dragDistance = it },
+                    onTransitionStateChanged = { transitionState = it },
+                    onBackCompletedCountChanged = { backCompletedCount = it },
+                )
+            }
+
+            findNodeWithTag(OVERLAY_SURFACE).swipeRight()
+
+            waitUntil("Inner swipe should dispatch drag deltas over Dialog") { dragDistance > 0f }
+
+            assertFalse(
+                transitionState is InProgress,
+                "Inner swipe over Dialog should not start back navigation",
+            )
+            assertEquals(
+                expected = 0,
+                actual = backCompletedCount,
+                message = "Inner swipe over Dialog should not complete back navigation",
             )
         }
-
-        findNodeWithTag(OVERLAY_SURFACE).swipeRight()
-
-        waitUntil("Inner swipe should dispatch drag deltas over Dialog") {
-            dragDistance > 0f
-        }
-
-        assertFalse(
-            transitionState is InProgress,
-            "Inner swipe over Dialog should not start back navigation"
-        )
-        assertEquals(
-            expected = 0,
-            actual = backCompletedCount,
-            message = "Inner swipe over Dialog should not complete back navigation"
-        )
-    }
 
     @Test
-    fun testInnerSwipeOverDialogDispatchesHorizontalDragWithoutStartingBackRtl() = runUIKitInstrumentedTest {
-        var dragDistance = Float.NaN
-        var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
-        var backCompletedCount = -1
+    fun testInnerSwipeOverDialogDispatchesHorizontalDragWithoutStartingBackRtl() =
+        runUIKitInstrumentedTest {
+            var dragDistance = Float.NaN
+            var transitionState: NavigationEventTransitionState =
+                NavigationEventTransitionState.Idle
+            var backCompletedCount = -1
 
-        setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
-            DialogBackGestureContent(
-                onDragDistanceChanged = { dragDistance = it },
-                onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+            setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
+                DialogBackGestureContent(
+                    onDragDistanceChanged = { dragDistance = it },
+                    onTransitionStateChanged = { transitionState = it },
+                    onBackCompletedCountChanged = { backCompletedCount = it },
+                )
+            }
+
+            findNodeWithTag(OVERLAY_SURFACE).swipeLeft()
+
+            waitUntil("Inner swipe should dispatch drag deltas over Dialog") { dragDistance < 0f }
+
+            assertFalse(
+                transitionState is InProgress,
+                "Inner swipe over Dialog should not start back navigation",
+            )
+            assertEquals(
+                expected = 0,
+                actual = backCompletedCount,
+                message = "Inner swipe over Dialog should not complete back navigation",
             )
         }
-
-        findNodeWithTag(OVERLAY_SURFACE).swipeLeft()
-
-        waitUntil("Inner swipe should dispatch drag deltas over Dialog") {
-            dragDistance < 0f
-        }
-
-        assertFalse(
-            transitionState is InProgress,
-            "Inner swipe over Dialog should not start back navigation"
-        )
-        assertEquals(
-            expected = 0,
-            actual = backCompletedCount,
-            message = "Inner swipe over Dialog should not complete back navigation"
-        )
-    }
 }
 
 @Composable
@@ -230,15 +239,16 @@ private fun DialogBackGestureContent(
 ) {
     BackGestureHost(
         onTransitionStateChanged = onTransitionStateChanged,
-        onBackCompletedCountChanged = onBackCompletedCountChanged
+        onBackCompletedCountChanged = onBackCompletedCountChanged,
     ) {
         Dialog(
             onDismissRequest = {},
-            properties = DialogProperties(
-                dismissOnBackPress = false,
-                usePlatformDefaultWidth = false,
-                usePlatformInsets = false
-            )
+            properties =
+                DialogProperties(
+                    dismissOnBackPress = false,
+                    usePlatformDefaultWidth = false,
+                    usePlatformInsets = false,
+                ),
         ) {
             DraggableSurface(onDragDistanceChanged = onDragDistanceChanged)
         }
@@ -246,24 +256,20 @@ private fun DialogBackGestureContent(
 }
 
 @Composable
-private fun DraggableSurface(
-    onDragDistanceChanged: (Float) -> Unit,
-) {
+private fun DraggableSurface(onDragDistanceChanged: (Float) -> Unit) {
     var dragDistance by remember { mutableFloatStateOf(0f) }
 
     onDragDistanceChanged(dragDistance)
 
     Box(
-        modifier = Modifier
-            .background(Color.Red)
-            .fillMaxSize()
-            .testTag(OVERLAY_SURFACE)
-            .draggable(
-                state = rememberDraggableState { delta ->
-                    dragDistance += delta
-                },
-                orientation = Orientation.Horizontal,
-            )
+        modifier =
+            Modifier.background(Color.Red)
+                .fillMaxSize()
+                .testTag(OVERLAY_SURFACE)
+                .draggable(
+                    state = rememberDraggableState { delta -> dragDistance += delta },
+                    orientation = Orientation.Horizontal,
+                )
     )
 }
 
@@ -274,24 +280,21 @@ private fun BackGestureHost(
     content: @Composable () -> Unit,
 ) {
     var backCompletedCount by remember { mutableIntStateOf(0) }
-    val navigationEventState = rememberNavigationEventState<NavigationEventInfo>(
-        currentInfo = NavigationEventInfo.None,
-        backInfo = listOf(NavigationEventInfo.None)
-    )
+    val navigationEventState =
+        rememberNavigationEventState<NavigationEventInfo>(
+            currentInfo = NavigationEventInfo.None,
+            backInfo = listOf(NavigationEventInfo.None),
+        )
 
     onTransitionStateChanged(navigationEventState.transitionState)
     onBackCompletedCountChanged(backCompletedCount)
 
     NavigationBackHandler(
         state = navigationEventState,
-        onBackCompleted = {
-            backCompletedCount += 1
-        }
+        onBackCompleted = { backCompletedCount += 1 },
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        content()
-    }
+    Box(modifier = Modifier.fillMaxSize()) { content() }
 }
 
 private const val OVERLAY_SURFACE = "overlaySurface"

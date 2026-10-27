@@ -18,7 +18,6 @@
 
 package androidx.compose.ui.text
 
-import org.jetbrains.skia.Rect as SkRect
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -33,7 +32,6 @@ import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.skiaCanvas
 import androidx.compose.ui.graphics.toComposeRect
-import androidx.compose.ui.text.PlatformParagraph
 import androidx.compose.ui.text.platform.SkikoParagraphIntrinsics
 import androidx.compose.ui.text.platform.cursorHorizontalPosition
 import androidx.compose.ui.text.style.LineHeightStyle
@@ -47,33 +45,34 @@ import kotlin.math.floor
 import org.jetbrains.skia.FontMetrics
 import org.jetbrains.skia.IRange
 import org.jetbrains.skia.PathBuilder
+import org.jetbrains.skia.Rect as SkRect
 import org.jetbrains.skia.paragraph.Direction
 import org.jetbrains.skia.paragraph.LineMetrics
+import org.jetbrains.skia.paragraph.Paragraph as SkParagraph
 import org.jetbrains.skia.paragraph.RectHeightMode
 import org.jetbrains.skia.paragraph.RectWidthMode
 import org.jetbrains.skia.paragraph.TextBox
-import org.jetbrains.skia.paragraph.Paragraph as SkParagraph
 
 internal class SkikoParagraph(
     private val paragraphIntrinsics: SkikoParagraphIntrinsics,
     val maxLines: Int,
     private val overflow: TextOverflow,
-    val constraints: Constraints
+    val constraints: Constraints,
 ) : PlatformParagraph {
-    private val layouter = paragraphIntrinsics.layouter().apply {
-        setParagraphStyle(maxLines, ellipsis)
-    }
+    private val layouter =
+        paragraphIntrinsics.layouter().apply { setParagraphStyle(maxLines, ellipsis) }
 
     internal val defaultFont
         get() = layouter.defaultFont
 
+    private val bulletPainter =
+        if (layouter.bullets.isEmpty()) null else SkikoBulletPainter(layouter)
+
     /**
-     * Paragraph isn't always immutable, it could be changed via [paint] method without
-     * rerunning layout
+     * Paragraph isn't always immutable, it could be changed via [paint] method without rerunning
+     * layout
      */
-    private var paragraph: SkParagraph = layouter.layoutParagraph(
-        width = width
-    )
+    private var paragraph: SkParagraph = layouter.layoutParagraph(width = width)
         set(value) {
             field = value
             _lineMetrics = null
@@ -94,12 +93,12 @@ internal class SkikoParagraph(
 
         // Ellipsize if there's not enough vertical space to fit all lines. Because this only makes
         // sense for end ellipsis because start/middle only works for a single line.
-        if (overflow == TextOverflow.Ellipsis
-            && paragraph.height > constraints.maxHeight
-            && maxLines > 1
+        if (
+            overflow == TextOverflow.Ellipsis &&
+                paragraph.height > constraints.maxHeight &&
+                maxLines > 1
         ) {
-            val calculatedMaxLines =
-                numberOfLinesThatFitMaxHeight(constraints.maxHeight)
+            val calculatedMaxLines = numberOfLinesThatFitMaxHeight(constraints.maxHeight)
             if (calculatedMaxLines >= 0 && calculatedMaxLines != maxLines) {
                 layouter.setParagraphStyle(
                     // When we can't fully fit even a single line, measure with one line anyway.
@@ -107,7 +106,7 @@ internal class SkikoParagraph(
                     // with 0 maxLines, it would measure all lines with no ellipsis even though
                     // the first line might be partially visible
                     maxLines = calculatedMaxLines.coerceAtLeast(1),
-                    ellipsis = ellipsis
+                    ellipsis = ellipsis,
                 )
                 paragraph = layouter.layoutParagraph(width)
             }
@@ -116,12 +115,17 @@ internal class SkikoParagraph(
 
     // TODO(https://youtrack.jetbrains.com/issue/CMP-6716): Properly support Middle/Start ellipsis
     private val ellipsis: String
-        get() = if (overflow in listOf(
-                TextOverflow.Ellipsis,
-                TextOverflow.MiddleEllipsis,
-                TextOverflow.StartEllipsis,
+        get() =
+            if (
+                overflow in
+                    listOf(
+                        TextOverflow.Ellipsis,
+                        TextOverflow.MiddleEllipsis,
+                        TextOverflow.StartEllipsis,
+                    )
             )
-        ) "\u2026" else ""
+                "\u2026"
+            else ""
 
     private val text: String
         get() = paragraphIntrinsics.text
@@ -150,30 +154,22 @@ internal class SkikoParagraph(
     override val lineCount: Int
         // workaround for https://bugs.chromium.org/p/skia/issues/detail?id=11321
         // workaround for invalid paragraph layout result
-        get() = if (text == "" || paragraph.lineNumber < 1) {
-            1
-        } else {
-            paragraph.lineNumber
-        }
+        get() =
+            if (text == "" || paragraph.lineNumber < 1) {
+                1
+            } else {
+                paragraph.lineNumber
+            }
 
     override val placeholderRects: List<Rect?>
-        get() =
-            paragraph.rectsForPlaceholders.map {
-                it.rect.toComposeRect()
-            }
+        get() = paragraph.rectsForPlaceholders.map { it.rect.toComposeRect() }
 
     override fun getPathForRange(start: Int, end: Int): Path {
         require(start in 0..end && end <= text.length) {
-            "start($start) or end($end) is out of range [0..${text.length}]," +
-                " or start > end!"
+            "start($start) or end($end) is out of range [0..${text.length}]," + " or start > end!"
         }
 
-        val boxes = paragraph.getRectsForRange(
-            start,
-            end,
-            RectHeightMode.MAX,
-            RectWidthMode.TIGHT
-        )
+        val boxes = paragraph.getRectsForRange(start, end, RectHeightMode.MAX, RectWidthMode.TIGHT)
         val pathBuilder = PathBuilder()
         for (b in boxes) {
             pathBuilder.addRect(b.rect.left, b.rect.top, b.rect.right, b.rect.bottom)
@@ -187,32 +183,35 @@ internal class SkikoParagraph(
         val line = lineMetricsForOffset(offset)!!
 
         // workaround for https://bugs.chromium.org/p/skia/issues/detail?id=11321 :(
-        // Otherwise it shows a big cursor on a new empty line https://youtrack.jetbrains.com/issue/CMP-1895
+        // Otherwise it shows a big cursor on a new empty line
+        // https://youtrack.jetbrains.com/issue/CMP-1895
         val isNewEmptyLine = offset - 1 == line.startIndex && offset == text.length
         val metrics = defaultFont.metrics
 
-        val asc = line.ascent.let {
-            if (isNewEmptyLine) {
-                val ascent = -metrics.ascent.toDouble()
-                it.coerceAtMost(ascent)
-            } else {
-                it
+        val asc =
+            line.ascent.let {
+                if (isNewEmptyLine) {
+                    val ascent = -metrics.ascent.toDouble()
+                    it.coerceAtMost(ascent)
+                } else {
+                    it
+                }
             }
-        }
-        val desc = line.descent.let {
-            if (isNewEmptyLine) {
-                val descent = metrics.descent.toDouble()
-                it.coerceAtMost(descent)
-            } else {
-                it
+        val desc =
+            line.descent.let {
+                if (isNewEmptyLine) {
+                    val descent = metrics.descent.toDouble()
+                    it.coerceAtMost(descent)
+                } else {
+                    it
+                }
             }
-        }
 
         return Rect(
             horizontal,
             (line.baseline - asc).toFloat(),
             horizontal,
-            (line.baseline + desc).toFloat()
+            (line.baseline + desc).toFloat(),
         )
     }
 
@@ -243,9 +242,7 @@ internal class SkikoParagraph(
 
     private fun lineMetricsForOffset(offset: Int): LineMetrics? =
         if (offset in 0..text.length) {
-            lineMetrics.binarySearchFirstMatchingOrLast {
-                offset < it.endIncludingNewline
-            }
+            lineMetrics.binarySearchFirstMatchingOrLast { offset < it.endIncludingNewline }
         } else null
 
     override fun getLineHeight(lineIndex: Int) =
@@ -254,8 +251,7 @@ internal class SkikoParagraph(
     override fun getLineWidth(lineIndex: Int) =
         lineMetrics.getOrNull(lineIndex)?.width?.toFloat() ?: 0f
 
-    override fun getLineStart(lineIndex: Int) =
-        lineMetrics.getOrNull(lineIndex)?.startIndex ?: 0
+    override fun getLineStart(lineIndex: Int) = lineMetrics.getOrNull(lineIndex)?.startIndex ?: 0
 
     override fun getLineEnd(lineIndex: Int, visibleEnd: Boolean): Int {
         val metrics = lineMetrics.getOrNull(lineIndex) ?: return 0
@@ -264,10 +260,7 @@ internal class SkikoParagraph(
             // we are waiting for fixes
             if (lineIndex > 0 && metrics.startIndex < lineMetrics[lineIndex - 1].endIndex) {
                 metrics.endIndex
-            } else if (
-                metrics.startIndex < text.length &&
-                text[metrics.startIndex] == '\n'
-            ) {
+            } else if (metrics.startIndex < text.length && text[metrics.startIndex] == '\n') {
                 metrics.startIndex
             } else {
                 metrics.endExcludingWhitespaces
@@ -277,7 +270,9 @@ internal class SkikoParagraph(
         }
     }
 
-    override fun isLineEllipsized(lineIndex: Int) = false
+    // TODO: Won't be correct after CMP-6716
+    override fun isLineEllipsized(lineIndex: Int): Boolean =
+        ellipsis.isNotEmpty() && lineIndex == lineCount - 1 && didExceedMaxLines
 
     override fun getLineForOffset(offset: Int) =
         when {
@@ -304,8 +299,10 @@ internal class SkikoParagraph(
             prevBox == null -> nextBox!!.cursorHorizontalPosition(true)
             nextBox == null -> prevBox.cursorHorizontalPosition()
             nextBox.direction == prevBox.direction -> nextBox.cursorHorizontalPosition(true)
-            isLtr && prevBox.direction == Direction.LTR -> nextBox.cursorHorizontalPosition(opposite = true)
-            isRtl && prevBox.direction == Direction.RTL -> nextBox.cursorHorizontalPosition(opposite = true)
+            isLtr && prevBox.direction == Direction.LTR ->
+                nextBox.cursorHorizontalPosition(opposite = true)
+            isRtl && prevBox.direction == Direction.RTL ->
+                nextBox.cursorHorizontalPosition(opposite = true)
             // BiDi transition offset, we need to resolve ambiguity with usePrimaryDirection
             // for details see comment for MultiParagraph.getHorizontalPosition
             usePrimaryDirection -> prevBox.cursorHorizontalPosition()
@@ -326,28 +323,26 @@ internal class SkikoParagraph(
     private var _lineMetrics: Array<LineMetrics>? = null
     private val lineMetrics: Array<LineMetrics>
         get() {
-            val lineMetrics = _lineMetrics ?: receiveLineMetrics().also {
-                _lineMetrics = it
-            }
+            val lineMetrics = _lineMetrics ?: receiveLineMetrics().also { _lineMetrics = it }
             return lineMetrics
         }
 
     private fun receiveLineMetrics(): Array<LineMetrics> {
-        val lineMetrics = if (text.isEmpty()) {
-            layouter.emptyLineMetrics(paragraph)
-        } else {
-            // This getter creates a new object every time
-            paragraph.lineMetrics
-                // In the case of annotated text where everything is replaced by placeholders,
-                // the line metrics may be empty
-                .ifEmpty { layouter.emptyLineMetrics(paragraph) }
-        }
+        val lineMetrics =
+            if (text.isEmpty()) {
+                layouter.emptyLineMetrics(paragraph)
+            } else {
+                // This getter creates a new object every time
+                paragraph.lineMetrics
+                    // In the case of annotated text where everything is replaced by placeholders,
+                    // the line metrics may be empty
+                    .ifEmpty { layouter.emptyLineMetrics(paragraph) }
+            }
 
         val fontMetrics = defaultFont.metrics
-        lineMetrics[0] = lineMetrics[0]
-            .trimFirstAscent(fontMetrics, layouter.textStyle)
-        lineMetrics[lineMetrics.size - 1] = lineMetrics[lineMetrics.size - 1]
-            .trimLastDescent(fontMetrics, layouter.textStyle)
+        lineMetrics[0] = lineMetrics[0].trimFirstAscent(fontMetrics, layouter.textStyle)
+        lineMetrics[lineMetrics.size - 1] =
+            lineMetrics[lineMetrics.size - 1].trimLastDescent(fontMetrics, layouter.textStyle)
 
         return lineMetrics
     }
@@ -356,10 +351,10 @@ internal class SkikoParagraph(
         if (offset !in 0..text.length) return null
         var to = offset + 1 // TODO: Use unicode code points (CodePoint.charCount() instead of +1)
         while (to <= text.length) {
-            val box = paragraph.getRectsForRange(
-                offset, to,
-                RectHeightMode.STRUT, RectWidthMode.TIGHT
-            ).firstOrNull()
+            val box =
+                paragraph
+                    .getRectsForRange(offset, to, RectHeightMode.STRUT, RectWidthMode.TIGHT)
+                    .firstOrNull()
             if (box != null) {
                 return box
             }
@@ -373,10 +368,10 @@ internal class SkikoParagraph(
         var from = offset - 1
         val isRtl = paragraphIntrinsics.textDirection == ResolvedTextDirection.Rtl
         while (from >= 0) {
-            val box = paragraph.getRectsForRange(
-                from, end,
-                RectHeightMode.STRUT, RectWidthMode.TIGHT
-            ).firstOrNull()
+            val box =
+                paragraph
+                    .getRectsForRange(from, end, RectHeightMode.STRUT, RectWidthMode.TIGHT)
+                    .firstOrNull()
             when {
                 (box == null) -> from -= 1
                 (text[from] == '\n') -> {
@@ -386,15 +381,19 @@ internal class SkikoParagraph(
                         TextBox(rect, box.direction)
                     } else {
                         // For RTL:
-                        // When cursor changes its position across lines, we apply the following rules:
+                        // When cursor changes its position across lines, we apply the following
+                        // rules:
 
-                        // if '\n' is the last character, then the box should be aligned to the right:
+                        // if '\n' is the last character, then the box should be aligned to the
+                        // right:
                         // _________________abc   <- '\n' new line here
                         // ___________________|   <- cursor is in the end of the next line
 
-                        // if '\n' is not the last, then the box should be aligned to the left of the following box:
+                        // if '\n' is not the last, then the box should be aligned to the left of
+                        // the following box:
                         // _________________abc   <- '\n' new line here
-                        // _________________|qw   <- cursor is before the box ('q') following the new line
+                        // _________________|qw   <- cursor is before the box ('q') following the
+                        // new line
 
                         if (from == text.lastIndex) {
                             val bottom = box.rect.bottom + box.rect.bottom - box.rect.top
@@ -402,14 +401,22 @@ internal class SkikoParagraph(
                             TextBox(rect, box.direction)
                         } else {
                             // TODO: Use unicode code points (CodePoint.charCount() instead of +1)
-                            val nextBox = paragraph.getRectsForRange(
-                                offset, offset + 1,
-                                RectHeightMode.STRUT, RectWidthMode.TIGHT
-                            ).firstOrNull() ?: return null
-                            val rect = SkRect(
-                                nextBox.rect.left, nextBox.rect.top,
-                                nextBox.rect.left, nextBox.rect.bottom
-                            )
+                            val nextBox =
+                                paragraph
+                                    .getRectsForRange(
+                                        offset,
+                                        offset + 1,
+                                        RectHeightMode.STRUT,
+                                        RectWidthMode.TIGHT,
+                                    )
+                                    .firstOrNull() ?: return null
+                            val rect =
+                                SkRect(
+                                    nextBox.rect.left,
+                                    nextBox.rect.top,
+                                    nextBox.rect.left,
+                                    nextBox.rect.bottom,
+                                )
                             TextBox(rect, nextBox.direction)
                         }
                     }
@@ -436,14 +443,18 @@ internal class SkikoParagraph(
 
         // Below we apply a workaround for skiko/skia issue:
         //
-        // It's expected that this method should return the glyph position that lays on the line at `position.y`.
-        // When the `position` is not within the text line, glyphPosition will reference a wrong glyph (for example, the first glyph on a next line).
-        // This will make the cursor go to the wrong position, not according to the coordinates of a click.
+        // It's expected that this method should return the glyph position that lays on the line at
+        // `position.y`.
+        // When the `position` is not within the text line, glyphPosition will reference a wrong
+        // glyph (for example, the first glyph on a next line).
+        // This will make the cursor go to the wrong position, not according to the coordinates of a
+        // click.
         //
         // When position.x lays beyond the left or right side of a text line,
         // `getGlyphPositionAtCoordinate` returns a wrong value.
         // This happens:
-        // - in multiline text when a text block has an opposite direction than the primary paragraph direction
+        // - in multiline text when a text block has an opposite direction than the primary
+        // paragraph direction
         // - in text with line-breaks, when clicking to the right of a text line
         //
         // Therefore, when the position.x is not within the line's left or right side,
@@ -453,24 +464,32 @@ internal class SkikoParagraph(
 
         // expectedLine is the line which lays at position.y
         val expectedLine = getLineMetricsForVerticalPosition(position.y) ?: return glyphPosition
-        val isNotEmptyLine = expectedLine.startIndex < expectedLine.endIndex // a line with only whitespaces considered to be not empty
+        val isNotEmptyLine =
+            expectedLine.startIndex <
+                expectedLine.endIndex // a line with only whitespaces considered to be not empty
 
-        // No need to apply the workaround if the clicked position is within the line bounds (but doesn't include whitespaces)
+        // No need to apply the workaround if the clicked position is within the line bounds (but
+        // doesn't include whitespaces)
         if (position.x > expectedLine.left && position.x < expectedLine.right) {
             return glyphPosition
         }
 
-        val rects = if (isNotEmptyLine) {
-            // expectedLine width doesn't include whitespaces. Therefore, we look at the Rectangle representing the line
-            paragraph.getRectsForRange(
-                start = expectedLine.startIndex,
-                end = if (expectedLine.isHardBreak) expectedLine.endIndex else expectedLine.endIndex - 1,
-                rectHeightMode = RectHeightMode.STRUT,
-                rectWidthMode = RectWidthMode.TIGHT
-            )
-        } else { // the array of rects should be empty for an empty line, so no need to call `getRectsForRange`
-            null
-        }
+        val rects =
+            if (isNotEmptyLine) {
+                // expectedLine width doesn't include whitespaces. Therefore, we look at the
+                // Rectangle representing the line
+                paragraph.getRectsForRange(
+                    start = expectedLine.startIndex,
+                    end =
+                        if (expectedLine.isHardBreak) expectedLine.endIndex
+                        else expectedLine.endIndex - 1,
+                    rectHeightMode = RectHeightMode.STRUT,
+                    rectWidthMode = RectWidthMode.TIGHT,
+                )
+            } else { // the array of rects should be empty for an empty line, so no need to call
+                     // `getRectsForRange`
+                null
+            }
 
         val leftX = rects?.firstOrNull()?.rect?.left ?: expectedLine.left.toFloat()
         val rightX = rects?.lastOrNull()?.rect?.right ?: expectedLine.right.toFloat()
@@ -482,9 +501,11 @@ internal class SkikoParagraph(
         var correctedGlyphPosition = glyphPosition
 
         if (position.x <= leftX) { // when clicked to the left of a text line
-            correctedGlyphPosition = paragraph.getGlyphPositionAtCoordinate(leftX + 1f, position.y).position
+            correctedGlyphPosition =
+                paragraph.getGlyphPositionAtCoordinate(leftX + 1f, position.y).position
         } else if (position.x >= rightX) { // when clicked to the right of a text line
-            correctedGlyphPosition = paragraph.getGlyphPositionAtCoordinate(rightX - 1f, position.y).position
+            correctedGlyphPosition =
+                paragraph.getGlyphPositionAtCoordinate(rightX - 1f, position.y).position
         }
 
         return correctedGlyphPosition
@@ -493,27 +514,23 @@ internal class SkikoParagraph(
     override fun getRangeForRect(
         rect: Rect,
         granularity: TextGranularity,
-        inclusionStrategy: TextInclusionStrategy
+        inclusionStrategy: TextInclusionStrategy,
     ): TextRange {
         // TODO(https://youtrack.jetbrains.com/issue/CMP-1255)
         return TextRange.Zero
     }
 
     override fun getBoundingBox(offset: Int): Rect {
-        require(offset in text.indices) {
-            "offset($offset) is out of bounds [0,${text.length})"
-        }
+        require(offset in text.indices) { "offset($offset) is out of bounds [0,${text.length})" }
         val box = getBoxForwardByOffset(offset) ?: getBoxBackwardByOffset(offset, text.length)!!
         return box.rect.toComposeRect()
     }
 
-    override fun fillBoundingBoxes(
-        range: TextRange,
-        array: FloatArray,
-        arrayStart: Int
-    ) {
-        println("Compose Multiplatform doesn't support fillBoundingBoxes` yet. " +
-            "Follow https://youtrack.jetbrains.com/issue/CMP-720")
+    override fun fillBoundingBoxes(range: TextRange, array: FloatArray, arrayStart: Int) {
+        println(
+            "Compose Multiplatform doesn't support fillBoundingBoxes` yet. " +
+                "Follow https://youtrack.jetbrains.com/issue/CMP-720"
+        )
         // TODO(https://youtrack.jetbrains.com/issue/CMP-720) implement fillBoundingBoxes
     }
 
@@ -547,19 +564,23 @@ internal class SkikoParagraph(
         canvas: Canvas,
         color: Color,
         shadow: Shadow?,
-        textDecoration: TextDecoration?
+        textDecoration: TextDecoration?,
     ) {
-        paragraph = with(layouter) {
-            setColor(color)
-            setTextStyle(
-                shadow = shadow,
-                textDecoration = textDecoration
-            )
-            layoutParagraph(
-                width = width
-            )
-        }
+        paragraph =
+            with(layouter) {
+                setColor(color)
+                setTextStyle(shadow = shadow, textDecoration = textDecoration)
+                layoutParagraph(width = width)
+            }
         paragraph.paint(canvas.skiaCanvas, 0.0f, 0.0f)
+        bulletPainter?.paint(
+            canvas = canvas,
+            textDirection = paragraphIntrinsics.textDirection,
+            lineMetricsForOffset = ::lineMetricsForOffset,
+            color = color,
+            brush = null,
+            alpha = 1f,
+        )
     }
 
     @ExperimentalTextApi
@@ -569,21 +590,25 @@ internal class SkikoParagraph(
         shadow: Shadow?,
         textDecoration: TextDecoration?,
         drawStyle: DrawStyle?,
-        blendMode: BlendMode
+        blendMode: BlendMode,
     ) {
-        paragraph = with(layouter) {
-            setColor(color)
-            setTextStyle(
-                shadow = shadow,
-                textDecoration = textDecoration
-            )
-            setDrawStyle(drawStyle)
-            setBlendMode(blendMode)
-            layoutParagraph(
-                width = width
-            )
-        }
+        paragraph =
+            with(layouter) {
+                setColor(color)
+                setTextStyle(shadow = shadow, textDecoration = textDecoration)
+                setDrawStyle(drawStyle)
+                setBlendMode(blendMode)
+                layoutParagraph(width = width)
+            }
         paragraph.paint(canvas.skiaCanvas, 0.0f, 0.0f)
+        bulletPainter?.paint(
+            canvas = canvas,
+            textDirection = paragraphIntrinsics.textDirection,
+            lineMetricsForOffset = ::lineMetricsForOffset,
+            color = color,
+            brush = null,
+            alpha = 1f,
+        )
     }
 
     @ExperimentalTextApi
@@ -594,63 +619,61 @@ internal class SkikoParagraph(
         shadow: Shadow?,
         textDecoration: TextDecoration?,
         drawStyle: DrawStyle?,
-        blendMode: BlendMode
+        blendMode: BlendMode,
     ) {
-        paragraph = with(layouter) {
-            setBrush(
-                brush = brush,
-                brushSize = Size(width, height),
-                alpha = alpha,
-            )
-            setTextStyle(
-                shadow = shadow,
-                textDecoration = textDecoration,
-            )
-            setDrawStyle(drawStyle)
-            setBlendMode(blendMode)
-            layoutParagraph(
-                width = width
-            )
-        }
+        paragraph =
+            with(layouter) {
+                setBrush(brush = brush, brushSize = Size(width, height), alpha = alpha)
+                setTextStyle(shadow = shadow, textDecoration = textDecoration)
+                setDrawStyle(drawStyle)
+                setBlendMode(blendMode)
+                layoutParagraph(width = width)
+            }
         paragraph.paint(canvas.skiaCanvas, 0.0f, 0.0f)
+        bulletPainter?.paint(
+            canvas = canvas,
+            textDirection = paragraphIntrinsics.textDirection,
+            lineMetricsForOffset = ::lineMetricsForOffset,
+            color = Color.Unspecified,
+            brush = brush,
+            alpha = alpha,
+        )
     }
 
-    /**
-     * Check if the given offset is in the given range.
-     */
+    /** Check if the given offset is in the given range. */
     @Suppress("NOTHING_TO_INLINE")
     private inline fun checkOffsetIsValid(offset: Int) {
-        require(offset in 0..text.length) {
-            "offset($offset) is out of bounds [0,${text.length}]"
-        }
+        require(offset in 0..text.length) { "offset($offset) is out of bounds [0,${text.length}]" }
     }
 }
 
 private fun LineMetrics.trimFirstAscent(
     fontMetrics: FontMetrics,
-    textStyle: TextStyle
+    textStyle: TextStyle,
 ): LineMetrics {
     if (textStyle.lineHeight.isUnspecified) return this
     val style = textStyle.lineHeightStyle ?: LineHeightStyle.Default
-    val ascent = if (style.trim.trimsFirstLineTop) {
-        -fontMetrics.ascent.toDouble()
-    } else {
-        ascent
-    }
+    val ascent =
+        if (style.trim.trimsFirstLineTop) {
+            -fontMetrics.ascent.toDouble()
+        } else {
+            ascent
+        }
     return copy(ascent = ascent)
 }
 
 private fun LineMetrics.trimLastDescent(
     fontMetrics: FontMetrics,
-    textStyle: TextStyle
+    textStyle: TextStyle,
 ): LineMetrics {
     if (textStyle.lineHeight.isUnspecified) return this
     val style = textStyle.lineHeightStyle ?: LineHeightStyle.Default
-    val descent = if (style.trim.trimsLastLineBottom) {
-        fontMetrics.descent.toDouble()
-    } else {
-        descent
-    }
+    val descent =
+        if (style.trim.trimsLastLineBottom) {
+            fontMetrics.descent.toDouble()
+        } else {
+            descent
+        }
     return copy(descent = descent)
 }
 
@@ -667,22 +690,23 @@ private fun LineMetrics.copy(
     width: Double = this.width,
     left: Double = this.left,
     baseline: Double = this.baseline,
-    lineNumber: Int = this.lineNumber
-) = LineMetrics(
-    startIndex = startIndex,
-    endIndex = endIndex,
-    endExcludingWhitespaces = endExcludingWhitespaces,
-    endIncludingNewline = endIncludingNewline,
-    isHardBreak = isHardBreak,
-    ascent = ascent,
-    descent = descent,
-    unscaledAscent = unscaledAscent,
-    height = height,
-    width = width,
-    left = left,
-    baseline = baseline,
-    lineNumber = lineNumber
-)
+    lineNumber: Int = this.lineNumber,
+) =
+    LineMetrics(
+        startIndex = startIndex,
+        endIndex = endIndex,
+        endExcludingWhitespaces = endExcludingWhitespaces,
+        endIncludingNewline = endIncludingNewline,
+        isHardBreak = isHardBreak,
+        ascent = ascent,
+        descent = descent,
+        unscaledAscent = unscaledAscent,
+        height = height,
+        width = width,
+        left = left,
+        baseline = baseline,
+        lineNumber = lineNumber,
+    )
 
 private fun SkikoParagraph.numberOfLinesThatFitMaxHeight(maxHeight: Int): Int {
     for (lineIndex in 0 until lineCount) {
@@ -699,15 +723,13 @@ private fun IRange.toTextRange() = TextRange(start, end)
  * Returns `null` if the array is empty.
  */
 private inline fun <T> Array<out T>.binarySearchFirstMatchingOrLast(
-    crossinline predicate: (T) -> Boolean): T?
-{
+    crossinline predicate: (T) -> Boolean
+): T? {
     if (this.isEmpty()) {
         return null
     }
 
-    val index = this.asList().binarySearch {
-        if (predicate(it)) 1 else -1
-    }
+    val index = this.asList().binarySearch { if (predicate(it)) 1 else -1 }
 
     // The search will always return a negative value because the comparison never returns 0
     return this[(-index - 1).coerceAtMost(this.lastIndex)]

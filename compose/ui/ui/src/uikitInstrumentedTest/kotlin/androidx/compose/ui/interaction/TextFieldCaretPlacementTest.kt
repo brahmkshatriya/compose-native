@@ -49,15 +49,45 @@ import kotlin.test.assertTrue
 
 class TextFieldCaretPlacementTest {
 
-    @Test fun tapCharacter_btf1() = runUIKitInstrumentedTest { checkTapCharacter(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun tapCharacter_btf2() = runUIKitInstrumentedTest { checkTapCharacter(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun tapCharacter_nitiBtf1() = runUIKitInstrumentedTest { checkTapCharacter(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun tapCharacter_nitiBtf2() = runUIKitInstrumentedTest { checkTapCharacter(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun tapCharacter_btf1() = runUIKitInstrumentedTest {
+        checkTapCharacter(BasicTextFieldType.V1, nativeInput = false)
+    }
 
-    @Test fun longPressCharacter_btf1() = runUIKitInstrumentedTest { checkLongPressCharacter(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun longPressCharacter_btf2() = runUIKitInstrumentedTest { checkLongPressCharacter(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun longPressCharacter_nitiBtf1() = runUIKitInstrumentedTest { checkLongPressCharacter(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun longPressCharacter_nitiBtf2() = runUIKitInstrumentedTest { checkLongPressCharacter(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun tapCharacter_btf2() = runUIKitInstrumentedTest {
+        checkTapCharacter(BasicTextFieldType.V2, nativeInput = false)
+    }
+
+    @Test
+    fun tapCharacter_nitiBtf1() = runUIKitInstrumentedTest {
+        checkTapCharacter(BasicTextFieldType.V1, nativeInput = true)
+    }
+
+    @Test
+    fun tapCharacter_nitiBtf2() = runUIKitInstrumentedTest {
+        checkTapCharacter(BasicTextFieldType.V2, nativeInput = true)
+    }
+
+    @Test
+    fun longPressCharacter_btf1() = runUIKitInstrumentedTest {
+        checkLongPressCharacter(BasicTextFieldType.V1, nativeInput = false)
+    }
+
+    @Test
+    fun longPressCharacter_btf2() = runUIKitInstrumentedTest {
+        checkLongPressCharacter(BasicTextFieldType.V2, nativeInput = false)
+    }
+
+    @Test
+    fun longPressCharacter_nitiBtf1() = runUIKitInstrumentedTest {
+        checkLongPressCharacter(BasicTextFieldType.V1, nativeInput = true)
+    }
+
+    @Test
+    fun longPressCharacter_nitiBtf2() = runUIKitInstrumentedTest {
+        checkLongPressCharacter(BasicTextFieldType.V2, nativeInput = true)
+    }
 }
 
 private const val FIELD_TAG = "textField"
@@ -72,11 +102,12 @@ private fun CaptionedField(caption: String?, field: @Composable () -> Unit) {
             if (caption != null) {
                 BasicText(
                     text = caption,
-                    style = TextStyle(
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                    ),
+                    style =
+                        TextStyle(
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                        ),
                     modifier = Modifier.padding(bottom = 24.dp),
                 )
             }
@@ -91,48 +122,49 @@ private fun UIKitInstrumentedTest.setUpField(
     nativeInput: Boolean,
     caption: String? = null,
 ): () -> TextRange {
-    val ime = KeyboardOptions(
-        // Disable autocorrect/spell-check so the native iOS replacement-suggestion bubble does not
-        // pop over the selection during the test (spellCheckingType defaults to follow this).
-        autoCorrectEnabled = false,
-        platformImeOptions = PlatformImeOptions { usingNativeTextInput(nativeInput) }
-    )
+    val ime =
+        KeyboardOptions(
+            // Disable autocorrect/spell-check so the native iOS replacement-suggestion bubble does
+            // not
+            // pop over the selection during the test (spellCheckingType defaults to follow this).
+            autoCorrectEnabled = false,
+            platformImeOptions = PlatformImeOptions { usingNativeTextInput(nativeInput) },
+        )
     val focusRequester = FocusRequester()
-    val variant = "${if (nativeInput) "NITI" else "Compose"} BTF${if (btf == BasicTextFieldType.V1) "1" else "2"}"
+    val variant =
+        "${if (nativeInput) "NITI" else "Compose"} BTF${if (btf == BasicTextFieldType.V1) "1" else "2"}"
     val label = caption?.let { "$variant\n$it" }
-    val selection: () -> TextRange = when (btf) {
-        BasicTextFieldType.V1 -> {
-            val value = mutableStateOf(TextFieldValue(text))
-            setContent {
-                CaptionedField(label) {
-                    BasicTextField(
-                        value = value.value,
-                        onValueChange = { value.value = it },
-                        keyboardOptions = ime,
-                        modifier = Modifier
-                            .focusRequester(focusRequester)
-                            .testTag(FIELD_TAG),
-                    )
+    val selection: () -> TextRange =
+        when (btf) {
+            BasicTextFieldType.V1 -> {
+                val value = mutableStateOf(TextFieldValue(text))
+                setContent {
+                    CaptionedField(label) {
+                        @Suppress("DEPRECATION")
+                        BasicTextField(
+                            value = value.value,
+                            onValueChange = { value.value = it },
+                            keyboardOptions = ime,
+                            modifier = Modifier.focusRequester(focusRequester).testTag(FIELD_TAG),
+                        )
+                    }
                 }
+                ({ value.value.selection })
             }
-            ({ value.value.selection })
-        }
-        BasicTextFieldType.V2 -> {
-            val state = TextFieldState(text)
-            setContent {
-                CaptionedField(label) {
-                    BasicTextField(
-                        state = state,
-                        keyboardOptions = ime,
-                        modifier = Modifier
-                            .focusRequester(focusRequester)
-                            .testTag(FIELD_TAG),
-                    )
+            BasicTextFieldType.V2 -> {
+                val state = TextFieldState(text)
+                setContent {
+                    CaptionedField(label) {
+                        BasicTextField(
+                            state = state,
+                            keyboardOptions = ime,
+                            modifier = Modifier.focusRequester(focusRequester).testTag(FIELD_TAG),
+                        )
+                    }
                 }
+                ({ state.selection })
             }
-            ({ state.selection })
         }
-    }
     focusRequester.requestFocus()
     waitForIdle()
     return selection
@@ -143,11 +175,21 @@ private fun UIKitInstrumentedTest.checkTapCharacter(btf: BasicTextFieldType, nat
     findNodeWithTag(FIELD_TAG).tapCharacter(offset = 8)
     waitForIdle()
     val resultSelection = selection()
-    assertTrue(resultSelection.collapsed, "expected a collapsed cursor after tap, got $resultSelection")
-    assertEquals(9, resultSelection.start, "trailing tap in 'quick' should snap to its end; landed at ${resultSelection.start}")
+    assertTrue(
+        resultSelection.collapsed,
+        "expected a collapsed cursor after tap, got $resultSelection",
+    )
+    assertEquals(
+        9,
+        resultSelection.start,
+        "trailing tap in 'quick' should snap to its end; landed at ${resultSelection.start}",
+    )
 }
 
-private fun UIKitInstrumentedTest.checkLongPressCharacter(btf: BasicTextFieldType, nativeInput: Boolean) {
+private fun UIKitInstrumentedTest.checkLongPressCharacter(
+    btf: BasicTextFieldType,
+    nativeInput: Boolean,
+) {
     val selection = setUpField("The quick brown fox", btf, nativeInput)
     findNodeWithTag(FIELD_TAG).longPressCharacter(offset = 6)
     waitForIdle()

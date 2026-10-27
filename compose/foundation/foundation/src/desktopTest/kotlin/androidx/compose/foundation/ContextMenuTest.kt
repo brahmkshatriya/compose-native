@@ -72,7 +72,6 @@ import java.awt.datatransfer.StringSelection
 import kotlin.test.assertEquals
 import org.junit.Test
 
-
 @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
 class ContextMenuTest {
 
@@ -88,20 +87,11 @@ class ContextMenuTest {
             Layout(
                 content = {
                     val state = ContextMenuState()
-                    state.status = ContextMenuState.Status.Open(
-                        Rect(Offset(1f, 1f), 0f)
-                    )
+                    state.status = ContextMenuState.Status.Open(Rect(Offset(1f, 1f), 0f))
 
                     ContextMenuArea(
-                        items = {
-                            listOf(
-                                ContextMenuItem(
-                                    label = "Copy",
-                                    onClick = {}
-                                )
-                            )
-                        },
-                        state = state
+                        items = { listOf(ContextMenuItem(label = "Copy", onClick = {})) },
+                        state = state,
                     ) {
                         Box(content = {})
                     }
@@ -109,7 +99,7 @@ class ContextMenuTest {
                 measurePolicy = { measurables, _ ->
                     childrenCount = measurables.size
                     layout(0, 0) {}
-                }
+                },
             )
         }
 
@@ -124,86 +114,93 @@ class ContextMenuTest {
     fun `different items for different selections in btf2`() =
         `different items for different selections in textfield`(useBtf2 = true)
 
-
     // https://youtrack.jetbrains.com/issue/CMP-7083/Context-menu-on-desktop-shows-incorrect-items-after-the-second-showing
-    private fun `different items for different selections in textfield`(
-        useBtf2: Boolean
-    ) = runContextMenuTest {
-        val localization = object : PlatformLocalization {
-            override val copy = "copy"
-            override val cut = "cut"
-            override val paste = "paste"
-            override val selectAll = "selectAll"
-        }
-
-        val clipboard = object : Clipboard {
-            val text = StringSelection("text")
-            val clipEntry = ClipEntry(text)
-
-            val mockPlatformClipboard = java.awt.datatransfer.Clipboard("test").apply {
-                this.setContents(text, null)
-            }
-
-            override suspend fun getClipEntry(): ClipEntry? {
-                return clipEntry
-            }
-
-            override suspend fun setClipEntry(clipEntry: ClipEntry?) {
-                TODO("Not yet implemented")
-            }
-
-            override val nativeClipboard: NativeClipboard
-                get() = mockPlatformClipboard
-        }
-        val navEventInput = DirectNavigationEventInput()
-
-        setContent {
-            CompositionLocalProvider(
-                LocalLocalization provides localization,
-                LocalClipboard provides clipboard
-            ) {
-                val owner = LocalNavigationEventDispatcherOwner.current
-                LaunchedEffect(owner) {
-                    owner?.navigationEventDispatcher?.addInput(navEventInput)
+    private fun `different items for different selections in textfield`(useBtf2: Boolean) =
+        runContextMenuTest {
+            val localization =
+                object : PlatformLocalization {
+                    override val copy = "copy"
+                    override val cut = "cut"
+                    override val paste = "paste"
+                    override val selectAll = "selectAll"
                 }
-                if (useBtf2) {
-                    BasicTextField(rememberTextFieldState("Text"), Modifier.testTag("textfield"))
-                } else {
-                    BasicTextField("Text", {}, Modifier.testTag("textfield"))
+
+            val clipboard =
+                object : Clipboard {
+                    val text = StringSelection("text")
+                    val clipEntry = ClipEntry(text)
+
+                    val mockPlatformClipboard =
+                        java.awt.datatransfer.Clipboard("test").apply {
+                            this.setContents(text, null)
+                        }
+
+                    override suspend fun getClipEntry(): ClipEntry {
+                        return clipEntry
+                    }
+
+                    override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+                        TODO("Not yet implemented")
+                    }
+
+                    @Suppress("DeprecatedCallableAddReplaceWith")
+                    @Deprecated("Use platform-specific extension to get platform reference")
+                    override val nativeClipboard: NativeClipboard
+                        get() = mockPlatformClipboard
+                }
+            val navEventInput = DirectNavigationEventInput()
+
+            setContent {
+                CompositionLocalProvider(
+                    LocalLocalization provides localization,
+                    LocalClipboard provides clipboard,
+                ) {
+                    val owner = LocalNavigationEventDispatcherOwner.current
+                    LaunchedEffect(owner) {
+                        owner?.navigationEventDispatcher?.addInput(navEventInput)
+                    }
+                    if (useBtf2) {
+                        BasicTextField(
+                            rememberTextFieldState("Text"),
+                            Modifier.testTag("textfield"),
+                        )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        BasicTextField("Text", {}, Modifier.testTag("textfield"))
+                    }
                 }
             }
+
+            onNodeWithText(localization.copy).assertDoesNotExist()
+            onNodeWithText(localization.cut).assertDoesNotExist()
+            onNodeWithText(localization.paste).assertDoesNotExist()
+            onNodeWithText(localization.selectAll).assertDoesNotExist()
+
+            onNodeWithTag("textfield").performMouseInput { rightClick() }
+            onNodeWithText(localization.copy).assertIsNotEnabled()
+            onNodeWithText(localization.cut).assertIsNotEnabled()
+            onNodeWithText(localization.paste).assertExists()
+            onNodeWithText(localization.selectAll).assertExists()
+
+            navEventInput.backCompleted()
+            onNodeWithText(localization.copy).assertDoesNotExist()
+            onNodeWithText(localization.cut).assertDoesNotExist()
+            onNodeWithText(localization.paste).assertDoesNotExist()
+            onNodeWithText(localization.selectAll).assertDoesNotExist()
+
+            onNodeWithTag("textfield").performTextInputSelection(TextRange(0, "Text".length))
+            onNodeWithTag("textfield").performMouseInput { rightClick() }
+            onNodeWithText(localization.copy).assertExists()
+            onNodeWithText(localization.cut).assertExists()
+            onNodeWithText(localization.paste).assertExists()
+            onNodeWithText(localization.selectAll).assertIsNotEnabled()
+
+            navEventInput.backCompleted()
+            onNodeWithText(localization.copy).assertDoesNotExist()
+            onNodeWithText(localization.cut).assertDoesNotExist()
+            onNodeWithText(localization.paste).assertDoesNotExist()
+            onNodeWithText(localization.selectAll).assertDoesNotExist()
         }
-
-        onNodeWithText(localization.copy).assertDoesNotExist()
-        onNodeWithText(localization.cut).assertDoesNotExist()
-        onNodeWithText(localization.paste).assertDoesNotExist()
-        onNodeWithText(localization.selectAll).assertDoesNotExist()
-
-        onNodeWithTag("textfield").performMouseInput { rightClick() }
-        onNodeWithText(localization.copy).assertIsNotEnabled()
-        onNodeWithText(localization.cut).assertIsNotEnabled()
-        onNodeWithText(localization.paste).assertExists()
-        onNodeWithText(localization.selectAll).assertExists()
-
-        navEventInput.backCompleted()
-        onNodeWithText(localization.copy).assertDoesNotExist()
-        onNodeWithText(localization.cut).assertDoesNotExist()
-        onNodeWithText(localization.paste).assertDoesNotExist()
-        onNodeWithText(localization.selectAll).assertDoesNotExist()
-
-        onNodeWithTag("textfield").performTextInputSelection(TextRange(0, "Text".length))
-        onNodeWithTag("textfield").performMouseInput { rightClick() }
-        onNodeWithText(localization.copy).assertExists()
-        onNodeWithText(localization.cut).assertExists()
-        onNodeWithText(localization.paste).assertExists()
-        onNodeWithText(localization.selectAll).assertIsNotEnabled()
-
-        navEventInput.backCompleted()
-        onNodeWithText(localization.copy).assertDoesNotExist()
-        onNodeWithText(localization.cut).assertDoesNotExist()
-        onNodeWithText(localization.paste).assertDoesNotExist()
-        onNodeWithText(localization.selectAll).assertDoesNotExist()
-    }
 
     @Test
     fun contextMenuClosesAfterMenuItemSelection_btf1() =
@@ -214,32 +211,33 @@ class ContextMenuTest {
         contextMenuClosesAfterMenuItemSelection(useBtf2 = true)
 
     private fun contextMenuClosesAfterMenuItemSelection(useBtf2: Boolean) = runContextMenuTest {
-
-        val localization = object : PlatformLocalization {
-            override val copy = "copy"
-            override val cut = "cut"
-            override val paste = "paste"
-            override val selectAll = "selectAll"
-        }
+        val localization =
+            object : PlatformLocalization {
+                override val copy = "copy"
+                override val cut = "cut"
+                override val paste = "paste"
+                override val selectAll = "selectAll"
+            }
 
         setContent {
             CompositionLocalProvider(LocalLocalization provides localization) {
                 if (useBtf2) {
                     BasicTextField(
                         rememberTextFieldState("Text", initialSelection = TextRange(0, 4)),
-                        Modifier.testTag("textfield")
+                        Modifier.testTag("textfield"),
                     )
                 } else {
+                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = TextFieldValue("Text", selection = TextRange(0, 4)),
                         onValueChange = {},
-                        modifier = Modifier.testTag("textfield")
+                        modifier = Modifier.testTag("textfield"),
                     )
                 }
             }
         }
 
-        onNodeWithTag("textfield").performMouseInput { rightClick(Offset(1f, height/2f)) }
+        onNodeWithTag("textfield").performMouseInput { rightClick(Offset(1f, height / 2f)) }
         onNodeWithText(localization.copy).apply {
             assertExists()
             performClick()
@@ -251,18 +249,19 @@ class ContextMenuTest {
     @Test
     fun `contextMenuArea disables or removes copy action for SelectionContainer with empty selection`() =
         runContextMenuTest {
-            val localization = object : PlatformLocalization {
-                override val copy = "copy"
-                override val cut = "cut"
-                override val paste = "paste"
-                override val selectAll = "selectAll"
-            }
+            val localization =
+                object : PlatformLocalization {
+                    override val copy = "copy"
+                    override val cut = "cut"
+                    override val paste = "paste"
+                    override val selectAll = "selectAll"
+                }
 
             var textContextMenu by mutableStateOf(TextContextMenu.Default)
             setContent {
                 CompositionLocalProvider(
                     LocalLocalization provides localization,
-                    LocalTextContextMenu provides textContextMenu
+                    LocalTextContextMenu provides textContextMenu,
                 ) {
                     SelectionContainer {
                         BasicText("Hello, row 1")
@@ -282,7 +281,7 @@ class ContextMenuTest {
             // Close the menu
             onNode(ContextMenuMatcher).assertExists()
             onNodeWithTag("box").performMouseInput { click(Offset.Zero) }
-            onNode(ContextMenuMatcher).assertDoesNotExist()  // Verify it has been closed
+            onNode(ContextMenuMatcher).assertDoesNotExist() // Verify it has been closed
 
             // Check hiding variant
             textContextMenu = TextContextMenu.HideDisabledMenuItems
@@ -293,39 +292,37 @@ class ContextMenuTest {
 
     // https://youtrack.jetbrains.com/issue/CMP-9342
     @Test
-    fun `empty text context menu is not shown`() =
-        runContextMenuTest {
-            val emptyTextContextMenu = object : TextContextMenu {
+    fun `empty text context menu is not shown`() = runContextMenuTest {
+        val emptyTextContextMenu =
+            object : TextContextMenu {
                 @Composable
                 override fun Area(
                     textManager: TextContextMenu.TextManager,
                     state: ContextMenuState,
-                    content: @Composable (() -> Unit)
+                    content: @Composable (() -> Unit),
                 ) {
                     TextContextMenuArea(
                         textManager = textManager,
                         items = { emptyList() },
                         state = state,
-                        content = content
+                        content = content,
                     )
                 }
             }
 
-            setContent {
-                CompositionLocalProvider(
-                    LocalTextContextMenu provides emptyTextContextMenu
-                ) {
-                    SelectionContainer {
-                        BasicText("Hello, row 1")
-                        Box(Modifier.testTag("box").size(16.dp))
-                        BasicText("Hello, row 2")
-                    }
+        setContent {
+            CompositionLocalProvider(LocalTextContextMenu provides emptyTextContextMenu) {
+                SelectionContainer {
+                    BasicText("Hello, row 1")
+                    Box(Modifier.testTag("box").size(16.dp))
+                    BasicText("Hello, row 2")
                 }
             }
-
-            onNodeWithTag("box").performMouseInput { rightClick() }
-            onNode(ContextMenuMatcher).assertDoesNotExist()
         }
+
+        onNodeWithTag("box").performMouseInput { rightClick() }
+        onNode(ContextMenuMatcher).assertDoesNotExist()
+    }
 
     // https://youtrack.jetbrains.com/issue/CMP-10043
     @Test
@@ -341,16 +338,12 @@ class ContextMenuTest {
                     )
                 },
                 state = state,
-                content = {
-                    Box(Modifier.fillMaxSize().testTag("content"))
-                }
+                content = { Box(Modifier.fillMaxSize().testTag("content")) },
             )
         }
 
         fun showContextMenu() {
-            onNodeWithTag("content").performMouseInput {
-                click(button = MouseButton.Secondary)
-            }
+            onNodeWithTag("content").performMouseInput { click(button = MouseButton.Secondary) }
         }
 
         showContextMenu()
@@ -380,13 +373,11 @@ class ContextMenuTest {
     }
 
     @Suppress("DEPRECATION")
-    private fun runContextMenuTest(block: ComposeUiTest.() -> Unit) = androidx.compose.ui.test.runComposeUiTest {
-        DesktopPlatform.withOverriddenCurrent(DesktopPlatform.Unknown) {
-            block()
+    private fun runContextMenuTest(block: ComposeUiTest.() -> Unit) =
+        androidx.compose.ui.test.runComposeUiTest {
+            DesktopPlatform.withOverriddenCurrent(DesktopPlatform.Unknown) { block() }
         }
-    }
 }
 
-private val ContextMenuMatcher = SemanticsMatcher("Context menu") {
-    SemanticsProperties.IsPopup in it.config
-}
+private val ContextMenuMatcher =
+    SemanticsMatcher("Context menu") { SemanticsProperties.IsPopup in it.config }

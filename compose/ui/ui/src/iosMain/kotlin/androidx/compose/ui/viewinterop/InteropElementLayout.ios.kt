@@ -20,6 +20,7 @@ import androidx.compose.ui.layout.Measurable
 import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
+import androidx.compose.ui.uikit.utils.CMPInteropHostView
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
@@ -30,6 +31,8 @@ import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGRect
 import platform.CoreGraphics.CGRectZero
 import platform.UIKit.NSLayoutConstraint
+import platform.UIKit.UIEdgeInsetsEqualToEdgeInsets
+import platform.UIKit.UIEdgeInsetsZero
 import platform.UIKit.UILayoutFittingCompressedSize
 import platform.UIKit.UILayoutPriorityRequired
 import platform.UIKit.UIView
@@ -38,74 +41,84 @@ import platform.UIKit.UIView
  * UIKit-side layout implementation for a Compose interop element.
  *
  * **Hierarchy**:
- *  - [group] is the clipping viewport (clipsToBounds = true on [InteropWrappingView]).
- *    It is positioned by setting its frame to the *clipped* rect from Compose. [group] is placed to hierarchy
- *    in [InteropViewHolder.insertInteropView].
- *  - [userComponentHostView] is the "unclipped content container". It is positioned by setting
- *    its frame to the *unclipped* rect relative to [group].
- *  - [userComponent] is pinned to the edges of [userComponentHostView] with [NSLayoutConstraint]s.
+ * - [group] is the clipping viewport (clipsToBounds = true on [InteropWrappingView]). It is
+ *   positioned by setting its frame to the *clipped* rect from Compose. [group] is placed to
+ *   hierarchy in [InteropViewHolder.insertInteropView].
+ * - [userComponentHostView] is the "unclipped content container". It is positioned by setting its
+ *   frame to the *unclipped* rect relative to [group].
+ * - [userComponent] is pinned to the edges of [userComponentHostView] with [NSLayoutConstraint]s.
  *
  * This design allows the interop view to keep a stable window position while the visible area is
- * clipped by Compose, without requiring frequent Auto Layout constraint updates
- * for scrolling/positioning.
+ * clipped by Compose, without requiring frequent Auto Layout constraint updates for
+ * scrolling/positioning.
  *
  * **Important**:
- *  - [group] and [userComponentHostView] are frame driven (translatesAutoresizingMaskIntoConstraints = true).
- *  - [userComponent] is Auto Layout–driven inside the host (translatesAutoresizingMaskIntoConstraints = false).
+ * - [group] and [userComponentHostView] are frame driven (translatesAutoresizingMaskIntoConstraints
+ *   = true).
+ * - [userComponent] is Auto Layout–driven inside the host
+ *   (translatesAutoresizingMaskIntoConstraints = false).
  *
  * @param group clipping viewport that wraps the [userComponent]
  * @param userComponent actual UIKit interop view being embedded
  */
 internal class InteropElementLayout(
-    private val group: InteropViewGroup,
+    private val group: InteropWrappingView,
     private val userComponent: UIView,
 ) {
     /**
-     * Frame-driven container that defines the "unclipped content bounds".
-     * The [userComponent] is constrained to fill this host using Auto Layout.
+     * Frame-driven container that defines the "unclipped content bounds". The [userComponent] is
+     * constrained to fill this host using Auto Layout.
      */
-    private val userComponentHostView = UIView(frame = CGRectZero.readValue())
-        .also {
+    private val userComponentHostView =
+        CMPInteropHostView(frame = CGRectZero.readValue()).also {
             it.translatesAutoresizingMaskIntoConstraints = true
             it.backgroundColor = null
         }
+    private var userComponentHostSafeAreaInsets: UserComponentHostSafeAreaInsets? = null
 
-    val measurePolicy = object : MeasurePolicy {
-        override fun MeasureScope.measure(
-            measurables: List<Measurable>,
-            constraints: Constraints
-        ): MeasureResult {
-            if (constraints.hasFixedWidth && constraints.hasFixedHeight) {
-                return layout(constraints.maxWidth, constraints.maxHeight) {}
-            }
-
-            val minW = constraints.minWidth.toDp()
-            val minH = constraints.minHeight.toDp()
-            val maxW = constraints.maxWidth.toDp()
-            val maxH = constraints.maxHeight.toDp()
-
-            val fixedW = if (constraints.hasFixedWidth) minW else null
-            val fixedH = if (constraints.hasFixedHeight) minH else null
-
-            val measuredSize = userComponentHostView.measureFittingSize(
-                fixedWidth = fixedW,
-                fixedHeight = fixedH,
-                minWidth = minW,
-                minHeight = minH,
-                maxWidth = maxW,
-                maxHeight = maxH,
-            )
-
-            return layout(measuredSize.width.roundToPx(), measuredSize.height.roundToPx()) {}
-        }
+    init {
+        group.onDidMoveToWindow = { userComponentHostSafeAreaInsets?.update() }
+        group.onSafeAreaInsetsChanged = { userComponentHostSafeAreaInsets?.update() }
     }
+
+    val measurePolicy =
+        object : MeasurePolicy {
+            override fun MeasureScope.measure(
+                measurables: List<Measurable>,
+                constraints: Constraints,
+            ): MeasureResult {
+                if (constraints.hasFixedWidth && constraints.hasFixedHeight) {
+                    return layout(constraints.maxWidth, constraints.maxHeight) {}
+                }
+
+                val minW = constraints.minWidth.toDp()
+                val minH = constraints.minHeight.toDp()
+                val maxW = constraints.maxWidth.toDp()
+                val maxH = constraints.maxHeight.toDp()
+
+                val fixedW = if (constraints.hasFixedWidth) minW else null
+                val fixedH = if (constraints.hasFixedHeight) minH else null
+
+                val measuredSize =
+                    userComponentHostView.measureFittingSize(
+                        fixedWidth = fixedW,
+                        fixedHeight = fixedH,
+                        minWidth = minW,
+                        minHeight = minH,
+                        maxWidth = maxW,
+                        maxHeight = maxH,
+                    )
+
+                return layout(measuredSize.width.roundToPx(), measuredSize.height.roundToPx()) {}
+            }
+        }
 
     /**
      * Attaches [userComponent] into [group] once and installs edge pinning constraints.
      *
      * Note: takes ownership of `translatesAutoresizingMaskIntoConstraints`:
-     *  - [group] and [userComponentHostView] are frame-driven
-     *  - [userComponent] is Auto Layout–driven inside the host
+     * - [group] and [userComponentHostView] are frame-driven
+     * - [userComponent] is Auto Layout–driven inside the host
      */
     fun attachUserComponent() {
         if (userComponentHostView.superview != null) return
@@ -120,27 +133,85 @@ internal class InteropElementLayout(
         NSLayoutConstraint.activateConstraints(
             listOf(
                 userComponent.leftAnchor.constraintEqualToAnchor(userComponentHostView.leftAnchor),
-                userComponent.rightAnchor.constraintEqualToAnchor(userComponentHostView.rightAnchor),
+                userComponent.rightAnchor.constraintEqualToAnchor(
+                    userComponentHostView.rightAnchor
+                ),
                 userComponent.topAnchor.constraintEqualToAnchor(userComponentHostView.topAnchor),
-                userComponent.bottomAnchor.constraintEqualToAnchor(userComponentHostView.bottomAnchor),
+                userComponent.bottomAnchor.constraintEqualToAnchor(
+                    userComponentHostView.bottomAnchor
+                ),
             )
         )
     }
 
-    /**
-     * Sets the frame of the clipping viewport ([group]) in its superview coordinate space (managed by [IosInteropContainer]).
-     * This rect corresponds to the clipped visible bounds of the element in Compose.
-     */
-    fun updateGroupFrame(rect: CValue<CGRect>) {
-        group.setFrame(rect)
+    fun updateFrames(groupFrame: CValue<CGRect>?, userComponentFrame: CValue<CGRect>?) {
+        groupFrame?.let(group::setFrame)
+        userComponentFrame?.let(userComponentHostView::setFrame)
+        userComponentHostSafeAreaInsets?.update()
     }
 
-    /**
-     * Sets the frame of the unclipped content host inside [group]'s coordinate space.
-     * The origin is typically negative when the element is partially clipped.
-     */
-    fun updateUserComponentFrame(rect: CValue<CGRect>) {
-        userComponentHostView.setFrame(rect)
+    fun updateSafeAreaInsetsPolicy(policy: UIKitInteropSafeAreaInsetsPolicy) {
+        val currentSafeAreaInsets = userComponentHostSafeAreaInsets
+        if (currentSafeAreaInsets == null) {
+            userComponentHostSafeAreaInsets =
+                UserComponentHostSafeAreaInsets(
+                    userComponentHostView = userComponentHostView,
+                    userComponent = userComponent,
+                    policy = policy,
+                )
+        } else {
+            currentSafeAreaInsets.updatePolicy(policy)
+        }
+    }
+}
+
+private class UserComponentHostSafeAreaInsets(
+    private val userComponentHostView: CMPInteropHostView,
+    private val userComponent: UIView,
+    private var policy: UIKitInteropSafeAreaInsetsPolicy,
+) {
+    init {
+        update()
+    }
+
+    fun updatePolicy(policy: UIKitInteropSafeAreaInsetsPolicy) {
+        this.policy = policy
+        update()
+    }
+
+    fun update() {
+        val safeAreaInsetsOverride = policy.safeAreaInsetsOverride()
+        if (
+            UIEdgeInsetsEqualToEdgeInsets(
+                userComponentHostView.safeAreaInsetsOverride,
+                safeAreaInsetsOverride,
+            )
+        )
+            return
+
+        userComponentHostView.safeAreaInsetsOverride = safeAreaInsetsOverride
+        userComponent.setNeedsLayout()
+    }
+
+    private fun UIKitInteropSafeAreaInsetsPolicy.safeAreaInsetsOverride() =
+        when (this) {
+            UIKitInteropSafeAreaInsetsPolicy.Inherit -> userComponentHostView.superSafeAreaInsets()
+            UIKitInteropSafeAreaInsetsPolicy.Ignore -> UIEdgeInsetsZero.readValue()
+            UIKitInteropSafeAreaInsetsPolicy.Automatic -> {
+                if (userComponentHostView.overlapsSuperSafeArea()) {
+                    UIEdgeInsetsZero.readValue()
+                } else {
+                    userComponentHostView.superSafeAreaInsets()
+                }
+            }
+        }
+
+    private fun CMPInteropHostView.overlapsSuperSafeArea(): Boolean {
+        // A nonzero value means Compose positions or clips the host under the safe area. Report
+        // zero
+        // insets to its UIKit child to prevent controls such as UIStepper from applying their own
+        // safe-area avoidance offset.
+        return !UIEdgeInsetsEqualToEdgeInsets(superSafeAreaInsets(), UIEdgeInsetsZero.readValue())
     }
 }
 
@@ -148,8 +219,8 @@ internal class InteropElementLayout(
  * Measures UIKit view's Auto Layout compressed fitting size under the given Dp size constraints.
  *
  * The measurement is performed by temporarily applying size constraints to bound the solve:
- *  - For fixed axes: `== fixed`
- *  - For wrap axes: `<= max`
+ * - For fixed axes: `== fixed`
+ * - For wrap axes: `<= max`
  */
 internal fun UIView.measureFittingSize(
     fixedWidth: Dp? = null,
@@ -159,30 +230,34 @@ internal fun UIView.measureFittingSize(
     maxWidth: Dp,
     maxHeight: Dp,
 ): DpSize {
-    val widthConstraint = if (fixedWidth != null) {
-        widthAnchor.constraintEqualToConstant(fixedWidth.value.toDouble())
-    } else {
-        widthAnchor.constraintLessThanOrEqualToConstant(maxWidth.value.toDouble())
-    }.apply {
-        priority = UILayoutPriorityRequired
-        active = true
-    }
+    val widthConstraint =
+        if (fixedWidth != null) {
+                widthAnchor.constraintEqualToConstant(fixedWidth.value.toDouble())
+            } else {
+                widthAnchor.constraintLessThanOrEqualToConstant(maxWidth.value.toDouble())
+            }
+            .apply {
+                priority = UILayoutPriorityRequired
+                active = true
+            }
 
-    val heightConstraint = if (fixedHeight != null) {
-        heightAnchor.constraintEqualToConstant(fixedHeight.value.toDouble())
-    } else {
-        heightAnchor.constraintLessThanOrEqualToConstant(maxHeight.value.toDouble())
-    }.apply {
-        priority = UILayoutPriorityRequired
-        active = true
-    }
+    val heightConstraint =
+        if (fixedHeight != null) {
+                heightAnchor.constraintEqualToConstant(fixedHeight.value.toDouble())
+            } else {
+                heightAnchor.constraintLessThanOrEqualToConstant(maxHeight.value.toDouble())
+            }
+            .apply {
+                priority = UILayoutPriorityRequired
+                active = true
+            }
 
     return try {
         systemLayoutSizeFittingSize(UILayoutFittingCompressedSize.readValue())
             .useContents {
                 DpSize(
                     width.dp.coerceIn(minWidth, maxWidth),
-                    height.dp.coerceIn(minHeight, maxHeight)
+                    height.dp.coerceIn(minHeight, maxHeight),
                 )
             }
             .let { if (it.width == 0.dp || it.height == 0.dp) DpSize.Zero else it }

@@ -36,27 +36,31 @@ import kotlinx.test.IgnoreWasmTarget
 class CupertinoTextFieldDelegateTest : SkikoComposeTestBase() {
 
     private val sampleText =
-        "aaaa bbb cccc dd e fffffffff?????????!!!!!!!          ...\n" + "ggggggg tttt\n" +
+        "aaaa bbb cccc dd e fffffffff?????????!!!!!!!          ...\n" +
+            "ggggggg tttt\n" +
             "Family emoji: \uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66, and some text at the end\n" +
             "Split family emoji: \uD83D\uDC68 \uD83D\uDC69 \uD83D\uDC67 \uD83D\uDC66, and some text at the end\n" +
             "Emoji sequence: \uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\uD83D\uDE02\n"
     private val defaultDensity = Density(density = 1f)
     private val fontFamilyResolver = createFontFamilyResolver()
 
-    fun testDetermineCursorDesiredOffset(
-        givenOffset: Int,
-        expected: Int,
-        sampleString: String
-    ) {
-        val actual = determineCursorDesiredOffset(
-            offset = givenOffset,
-            textLayoutResult = createSimpleTextLayoutResult(sampleText),
-            currentText = sampleText
-        )
+    fun testDetermineCursorDesiredOffset(givenOffset: Int, expected: Int, sampleString: String) {
+        val actual =
+            determineCursorDesiredOffset(
+                offset = givenOffset,
+                textLayoutResult = createSimpleTextLayoutResult(sampleText),
+                currentText = sampleText,
+            )
 
         // add the substring "<here>" at the expected and actual offsets
-        val expectedString = sampleString.substring(0, expected) + "<expected here($expected)>" + sampleString.substring(expected)
-        val actualString = sampleString.substring(0, actual) + "<got here($actual)>" + sampleString.substring(actual)
+        val expectedString =
+            sampleString.substring(0, expected) +
+                "<expected here($expected)>" +
+                sampleString.substring(expected)
+        val actualString =
+            sampleString.substring(0, actual) +
+                "<got here($actual)>" +
+                sampleString.substring(actual)
 
         assertEquals(expected, actual, "$expectedString\n<${"=".repeat(20)}>\n$actualString")
     }
@@ -75,7 +79,9 @@ class CupertinoTextFieldDelegateTest : SkikoComposeTestBase() {
         // https://github.com/JetBrains/compose-multiplatform/issues/4388
         val text = "0@1"
         val givenOffset = 1
-        val desiredOffset = 0 // TODO: define what should happen exactly, this test only assures that no crash happens
+        val desiredOffset =
+            0 // TODO: define what should happen exactly, this test only assures that no crash
+              // happens
 
         testDetermineCursorDesiredOffset(givenOffset, desiredOffset, text)
     }
@@ -209,30 +215,35 @@ class CupertinoTextFieldDelegateTest : SkikoComposeTestBase() {
         testDetermineCursorDesiredOffset(givenOffset, desiredOffset, sampleText)
     }
 
-    private fun createSimpleTextLayoutResult(text: String) = TextLayoutResult(
-        layoutInput = simpleTextLayoutInput(text),
-        multiParagraph = simpleMultiParagraph(text),
-        size = IntSize(1083, 150)
-    )
+    private fun createSimpleTextLayoutResult(text: String) =
+        TextLayoutResult(
+            layoutInput = simpleTextLayoutInput(text),
+            multiParagraph = simpleMultiParagraph(text),
+            size = IntSize(1083, 150),
+        )
 
-    private fun simpleTextLayoutInput(text: String) = TextLayoutInput(
-        text = AnnotatedString(text),
-        style = TextStyle(),
-        placeholders = listOf(),
-        maxLines = Int.MAX_VALUE,
-        softWrap = false,
-        overflow = TextOverflow.Visible,
-        density = defaultDensity,
-        layoutDirection = LayoutDirection.Ltr,
-        fontFamilyResolver = fontFamilyResolver,
-        constraints = Constraints(maxWidth = 1000)
-    )
+    @Suppress("DEPRECATION")
+    private fun simpleTextLayoutInput(text: String) =
+        TextLayoutInput(
+            text = AnnotatedString(text),
+            style = TextStyle(),
+            placeholders = listOf(),
+            maxLines = Int.MAX_VALUE,
+            softWrap = false,
+            overflow = TextOverflow.Visible,
+            density = defaultDensity,
+            layoutDirection = LayoutDirection.Ltr,
+            fontFamilyResolver = fontFamilyResolver,
+            constraints = Constraints(maxWidth = 1000),
+        )
 
-    private fun simpleMultiParagraph(text: String) = MultiParagraph(
-        annotatedString = AnnotatedString(text),
-        style = TextStyle(),
-        constraints = Constraints(maxWidth = 1000),
-        density = defaultDensity,
-        fontFamilyResolver = fontFamilyResolver
-    )
+    @Suppress("DEPRECATION")
+    private fun simpleMultiParagraph(text: String) =
+        MultiParagraph(
+            annotatedString = AnnotatedString(text),
+            style = TextStyle(),
+            constraints = Constraints(maxWidth = 1000),
+            density = defaultDensity,
+            fontFamilyResolver = fontFamilyResolver,
+        )
 }

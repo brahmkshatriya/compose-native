@@ -17,6 +17,7 @@
 package androidx.compose.ui.text.platform
 
 import androidx.compose.runtime.InternalComposeApi
+import androidx.compose.runtime.State
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isUnspecified
 import androidx.compose.ui.graphics.BlendMode
@@ -44,8 +45,8 @@ import org.jetbrains.skia.paragraph.Paragraph as SkParagraph
 internal expect fun getUnresolvedSymbolsRegistry(): UnresolvedSymbolsRegistry?
 
 /**
- * The purpose of this class is to store already built paragraph and pass it between
- * different internal entities (from PlatformParagraphIntrinsics to PlatformParagraph).
+ * The purpose of this class is to store already built paragraph and pass it between different
+ * internal entities (from PlatformParagraphIntrinsics to PlatformParagraph).
  *
  * An alternative to passing and reusing existed paragraph is to build it again, but it is 2.5x
  * slower.
@@ -54,12 +55,10 @@ internal expect fun getUnresolvedSymbolsRegistry(): UnresolvedSymbolsRegistry?
  *
  * Tests:
  *
- * val text = (1..100000).joinToString(" ")
- * reusedParagraph.layout(300f): 116.848500ms
+ * val text = (1..100000).joinToString(" ") reusedParagraph.layout(300f): 116.848500ms
  * builder.build().layout(300f): 288.302300ms
  *
- * text = (1..10000).joinToString(" ")
- * reusedParagraph.layout(300f): 10.004400ms
+ * text = (1..10000).joinToString(" ") reusedParagraph.layout(300f): 10.004400ms
  * builder.build().layout(300f): 23.421500ms
  */
 @OptIn(InternalComposeApi::class)
@@ -71,17 +70,20 @@ internal class ParagraphLayouter(
     placeholders: List<AnnotatedString.Range<Placeholder>>,
     density: Density,
     fontFamilyResolver: FontFamily.Resolver,
-    private val onFontStale: () -> Unit
+    private val onFontStale: () -> Unit,
+    onFontResolved: ((State<Any>) -> Unit)? = null,
 ) {
-    private val builder = ParagraphBuilder(
-        fontFamilyResolver = fontFamilyResolver,
-        text = text,
-        textStyle = style,
-        annotations = annotations,
-        placeholders = placeholders,
-        density = density,
-        textDirection = textDirection
-    )
+    private val builder =
+        ParagraphBuilder(
+            fontFamilyResolver = fontFamilyResolver,
+            text = text,
+            textStyle = style,
+            annotations = annotations,
+            placeholders = placeholders,
+            density = density,
+            textDirection = textDirection,
+            onFontResolved = onFontResolved,
+        )
     private var paragraphCache: SkParagraph? = null
     private var updateForeground = false
     private var width: Float = Float.NaN
@@ -103,15 +105,28 @@ internal class ParagraphLayouter(
             }
         }
 
-    private val unresolvedSymbolsRegistryListener = object : UnresolvedSymbolsRegistry.Listener {
-        override fun onNewFontInstalled() {
-            invalidateParagraph()
-            onFontStale()
+    private val unresolvedSymbolsRegistryListener =
+        object : UnresolvedSymbolsRegistry.Listener {
+            override fun onNewFontInstalled() {
+                invalidateParagraph()
+                onFontStale()
+            }
         }
-    }
 
-    val defaultFont get() = builder.defaultFont
-    val textStyle get() = builder.textStyle
+    val defaultFont
+        get() = builder.defaultFont
+
+    val textStyle
+        get() = builder.textStyle
+
+    val bullets
+        get() = builder.bullets
+
+    val density
+        get() = builder.density
+
+    val firstLineIndentPx
+        get() = builder.firstLineIndentPx
 
     private fun invalidateParagraph(onlyForeground: Boolean = false) {
         // skia's updateForegroundPaint applies the same style to every span,
@@ -126,83 +141,64 @@ internal class ParagraphLayouter(
     internal fun emptyLineMetrics(paragraph: SkParagraph): Array<LineMetrics> =
         builder.emptyLineMetrics(paragraph)
 
-    fun setParagraphStyle(
-        maxLines: Int,
-        ellipsis: String
-    ) {
-        if (builder.maxLines != maxLines ||
-            builder.ellipsis != ellipsis
-        ) {
+    fun setParagraphStyle(maxLines: Int, ellipsis: String) {
+        if (builder.maxLines != maxLines || builder.ellipsis != ellipsis) {
             builder.maxLines = maxLines
             builder.ellipsis = ellipsis
             invalidateParagraph()
         }
     }
 
-    fun setColor(
-        color: Color,
-    ) {
+    fun setColor(color: Color) {
         val actualColor = color.takeOrElse { builder.textStyle.color }
         if (builder.textStyle.color != actualColor) {
-            builder.textStyle = builder.textStyle.copy(
-                color = actualColor,
-            )
+            builder.textStyle = builder.textStyle.copy(color = actualColor)
             invalidateParagraph(onlyForeground = true)
         }
     }
 
-    fun setBrush(
-        brush: Brush?,
-        brushSize: Size,
-        alpha: Float,
-    ) {
+    fun setBrush(brush: Brush?, brushSize: Size, alpha: Float) {
         val actualSize = builder.brushSize
-        if (builder.textStyle.brush != brush ||
-            actualSize.isUnspecified ||
-            !actualSize.width.sameValueAs(brushSize.width) ||
-            !actualSize.height.sameValueAs(brushSize.height) ||
-            !builder.textStyle.alpha.sameValueAs(alpha)
+        if (
+            builder.textStyle.brush != brush ||
+                actualSize.isUnspecified ||
+                !actualSize.width.sameValueAs(brushSize.width) ||
+                !actualSize.height.sameValueAs(brushSize.height) ||
+                !builder.textStyle.alpha.sameValueAs(alpha)
         ) {
-            builder.textStyle = builder.textStyle.copy(
-                brush = brush,
-                alpha = alpha,
-            )
+            builder.textStyle = builder.textStyle.copy(brush = brush, alpha = alpha)
             builder.brushSize = brushSize
             invalidateParagraph(onlyForeground = true)
         }
     }
 
-    fun setBrushSize(
-        brushSize: Size,
-    ) {
+    fun setBrushSize(brushSize: Size) {
         if (builder.brushSize != brushSize) {
             builder.brushSize = brushSize
 
             // [brushSize] requires only for shader recreation and does not require re-layout,
             // but we have to invalidate it because it's backed into skia's paragraph.
             // Since it affects only [ShaderBrush] we can keep the cache if it's not used.
-            if (builder.textStyle.brush is ShaderBrush ||
-                builder.annotations.fastAny {
-                    // TODO(ivan): Verify that we need only [SpanStyle] here
-                    val spanStyle = it.item as? SpanStyle
-                    spanStyle?.brush is ShaderBrush
-                }) {
+            if (
+                builder.textStyle.brush is ShaderBrush ||
+                    builder.annotations.fastAny {
+                        // TODO(ivan): Verify that we need only [SpanStyle] here
+                        val spanStyle = it.item as? SpanStyle
+                        spanStyle?.brush is ShaderBrush
+                    }
+            ) {
                 invalidateParagraph(onlyForeground = true)
             }
         }
     }
 
-    fun setTextStyle(
-        shadow: Shadow?,
-        textDecoration: TextDecoration?,
-    ) {
-        if (!builder.textStyle.shadow.sameValueAs(shadow) ||
-            !builder.textStyle.textDecoration.sameValueAs(textDecoration)
+    fun setTextStyle(shadow: Shadow?, textDecoration: TextDecoration?) {
+        if (
+            !builder.textStyle.shadow.sameValueAs(shadow) ||
+                !builder.textStyle.textDecoration.sameValueAs(textDecoration)
         ) {
-            builder.textStyle = builder.textStyle.copy(
-                shadow = shadow,
-                textDecoration = textDecoration,
-            )
+            builder.textStyle =
+                builder.textStyle.copy(shadow = shadow, textDecoration = textDecoration)
             invalidateParagraph()
         }
     }
@@ -253,11 +249,9 @@ internal class ParagraphLayouter(
     }
 }
 
-private fun Shadow?.sameValueAs(other: Shadow?) =
-    (this ?: Shadow.None) == (other ?: Shadow.None)
+private fun Shadow?.sameValueAs(other: Shadow?) = (this ?: Shadow.None) == (other ?: Shadow.None)
 
 private fun TextDecoration?.sameValueAs(other: TextDecoration?) =
     (this ?: TextDecoration.None) == (other ?: TextDecoration.None)
 
-private fun Float.sameValueAs(other: Float) =
-    abs(this - other) < 0.00001f
+private fun Float.sameValueAs(other: Float) = abs(this - other) < 0.00001f

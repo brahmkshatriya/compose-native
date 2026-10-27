@@ -46,66 +46,70 @@ import kotlinx.coroutines.launch
 internal fun OffsetToFocusedRect(
     insets: PlatformInsets,
     getFocusedRect: () -> Rect?,
-    size: IntSize?,
     animationDuration: Duration,
     animationCompletion: () -> Unit,
     content: @Composable () -> Unit,
-) = Layout(
-    modifier = Modifier.then(
-        OffsetToFocusedRectElement(
-            insets = insets,
-            getFocusedRect = getFocusedRect,
-            size = size,
-            animationDuration = animationDuration,
-            animationCompletion = animationCompletion,
-        )
-    ),
-    content = content,
-    measurePolicy = { measurables, constraints ->
-        val placeables = measurables.fastMap { it.measure(constraints) }
-        layout(
-            placeables.fastMaxOfOrDefault(constraints.minWidth) { it.width },
-            placeables.fastMaxOfOrDefault(constraints.minHeight) { it.height }
-        ) {
-            placeables.fastForEach {
-                it.place(IntOffset.Zero)
+) =
+    Layout(
+        modifier =
+            Modifier.then(
+                OffsetToFocusedRectElement(
+                    insets = insets,
+                    getFocusedRect = getFocusedRect,
+                    animationDuration = animationDuration,
+                    animationCompletion = animationCompletion,
+                )
+            ),
+        content = content,
+        measurePolicy = { measurables, constraints ->
+            val placeables = measurables.fastMap { it.measure(constraints) }
+            layout(
+                placeables.fastMaxOfOrDefault(constraints.minWidth) { it.width },
+                placeables.fastMaxOfOrDefault(constraints.minHeight) { it.height },
+            ) {
+                placeables.fastForEach { it.place(IntOffset.Zero) }
             }
-        }
-    }
-)
+        },
+    )
 
 internal fun adjustedToFocusedRectOffset(
     insets: PlatformInsets,
     focusedRect: Rect?,
-    size: IntSize?
+    size: IntSize?,
 ): IntOffset {
+    // Read before the early returns: these reads are what subscribe a measuring node to the insets.
+    val insetLeft = insets.left
+    val insetTop = insets.top
+    val insetRight = insets.right
+    val insetBottom = insets.bottom
+
     focusedRect ?: return IntOffset.Zero
     size ?: return IntOffset.Zero
-    if (insets == PlatformInsets.Zero) {
+    if (insetLeft == 0 && insetTop == 0 && insetRight == 0 && insetBottom == 0) {
         return IntOffset.Zero
     }
 
-    val visibleAfterOffset = Rect(offset = Offset.Zero, size = size.toSize())
-        .intersect(focusedRect)
-        .isEmpty
-        .not()
+    val visibleAfterOffset =
+        Rect(offset = Offset.Zero, size = size.toSize()).intersect(focusedRect).isEmpty.not()
 
     return if (visibleAfterOffset) {
         IntOffset(
-            x = directionalFocusOffset(
-                contentSize = size.width.toFloat(),
-                contentInsetStart = insets.left.toFloat(),
-                contentInsetEnd = insets.right.toFloat(),
-                focusStart = focusedRect.left,
-                focusEnd = focusedRect.right
-            ),
-            y = directionalFocusOffset(
-                contentSize = size.height.toFloat(),
-                contentInsetStart = insets.top.toFloat(),
-                contentInsetEnd = insets.bottom.toFloat(),
-                focusStart = focusedRect.top,
-                focusEnd = focusedRect.bottom,
-            )
+            x =
+                directionalFocusOffset(
+                    contentSize = size.width.toFloat(),
+                    contentInsetStart = insetLeft.toFloat(),
+                    contentInsetEnd = insetRight.toFloat(),
+                    focusStart = focusedRect.left,
+                    focusEnd = focusedRect.right,
+                ),
+            y =
+                directionalFocusOffset(
+                    contentSize = size.height.toFloat(),
+                    contentInsetStart = insetTop.toFloat(),
+                    contentInsetEnd = insetBottom.toFloat(),
+                    focusStart = focusedRect.top,
+                    focusEnd = focusedRect.bottom,
+                ),
         )
     } else {
         IntOffset.Zero
@@ -117,7 +121,7 @@ private fun directionalFocusOffset(
     contentInsetStart: Float,
     contentInsetEnd: Float,
     focusStart: Float,
-    focusEnd: Float
+    focusEnd: Float,
 ): Int {
     val hiddenFromPart = contentInsetStart - max(focusStart, 0f)
     val hiddenToPart = contentInsetEnd - contentSize + min(focusEnd, contentSize)
@@ -134,23 +138,21 @@ private fun directionalFocusOffset(
 private data class OffsetToFocusedRectElement(
     val insets: PlatformInsets,
     val getFocusedRect: () -> Rect?,
-    val size: IntSize?,
     val animationDuration: Duration,
     val animationCompletion: () -> Unit,
 ) : ModifierNodeElement<OffsetToFocusedRectNode>() {
-    override fun create() = OffsetToFocusedRectNode(
-        insets = insets,
-        getFocusedRect = getFocusedRect,
-        size = size,
-        animationDuration = animationDuration,
-        animationCompletion = animationCompletion,
-    )
+    override fun create() =
+        OffsetToFocusedRectNode(
+            insets = insets,
+            getFocusedRect = getFocusedRect,
+            animationDuration = animationDuration,
+            animationCompletion = animationCompletion,
+        )
 
     override fun update(node: OffsetToFocusedRectNode) {
         node.update(
             insets = insets,
             getFocusedRect = getFocusedRect,
-            size = size,
             animationDuration = animationDuration,
             animationCompletion = animationCompletion,
         )
@@ -160,10 +162,10 @@ private data class OffsetToFocusedRectElement(
 private class OffsetToFocusedRectNode(
     private var insets: PlatformInsets,
     private var getFocusedRect: () -> Rect?,
-    private var size: IntSize?,
     private var animationDuration: Duration,
     private var animationCompletion: () -> Unit,
 ) : Modifier.Node(), GlobalPositionAwareModifierNode, LayoutModifierNode {
+    private var contentSize: IntSize? = null
     private var currentOffset = IntOffset.Zero
     private var startOffset = IntOffset.Zero
     private var offsetProgress = 1f
@@ -176,18 +178,15 @@ private class OffsetToFocusedRectNode(
     fun update(
         insets: PlatformInsets,
         getFocusedRect: () -> Rect?,
-        size: IntSize?,
         animationDuration: Duration,
         animationCompletion: () -> Unit,
     ) {
         val animationInputsChanged =
             this.insets != insets || this.animationDuration != animationDuration
-        val needsRemeasure =
-            animationInputsChanged || this.getFocusedRect !== getFocusedRect || this.size != size
+        val needsRemeasure = animationInputsChanged || this.getFocusedRect !== getFocusedRect
 
         this.insets = insets
         this.getFocusedRect = getFocusedRect
-        this.size = size
         this.animationDuration = animationDuration
         this.animationCompletion = animationCompletion
 
@@ -213,12 +212,11 @@ private class OffsetToFocusedRectNode(
         constraints: Constraints,
     ): MeasureResult {
         val placeable = measurable.measure(constraints)
+        contentSize = IntSize(placeable.width, placeable.height)
         canSettleOffset = !isSettlingOffset
         isSettlingOffset = false
         currentOffset = calculatedOffset()
-        return layout(placeable.width, placeable.height) {
-            placeable.place(currentOffset)
-        }
+        return layout(placeable.width, placeable.height) { placeable.place(currentOffset) }
     }
 
     override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
@@ -233,7 +231,7 @@ private class OffsetToFocusedRectNode(
 
         val settledOffset = calculatedOffset()
         if (settledOffset != currentOffset) {
-            currentOffset = settledOffset
+            // Keep the offset that matches the placed focus rect until the next measure.
             isSettlingOffset = true
             invalidateMeasurement()
         }
@@ -256,13 +254,14 @@ private class OffsetToFocusedRectNode(
             return
         }
 
-        animationJob = coroutineScope.launch {
-            withAnimationProgress(animationDuration) { progress ->
-                offsetProgress = progress
-                invalidateMeasurement()
+        animationJob =
+            coroutineScope.launch {
+                withAnimationProgress(animationDuration) { progress ->
+                    offsetProgress = progress
+                    invalidateMeasurement()
+                }
+                animationCompletion()
             }
-            animationCompletion()
-        }
     }
 
     private fun calculatedOffset(): IntOffset =
@@ -273,13 +272,14 @@ private class OffsetToFocusedRectNode(
         // either static or only changes during the animation.
         // The [Snapshot.withoutReadObservation] function is used here to avoid side effects caused
         // by the internal implementation of the [getFocusedRect] function.
-        val focusedRect = Snapshot.withoutReadObservation { getFocusedRect() }
-            ?.translate(-currentOffset.toOffset())
+        val focusedRect =
+            Snapshot.withoutReadObservation { getFocusedRect() }
+                ?.translate(-currentOffset.toOffset())
 
         return adjustedToFocusedRectOffset(
             insets = insets,
             focusedRect = focusedRect,
-            size = size,
+            size = contentSize,
         )
     }
 }

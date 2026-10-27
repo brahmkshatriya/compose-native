@@ -186,9 +186,7 @@ internal fun simpleScope() =
         override fun <T> getOrNull(property: StyleProperty<T>): T? = values[property] as T?
 
         override fun anySet(properties: Set<StyleProperty<*>>): Boolean =
-            values.any { property, _ ->
-                property in values
-            }
+            values.any { property, _ -> property in values }
 
         override fun <T> ProvidableStyleProperty<T>.provide(value: T) {
             values[this] = value
@@ -224,6 +222,10 @@ internal fun simpleScope() =
         override fun provideNestedStyle(key: NestedStyleKey, style: CommonStyle) {}
 
         override fun applyNestedStyle(key: NestedStyleKey) {}
+
+        override fun styleLayer(block: () -> Unit) {
+            error("Layer not supported in a simple scope")
+        }
     }
 
 private fun Shape.toTestOutline(): Outline {

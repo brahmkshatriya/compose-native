@@ -24,19 +24,19 @@ import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.asComposeCanvas
+import androidx.compose.ui.graphics.SkiaCanvasHolder
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.pointer.PointerButton
 import androidx.compose.ui.input.pointer.PointerButtons
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.platform.FrameRecomposer
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.platform.WindowInfoImpl
 import androidx.compose.ui.platform.registerSkikoComposeImplementation
 import androidx.compose.ui.scene.CanvasLayersComposeScene
-import androidx.compose.ui.platform.FrameRecomposer
 import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.scene.ComposeScenePointer
 import androidx.compose.ui.scene.hasInvalidations
@@ -66,8 +66,8 @@ import org.jetbrains.skiko.currentNanoTime
  *
  * This function doesn't support concurrent use from different threads. This includes use from a
  * thread that is not the main UI thread concurrently with other compose scenes (e.g. a regular
- * Compose application). To be used as part of a Compose application, it must be called from
- * the main UI thread only.
+ * Compose application). To be used as part of a Compose application, it must be called from the
+ * main UI thread only.
  *
  * @param width The width of the content.
  * @param height The height of the content.
@@ -78,24 +78,20 @@ fun renderComposeScene(
     width: Int,
     height: Int,
     density: Density = Density(1f),
-    content: @Composable () -> Unit
-): Image = ImageComposeScene(
-    width = width,
-    height = height,
-    density = density,
-    content = content
-).use { it.render() }
+    content: @Composable () -> Unit,
+): Image =
+    ImageComposeScene(width = width, height = height, density = density, content = content).use {
+        it.render()
+    }
 
 /**
- * Executes the given [block] function on this [ImageComposeScene] and then closes it down
- * correctly whether an exception is thrown or not.
+ * Executes the given [block] function on this [ImageComposeScene] and then closes it down correctly
+ * whether an exception is thrown or not.
  *
  * @param block a function to process this [ImageComposeScene].
  * @return the result of [block] function invoked on this [ImageComposeScene].
  */
-inline fun <R> ImageComposeScene.use(
-    block: (ImageComposeScene) -> R
-): R {
+inline fun <R> ImageComposeScene.use(block: (ImageComposeScene) -> R): R {
     return try {
         block(this)
     } finally {
@@ -113,23 +109,25 @@ inline fun <R> ImageComposeScene.use(
  * After [ImageComposeScene] will no longer needed, you should call [close] method, so all resources
  * and subscriptions will be properly closed. Otherwise there can be a memory leak.
  *
- * Instead of calling [close] manually, you can use the helper function [use],
- * it will close the scene for you.
+ * Instead of calling [close] manually, you can use the helper function [use], it will close the
+ * scene for you.
  *
- * [ImageComposeScene] doesn't support concurrent use from different threads. This includes use
- * from a thread that is not the main UI thread concurrently with other compose scenes (e.g. a
- * regular Compose application). To be used as part of a Compose application, it must be used from
- * the main UI thread only.
+ * [ImageComposeScene] doesn't support concurrent use from different threads. This includes use from
+ * a thread that is not the main UI thread concurrently with other compose scenes (e.g. a regular
+ * Compose application). To be used as part of a Compose application, it must be used from the main
+ * UI thread only.
  *
  * @param width The width of the content.
  * @param height The height of the content.
  * @param density Density of the content which will be used to convert [dp] units.
  * @param coroutineContext Context which will be used to launch effects ([LaunchedEffect],
- * [rememberCoroutineScope]) and run recompositions.
+ *   [rememberCoroutineScope]) and run recompositions.
  * @param content Composable content which needed to be rendered.
  */
 @OptIn(InternalComposeUiApi::class)
-class ImageComposeScene @ExperimentalComposeUiApi constructor(
+class ImageComposeScene
+@ExperimentalComposeUiApi
+constructor(
     width: Int,
     height: Int,
     density: Density = Density(1f),
@@ -144,69 +142,63 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
         density: Density = Density(1f),
         coroutineContext: CoroutineContext = Dispatchers.Unconfined,
         content: @Composable () -> Unit = {},
-    ): this(
-        width,
-        height,
-        density,
-        LayoutDirection.Ltr,
-        coroutineContext,
-        content
-    )
+    ) : this(width, height, density, LayoutDirection.Ltr, coroutineContext, content)
 
     private val surface = Surface.makeRasterN32Premul(width, height)
 
     private val imageSize = IntSize(width, height)
 
-    private val _windowInfo = WindowInfoImpl().apply {
-        isWindowFocused = true
-        containerSize = imageSize
-        containerDpSize = imageSize.toSize().toDpSize(density)
-    }
+    private val _windowInfo =
+        WindowInfoImpl().apply {
+            isWindowFocused = true
+            containerSize = imageSize
+            containerDpSize = imageSize.toSize().toDpSize(density)
+        }
+
+    private val canvasHolder = SkiaCanvasHolder(surface.canvas)
 
     private val frameRecomposer = FrameRecomposer(coroutineContext)
 
-    private val _platformContext = object : PlatformContext by PlatformContext.Empty(),
-        PlatformContext.SemanticsOwnerListener {
-        val semanticsOwners = mutableStateSetOf<SemanticsOwner>()
+    private val _platformContext =
+        object :
+            PlatformContext by PlatformContext.Empty(), PlatformContext.SemanticsOwnerListener {
+            val semanticsOwners = mutableStateSetOf<SemanticsOwner>()
 
-        override fun onSemanticsOwnerAppended(semanticsOwner: SemanticsOwner) {
-            semanticsOwners.add(semanticsOwner)
+            override fun onSemanticsOwnerAppended(semanticsOwner: SemanticsOwner) {
+                semanticsOwners.add(semanticsOwner)
+            }
+
+            override fun onSemanticsOwnerRemoved(semanticsOwner: SemanticsOwner) {
+                semanticsOwners.remove(semanticsOwner)
+            }
+
+            override fun onSemanticsChange(semanticsOwner: SemanticsOwner) = Unit
+
+            override fun onLayoutChange(semanticsOwner: SemanticsOwner, semanticsNodeId: Int) = Unit
+
+            override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener
+                get() = this
+
+            override val windowInfo: WindowInfo
+                get() = _windowInfo
         }
-
-        override fun onSemanticsOwnerRemoved(semanticsOwner: SemanticsOwner) {
-            semanticsOwners.remove(semanticsOwner)
-        }
-
-        override fun onSemanticsChange(semanticsOwner: SemanticsOwner) = Unit
-
-        override fun onLayoutChange(semanticsOwner: SemanticsOwner, semanticsNodeId: Int) = Unit
-
-        override val semanticsOwnerListener: PlatformContext.SemanticsOwnerListener
-            get() = this
-
-        override val windowInfo: WindowInfo
-            get() = _windowInfo
-    }
 
     init {
         registerSkikoComposeImplementation()
     }
 
-    private val scene = CanvasLayersComposeScene(
-        frameRecomposer = frameRecomposer,
-        density = density,
-        layoutDirection = layoutDirection,
-        size = imageSize,
-        platformContext = _platformContext
-    ).also {
-        it.setContent(content = content)
-    }
+    private val scene =
+        CanvasLayersComposeScene(
+                frameRecomposer = frameRecomposer,
+                density = density,
+                layoutDirection = layoutDirection,
+                size = imageSize,
+                platformContext = _platformContext,
+            )
+            .also { it.setContent(content = content) }
 
-    /**
-     * The default direction of layout for content.
-     */
-    @ExperimentalComposeUiApi
-    var layoutDirection: LayoutDirection by scene::layoutDirection
+    /** The default direction of layout for content. */
+    @ExperimentalComposeUiApi var layoutDirection: LayoutDirection by scene::layoutDirection
 
     /**
      * Returns the [SemanticsOwner]s corresponding to the roots of the semantics trees in this
@@ -223,8 +215,8 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
      * Close all resources and subscriptions. Not calling this method when [ImageComposeScene] is no
      * longer needed will cause a memory leak.
      *
-     * All effects launched via [LaunchedEffect] or [rememberCoroutineScope] will be cancelled
-     * (but not immediately).
+     * All effects launched via [LaunchedEffect] or [rememberCoroutineScope] will be cancelled (but
+     * not immediately).
      *
      * After calling this method, you cannot call any other method of this [ImageComposeScene].
      */
@@ -233,19 +225,20 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
         frameRecomposer.close()
     }
 
-    /**
-     * Constraints used to measure and layout content.
-     */
+    /** Constraints used to measure and layout content. */
     var constraints: Constraints
         get() = scene.size.toMaxConstraints()
-        set(value) { scene.size = value.toIntSize() }
+        set(value) {
+            scene.size = value.toIntSize()
+        }
 
     /**
-     * Returns whether there are pending recompositions, renders, or dispatched tasks.
-     * Can be called from any thread.
+     * Returns whether there are pending recompositions, renders, or dispatched tasks. Can be called
+     * from any thread.
      *
-     * Note that changes to snapshot state don't immediately trigger an invalidation.
-     * To guarantee that there are no changes expected in the scene use
+     * Note that changes to snapshot state don't immediately trigger an invalidation. To guarantee
+     * that there are no changes expected in the scene use
+     *
      * ```
      * !Snapshot.current.hasPendingChanges()
      *     && !Snapshot.isApplyObserverNotificationPending
@@ -253,33 +246,32 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
      *     && !scene.hasInvalidations()
      * ```
      */
-    fun hasInvalidations(): Boolean =
-        frameRecomposer.hasPendingWork() || scene.hasInvalidations()
+    fun hasInvalidations(): Boolean = frameRecomposer.hasPendingWork() || scene.hasInvalidations()
 
     /**
-     * Update the composition with the content described by the [content] composable. After this
-     * has been called, the changes to produce the initial composition have been calculated and
-     * applied to the composition.
+     * Update the composition with the content described by the [content] composable. After this has
+     * been called, the changes to produce the initial composition have been calculated and applied
+     * to the composition.
      *
      * Will throw an [IllegalStateException] if the composition has been disposed.
      *
      * @param content Content of the [ImageComposeScene]
      */
-    fun setContent(content: @Composable () -> Unit): Unit =
-        scene.setContent(content = content)
+    fun setContent(content: @Composable () -> Unit): Unit = scene.setContent(content = content)
 
-    /**
-     * Returns the current content size
-     */
-    @Deprecated("Use calculateContentSize() instead", replaceWith = ReplaceWith("calculateContentSize()"))
+    /** Returns the current content size */
+    @Deprecated(
+        "Use calculateContentSize() instead",
+        replaceWith = ReplaceWith("calculateContentSize()"),
+    )
     val contentSize: IntSize
         get() = scene.unconstrainedSize()
 
     /**
      * Returns the current content size in infinity constraints.
      *
-     * @throws IllegalStateException when [ComposeScene] content has lazy layouts without maximum size bounds
-     * (e.g. LazyColumn without maximum height).
+     * @throws IllegalStateException when [ComposeScene] content has lazy layouts without maximum
+     *   size bounds (e.g. LazyColumn without maximum height).
      */
     @ExperimentalComposeUiApi
     fun calculateContentSize(): IntSize {
@@ -287,24 +279,22 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
     }
 
     /**
-     * Render the current content into an image. [nanoTime] will be used to drive all
-     * animations in the content (or any other code, which uses [withFrameNanos]
+     * Render the current content into an image. [nanoTime] will be used to drive all animations in
+     * the content (or any other code, which uses [withFrameNanos]
      */
     fun render(nanoTime: Long = 0): Image {
         surface.canvas.clear(Color.TRANSPARENT)
         frameRecomposer.performFrame(nanoTime)
         scene.measureAndLayout()
-        scene.draw(surface.canvas.asComposeCanvas())
+        canvasHolder.drawInto(surface.canvas, scene::draw)
         return surface.makeImageSnapshot()
     }
 
     /**
-     * Render the current content into an image. [time] will be used to drive all
-     * animations in the content (or any other code, which uses [withFrameNanos]
+     * Render the current content into an image. [time] will be used to drive all animations in the
+     * content (or any other code, which uses [withFrameNanos]
      */
-    @ExperimentalTime
-    fun render(time: Duration): Image =
-        render(time.toLong(NANOSECONDS))
+    @ExperimentalTime fun render(time: Duration): Image = render(time.toLong(NANOSECONDS))
 
     /**
      * Send pointer event to the content.
@@ -312,16 +302,18 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
      * @param eventType Indicates the primary reason that the event was sent.
      * @param position The [Offset] of the current pointer event, relative to the content.
      * @param scrollDelta scroll delta for the PointerEventType.Scroll event
-     * @param timeMillis The time of the current pointer event, in milliseconds. The start (`0`) time
-     * is platform-dependent.
-     * @param type The device type that produced the event, such as [mouse][PointerType.Mouse],
-     * or [touch][PointerType.Touch].
-     * @param buttons Contains the state of pointer buttons (e.g. mouse and stylus buttons) after the event.
-     * @param keyboardModifiers Contains the state of modifier keys, such as Shift, Control,
-     * and Alt, as well as the state of the lock keys, such as Caps Lock and Num Lock.
+     * @param timeMillis The time of the current pointer event, in milliseconds. The start (`0`)
+     *   time is platform-dependent.
+     * @param type The device type that produced the event, such as [mouse][PointerType.Mouse], or
+     *   [touch][PointerType.Touch].
+     * @param buttons Contains the state of pointer buttons (e.g. mouse and stylus buttons) after
+     *   the event.
+     * @param keyboardModifiers Contains the state of modifier keys, such as Shift, Control, and
+     *   Alt, as well as the state of the lock keys, such as Caps Lock and Num Lock.
      * @param nativeEvent The original native event.
      * @param button Represents the index of a button which state changed in this event. It's null
-     * when there was no change of the buttons state or when button is not applicable (e.g. touch event).
+     *   when there was no change of the buttons state or when button is not applicable (e.g. touch
+     *   event).
      */
     fun sendPointerEvent(
         eventType: PointerEventType,
@@ -343,29 +335,31 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
             buttons,
             keyboardModifiers,
             nativeEvent,
-            button
+            button,
         )
     }
 
     /**
-     * Send pointer event to the content. The more detailed version of [sendPointerEvent] that can accept
-     * multiple pointers.
+     * Send pointer event to the content. The more detailed version of [sendPointerEvent] that can
+     * accept multiple pointers.
      *
      * @param eventType Indicates the primary reason that the event was sent.
-     * @param pointers The current pointers with position relative to the content.
-     * There can be multiple pointers, for example, if we use Touch and touch screen with multiple fingers.
-     * Contains only the state of the active pointers.
-     * Touch that is released still considered as active on PointerEventType.Release event (but with pressed=false). It
-     * is no longer active after that, and shouldn't be passed to the scene.
-     * @param buttons Contains the state of pointer buttons (e.g. mouse and stylus buttons) after the event.
-     * @param keyboardModifiers Contains the state of modifier keys, such as Shift, Control,
-     * and Alt, as well as the state of the lock keys, such as Caps Lock and Num Lock.
+     * @param pointers The current pointers with position relative to the content. There can be
+     *   multiple pointers, for example, if we use Touch and touch screen with multiple fingers.
+     *   Contains only the state of the active pointers. Touch that is released still considered as
+     *   active on PointerEventType.Release event (but with pressed=false). It is no longer active
+     *   after that, and shouldn't be passed to the scene.
+     * @param buttons Contains the state of pointer buttons (e.g. mouse and stylus buttons) after
+     *   the event.
+     * @param keyboardModifiers Contains the state of modifier keys, such as Shift, Control, and
+     *   Alt, as well as the state of the lock keys, such as Caps Lock and Num Lock.
      * @param scrollDelta scroll delta for the PointerEventType.Scroll event.
-     * @param timeMillis The time of the current pointer event, in milliseconds. The start (`0`) time
-     * is platform-dependent.
+     * @param timeMillis The time of the current pointer event, in milliseconds. The start (`0`)
+     *   time is platform-dependent.
      * @param nativeEvent The original native event.
      * @param button Represents the index of a button which state changed in this event. It's null
-     * when there was no change of the buttons state or when button is not applicable (e.g. touch event).
+     *   when there was no change of the buttons state or when button is not applicable (e.g. touch
+     *   event).
      * @param scaleGestureFactor The scale gesture factor for PointerEventType.Scale event.
      * @param panGestureOffset The pan gesture offset for PointerEventType.Pan event.
      */
@@ -398,6 +392,7 @@ class ImageComposeScene @ExperimentalComposeUiApi constructor(
 
     /**
      * Send [KeyEvent] to the content.
+     *
      * @return true if the event was consumed by the content
      */
     fun sendKeyEvent(event: KeyEvent): Boolean = scene.sendKeyEvent(event)

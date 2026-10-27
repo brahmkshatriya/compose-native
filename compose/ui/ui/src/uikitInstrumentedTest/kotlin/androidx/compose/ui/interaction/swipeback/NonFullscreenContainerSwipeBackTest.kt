@@ -34,10 +34,13 @@ import platform.UIKit.UIViewController
 import platform.UIKit.addChildViewController
 import platform.UIKit.didMoveToParentViewController
 
-internal class NonFullscreenContainerSwipeBackInHostingViewTest : NonFullscreenContainerSwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
-)
+@Suppress("unused")
+internal class NonFullscreenContainerSwipeBackInHostingViewTest :
+    NonFullscreenContainerSwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
+    )
 
+@Suppress("unused")
 internal class NonFullscreenContainerSwipeBackInHostingViewControllerTest :
     NonFullscreenContainerSwipeBackTest(
         runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
@@ -53,12 +56,14 @@ internal abstract class NonFullscreenContainerSwipeBackTest(
         var backCompletedCount = -1
 
         setupWindow {
-            val composeViewController = createViewControllerHostingCompose {
-                SwipeBackTestContent(
-                    onTransitionStateChanged = { transitionState = it },
-                    onBackCompletedCountChanged = { backCompletedCount = it }
-                )
-            }.apply { setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight) }
+            val composeViewController =
+                createViewControllerHostingCompose {
+                        SwipeBackTestContent(
+                            onTransitionStateChanged = { transitionState = it },
+                            onBackCompletedCountChanged = { backCompletedCount = it },
+                        )
+                    }
+                    .apply { setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight) }
 
             UIViewController().also { hostViewController ->
                 hostViewController.addChildViewController(composeViewController)
@@ -77,12 +82,12 @@ internal abstract class NonFullscreenContainerSwipeBackTest(
         assertEquals(
             expected = NavigationEvent.EDGE_LEFT,
             actual = (transitionState as InProgress).latestEvent.swipeEdge,
-            message = "back swipe should report the expected edge in a non-fullscreen container"
+            message = "back swipe should report the expected edge in a non-fullscreen container",
         )
         assertEquals(
             expected = 0,
             actual = backCompletedCount,
-            message = "back swipe should not complete before release in a non-fullscreen container"
+            message = "back swipe should not complete before release in a non-fullscreen container",
         )
 
         swipeBack.up()
@@ -99,12 +104,14 @@ internal abstract class NonFullscreenContainerSwipeBackTest(
         var backCompletedCount = -1
 
         setupWindow {
-            val composeViewController = createViewControllerHostingCompose {
-                SwipeBackTestContent(
-                    onTransitionStateChanged = { transitionState = it },
-                    onBackCompletedCountChanged = { backCompletedCount = it }
-                )
-            }.apply { setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft) }
+            val composeViewController =
+                createViewControllerHostingCompose {
+                        SwipeBackTestContent(
+                            onTransitionStateChanged = { transitionState = it },
+                            onBackCompletedCountChanged = { backCompletedCount = it },
+                        )
+                    }
+                    .apply { setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft) }
 
             UIViewController().also { hostViewController ->
                 hostViewController.addChildViewController(composeViewController)
@@ -123,12 +130,12 @@ internal abstract class NonFullscreenContainerSwipeBackTest(
         assertEquals(
             expected = NavigationEvent.EDGE_RIGHT,
             actual = (transitionState as InProgress).latestEvent.swipeEdge,
-            message = "back swipe should report the expected edge in a non-fullscreen container"
+            message = "back swipe should report the expected edge in a non-fullscreen container",
         )
         assertEquals(
             expected = 0,
             actual = backCompletedCount,
-            message = "back swipe should not complete before release in a non-fullscreen container"
+            message = "back swipe should not complete before release in a non-fullscreen container",
         )
 
         swipeBack.up()

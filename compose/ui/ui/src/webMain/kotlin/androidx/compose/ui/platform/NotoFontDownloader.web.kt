@@ -26,22 +26,24 @@ import org.jetbrains.skiko.loadBytesFromPath
  * Idea and some implementation details are adapted from
  * https://github.com/flutter/flutter/blob/master/engine/src/flutter/lib/web_ui/lib/src/engine/font_fallbacks.dart
  */
-internal class NotoFontDownloader : FallbackFontDownloader {
+internal class NotoFontDownloader(val fontFallbackUrl: String = FONT_FALLBACK_BASE_URL) :
+    FallbackFontDownloader {
     private val codePointsWithNoKnownFont = mutableSetOf<Int>()
     private val codePointToComponents by lazy { UnicodePropertyLookup.create() }
 
     override suspend fun downloadFallbackFont(codepoints: Set<Int>): List<FontFamily> {
         val fontsToDownload = getFontsToDownload(codepoints)
-        val fonts = fontsToDownload.map { font ->
-            val fontUrl = FONT_FALLBACK_BASE_URL + font.font.url
-            try {
-                val bytes = loadBytesFromPath(fontUrl)
-                FontFamily(Font(font.font.name, bytes))
-            } catch (e: Throwable) {
-                println("Failed to download fallback font [$fontUrl]: $e")
-                null
+        val fonts =
+            fontsToDownload.map { font ->
+                val fontUrl = fontFallbackUrl + font.font.url
+                try {
+                    val bytes = loadBytesFromPath(fontUrl)
+                    FontFamily(Font(font.font.name, bytes))
+                } catch (e: Throwable) {
+                    println("Failed to download fallback font [$fontUrl]: $e")
+                    null
+                }
             }
-        }
         if (fonts.isNotEmpty() && fonts.all { it == null }) {
             // we need to throw an error because we want to retry it later
             error("Failed to download fallback fonts for codepoints: $codepoints")
@@ -52,7 +54,7 @@ internal class NotoFontDownloader : FallbackFontDownloader {
 
     internal fun getFontsToDownload(
         codepoints: Set<Int>,
-        language: String = window.navigator.language
+        language: String = window.navigator.language,
     ): List<IndexedNotoFont> {
         if (codepoints.isEmpty()) return emptyList()
 
@@ -153,11 +155,18 @@ internal class NotoFontDownloader : FallbackFontDownloader {
         return bestFontForLanguage ?: bestFont ?: error("No fallback font selected")
     }
 
-    private fun List<IndexedNotoFont>.selectBestFontForLanguage(language: String): IndexedNotoFont? {
+    private fun List<IndexedNotoFont>.selectBestFontForLanguage(
+        language: String
+    ): IndexedNotoFont? {
         val fonts = this
         return when (language) {
-            "zh-Hans", "zh-CN", "zh-SG", "zh-MY" -> fonts.firstOrNull { it.font.isNotoSansSC() }
-            "zh-Hant", "zh-TW", "zh-MO" -> fonts.firstOrNull { it.font.isNotoSansTC() }
+            "zh-Hans",
+            "zh-CN",
+            "zh-SG",
+            "zh-MY" -> fonts.firstOrNull { it.font.isNotoSansSC() }
+            "zh-Hant",
+            "zh-TW",
+            "zh-MO" -> fonts.firstOrNull { it.font.isNotoSansTC() }
             "zh-HK" -> fonts.firstOrNull { it.font.isNotoSansHK() }
             "ja" -> fonts.firstOrNull { it.font.isNotoSansJP() }
             "ko" -> fonts.firstOrNull { it.font.isNotoSansKR() }
@@ -232,9 +241,7 @@ private class UnicodePropertyLookup(
                 }
             }
 
-            check(start == MAX_CODE_POINT + 1) {
-                "Bad fallback map size: $start"
-            }
+            check(start == MAX_CODE_POINT + 1) { "Bad fallback map size: $start" }
 
             return UnicodePropertyLookup(boundaries, values)
         }
@@ -274,15 +281,22 @@ private class UnicodePropertyLookup(
 
 private val NotoFont.isCjkFont: Boolean
     get() = isNotoSansSC() || isNotoSansTC() || isNotoSansHK() || isNotoSansJP() || isNotoSansKR()
+
 private fun NotoFont.isNotoSansSC(): Boolean = name.startsWith("Noto Sans SC")
+
 private fun NotoFont.isNotoSansTC(): Boolean = name.startsWith("Noto Sans TC")
+
 private fun NotoFont.isNotoSansHK(): Boolean = name.startsWith("Noto Sans HK")
+
 private fun NotoFont.isNotoSansJP(): Boolean = name.startsWith("Noto Sans JP")
+
 private fun NotoFont.isNotoSansKR(): Boolean = name.startsWith("Noto Sans KR")
+
 private fun NotoFont.isNotoColorEmoji(): Boolean = name.startsWith("Noto Color Emoji")
+
 private fun NotoFont.isNotoSansSymbols(): Boolean = name.startsWith("Noto Sans Symbols")
 
-private const val FONT_FALLBACK_BASE_URL = "https://fonts.gstatic.com/s/"
+internal const val FONT_FALLBACK_BASE_URL = "https://fonts.gstatic.com/s/"
 private const val PREFIX_DIGIT_0 = 48
 private const val PREFIX_RADIX = 10
 private const val FONT_INDEX_DIGIT_0 = 97

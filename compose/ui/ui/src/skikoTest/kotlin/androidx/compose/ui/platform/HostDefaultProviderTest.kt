@@ -34,26 +34,24 @@ class HostDefaultProviderTest {
     @Test
     fun testHostDefaultProviderGetLocalViewModelStoreOwner() = runSkikoComposeUiTest {
         var owner: ViewModelStoreOwner? = null
-        setContent {
-            owner = LocalViewModelStoreOwner.current
-        }
+        setContent { owner = LocalViewModelStoreOwner.current }
 
         assertNotNull(owner)
         assertIs<ViewModelStoreOwner>(owner)
     }
 
     interface TestRegistry
+
     val TestRegistryKey = object : HostDefaultKey<TestRegistry?> {}
 
     @Suppress("DEPRECATION")
     @Test
     fun testHostDefaultProviderNull() = runSkikoComposeUiTest {
+        @Suppress("LocalVariableName")
         val LocalTestRegistry = compositionLocalWithHostDefaultOf(TestRegistryKey)
 
         var registry: TestRegistry? = null
-        setContent {
-            registry = LocalTestRegistry.current
-        }
+        setContent { registry = LocalTestRegistry.current }
 
         assertNull(registry)
     }

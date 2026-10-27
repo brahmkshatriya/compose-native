@@ -43,7 +43,7 @@ internal interface FallbackFontDownloader {
 internal class WebFallbackFontDownloader(
     private val downloader: FallbackFontDownloader,
     scope: CoroutineScope,
-    private val onFontsLoaded: suspend (List<FontFamily>) -> Unit
+    private val onFontsLoaded: suspend (List<FontFamily>) -> Unit,
 ) {
     private val channel = Channel<Set<Int>>(Channel.UNLIMITED)
 
@@ -78,47 +78,54 @@ internal class WebFallbackFontDownloader(
         val codepoints = mutableSetOf<Int>()
         codepoints += channel.receive()
         repeat(9) {
-            codepoints += withTimeoutOrNull(60.milliseconds) {
-                channel.receive()
-            } ?: return codepoints
+            codepoints +=
+                withTimeoutOrNull(60.milliseconds) { channel.receive() } ?: return codepoints
         }
         return codepoints
     }
 
     private fun drainChannel() {
-        while (channel.tryReceive().isSuccess) { /* drain */ }
+        while (channel.tryReceive().isSuccess) {
+            /* drain */
+        }
     }
 }
 
 @OptIn(InternalComposeApi::class)
 @Composable
-internal fun installFallbackFontDownloader() {
+internal fun installFallbackFontDownloader(fontFallbackUrl: String?) {
+    val baseUrl = fontFallbackUrl ?: return
     val fontFamilyResolver = LocalFontFamilyResolver.current
     val coroutineScope = rememberCoroutineScope()
 
-    DisposableEffect(fontFamilyResolver, coroutineScope) {
-        val webDownloader = WebFallbackFontDownloader(
-            downloader = defaultFallbackFontDownloader,
-            scope = coroutineScope,
-            onFontsLoaded = { fonts ->
-                if (fonts.isNotEmpty()) {
-                    for (font in fonts) {
-                        fontFamilyResolver.preload(font)
+    DisposableEffect(fontFamilyResolver, coroutineScope, baseUrl) {
+        val fontDownloader =
+            when (baseUrl) {
+                FONT_FALLBACK_BASE_URL -> defaultFallbackFontDownloader
+                else -> NotoFontDownloader(baseUrl)
+            }
+        val webDownloader =
+            WebFallbackFontDownloader(
+                downloader = fontDownloader,
+                scope = coroutineScope,
+                onFontsLoaded = { fonts ->
+                    if (fonts.isNotEmpty()) {
+                        for (font in fonts) {
+                            fontFamilyResolver.preload(font)
+                        }
+                        WebUnresolvedSymbolsRegistry.onNewFontInstalled()
                     }
-                    WebUnresolvedSymbolsRegistry.onNewFontInstalled()
+                },
+            )
+
+        val listener =
+            object : UnresolvedSymbolsRegistry.Listener {
+                override fun onUnresolvedCodepoints(codepoints: Set<Int>) {
+                    webDownloader.submit(codepoints)
                 }
             }
-        )
-
-        val listener = object : UnresolvedSymbolsRegistry.Listener {
-            override fun onUnresolvedCodepoints(codepoints: Set<Int>) {
-                webDownloader.submit(codepoints)
-            }
-        }
 
         WebUnresolvedSymbolsRegistry.addListener(listener)
-        onDispose {
-            WebUnresolvedSymbolsRegistry.removeListener(listener)
-        }
+        onDispose { WebUnresolvedSymbolsRegistry.removeListener(listener) }
     }
 }

@@ -33,10 +33,8 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class BasicInteractionTest {
-    /**
-     *  Distance in pixels a touch can wander before we think the user is scrolling.
-     */
-    private val CUPERTINO_TOUCH_SLOP = 10.dp
+    /** Distance in pixels a touch can wander before we think the user is scrolling. */
+    private val CupertinoTouchSlop = 10.dp
 
     @Test
     fun testButtonClick() = runUIKitInstrumentedTest {
@@ -45,9 +43,7 @@ class BasicInteractionTest {
             Box(modifier = Modifier.fillMaxSize()) {
                 Button(
                     onClick = { clicks++ },
-                    modifier = Modifier
-                        .testTag("Button")
-                        .align(Alignment.Center)
+                    modifier = Modifier.testTag("Button").align(Alignment.Center),
                 ) {
                     Text("Click me")
                 }
@@ -55,14 +51,11 @@ class BasicInteractionTest {
         }
 
         assertEquals(0, clicks)
-        this.findNodeWithLabel(label = "Click me")
-            .tap()
+        this.findNodeWithLabel(label = "Click me").tap()
         assertEquals(1, clicks)
-        this.findNodeWithLabel(label = "Click me")
-            .tap()
+        this.findNodeWithLabel(label = "Click me").tap()
         assertEquals(2, clicks)
-        this.findNodeWithLabel(label = "Click me")
-            .tap()
+        this.findNodeWithLabel(label = "Click me").tap()
         assertEquals(3, clicks)
     }
 
@@ -73,30 +66,30 @@ class BasicInteractionTest {
         setContent {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(state)) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(100.dp)
-                        .background(Color.Red)
-                        .testTag("Hidden after scroll box")
-                )
-                Box(modifier = Modifier
-                    .fillMaxWidth()
-                    .height(100.dp)
-                    .background(Color.Green)
-                    .testTag("Box")
-                    .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(100.dp)
+                            .background(Color.Red)
+                            .testTag("Hidden after scroll box")
                 )
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(screenSize.height)
-                        .background(Color.White)
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .height(100.dp)
+                            .background(Color.Green)
+                            .testTag("Box")
+                            .onGloballyPositioned {
+                                boxRect = it.boundsInWindow().toDpRect(density)
+                            }
+                )
+                Box(
+                    modifier =
+                        Modifier.fillMaxWidth().height(screenSize.height).background(Color.White)
                 )
             }
         }
 
-        touchDown(screenSize.center)
-            .dragBy(dy = -(100.dp + CUPERTINO_TOUCH_SLOP))
+        touchDown(screenSize.center).dragBy(dy = -(100.dp + CupertinoTouchSlop))
 
         waitForIdle()
 

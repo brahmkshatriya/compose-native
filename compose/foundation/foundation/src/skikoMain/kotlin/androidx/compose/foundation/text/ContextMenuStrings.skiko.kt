@@ -27,19 +27,26 @@ import kotlin.jvm.JvmInline
 @JvmInline
 internal actual value class ContextMenuStrings actual constructor(actual val value: Int) {
     actual companion object {
-        actual val Cut = ContextMenuStrings(0)
-        actual val Copy = ContextMenuStrings(1)
-        actual val Paste = ContextMenuStrings(2)
-        actual val SelectAll = ContextMenuStrings(3)
-        actual val Autofill = ContextMenuStrings(4)
+        actual inline val Cut: ContextMenuStrings
+            get() = ContextMenuStrings(0)
+
+        actual inline val Copy: ContextMenuStrings
+            get() = ContextMenuStrings(1)
+
+        actual inline val Paste: ContextMenuStrings
+            get() = ContextMenuStrings(2)
+
+        actual inline val SelectAll: ContextMenuStrings
+            get() = ContextMenuStrings(3)
+
+        actual inline val Autofill: ContextMenuStrings
+            get() = ContextMenuStrings(4)
     }
 }
 
 private fun getTranslation(string: ContextMenuStrings, locale: Locale): String {
     val tag = localeTag(language = locale.language, region = locale.region)
-    val translation = translationByLocaleTag.getOrPut(tag) {
-        findTranslation(locale)
-    }
+    val translation = translationByLocaleTag.getOrPut(tag) { findTranslation(locale) }
     return translation[string] ?: error("Missing translation for $string")
 }
 
@@ -55,14 +62,10 @@ internal fun getLocalizedString(string: ContextMenuStrings): String {
     return getTranslation(string, locale)
 }
 
-/**
- * A single translation; should contain all the [ContextMenuStrings].
- */
+/** A single translation; should contain all the [ContextMenuStrings]. */
 internal typealias Translation = Map<ContextMenuStrings, String>
 
-/**
- * Translations we've already loaded, mapped by the locale tag (see [localeTag]).
- */
+/** Translations we've already loaded, mapped by the locale tag (see [localeTag]). */
 private val translationByLocaleTag = mutableMapOf<String, Translation>()
 
 /**
@@ -70,11 +73,12 @@ private val translationByLocaleTag = mutableMapOf<String, Translation>()
  *
  * Note that this is our internal format; this isn't the same as [Locale.toLanguageTag].
  */
-private fun localeTag(language: String, region: String) = when {
-    language == "" -> ""
-    region == "" -> language
-    else -> "${language}_$region"
-}
+private fun localeTag(language: String, region: String) =
+    when {
+        language == "" -> ""
+        region == "" -> language
+        else -> "${language}_$region"
+    }
 
 /**
  * Returns a sequence of locale tags to use as keys to look up the translation for the given locale.
@@ -92,16 +96,14 @@ private fun localeTagChain(locale: Locale) = sequence {
     yield(localeTag("", ""))
 }
 
-/**
- * Finds a [Translation] for the given locale.
- */
+/** Finds a [Translation] for the given locale. */
 private fun findTranslation(locale: Locale): Map<ContextMenuStrings, String> {
     // We don't need to merge translations because each one should contain all the strings.
     return localeTagChain(locale).firstNotNullOf { translationFor(it) }
 }
 
 /**
- * This object is only needed to provide a namespace for the [Translation] provider functions
- * (e.g. [Translations.en]), to avoid polluting the global namespace.
+ * This object is only needed to provide a namespace for the [Translation] provider functions (e.g.
+ * [Translations.en]), to avoid polluting the global namespace.
  */
 internal object Translations

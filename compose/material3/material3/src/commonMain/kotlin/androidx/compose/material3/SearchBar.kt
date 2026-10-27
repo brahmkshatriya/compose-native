@@ -301,7 +301,7 @@ internal fun StyleableSearchBar(
         modifier = modifier,
         shape = styleScope.shape,
         containerColor = styleScope.containerColor,
-        contentColor = contentColorFor(styleScope.containerColor),
+        contentColor = styleScope.contentColor,
         tonalElevation = styleScope.tonalElevation,
         shadowElevation = styleScope.shadowElevation,
     )
@@ -475,6 +475,7 @@ public fun AppBarWithSearch(
         actions = actions,
         shape = shape,
         searchBarContainerColor = colors.searchBarColors.containerColor,
+        searchBarContentColor = contentColorFor(colors.searchBarColors.containerColor),
         scrolledSearchBarContainerColor = colors.scrolledSearchBarContainerColor,
         appBarContainerColor = colors.appBarContainerColor,
         scrolledAppBarContainerColor = colors.scrolledAppBarContainerColor,
@@ -516,6 +517,7 @@ internal fun StyleableAppBarWithSearch(
         actions = actions,
         shape = styleScope.shape,
         searchBarContainerColor = styleScope.searchBarContainerColor,
+        searchBarContentColor = styleScope.searchBarContentColor,
         scrolledSearchBarContainerColor = styleScope.scrolledSearchBarContainerColor,
         appBarContainerColor = styleScope.appBarContainerColor,
         scrolledAppBarContainerColor = styleScope.scrolledAppBarContainerColor,
@@ -545,6 +547,7 @@ private fun AppBarWithSearchImpl(
     actions: @Composable (RowScope.() -> Unit)?,
     shape: Shape,
     searchBarContainerColor: Color,
+    searchBarContentColor: Color,
     scrolledSearchBarContainerColor: Color,
     appBarContainerColor: Color,
     scrolledAppBarContainerColor: Color,
@@ -635,7 +638,7 @@ private fun AppBarWithSearchImpl(
                             .align(Alignment.Center),
                     shape = shape,
                     containerColor = searchBarContainerColor,
-                    contentColor = contentColorFor(searchBarContainerColor),
+                    contentColor = searchBarContentColor,
                     tonalElevation = if (isContainerTransparent) tonalElevation else 0.dp,
                     shadowElevation = if (isContainerTransparent) shadowElevation else 0.dp,
                 )
@@ -688,6 +691,8 @@ private fun AppBarWithSearchImpl(
  *   properties which limit the dialog's size (e.g. [DialogProperties.usePlatformDefaultWidth]) are
  *   ignored.
  * @param content the content of this search bar to display search results below the [inputField].
+ *
+ * @material3expressive
  */
 @Composable
 public fun ExpandedFullScreenContainedSearchBar(
@@ -766,7 +771,7 @@ internal fun StyleableExpandedFullScreenContainedSearchBar(
             modifier = modifier,
             collapsedShape = styleScope.shape,
             containerColor = styleScope.containerColor,
-            contentColor = contentColorFor(styleScope.containerColor),
+            contentColor = styleScope.contentColor,
             tonalElevation = styleScope.tonalElevation,
             shadowElevation = styleScope.shadowElevation,
             windowInsets = windowInsets(),
@@ -883,7 +888,7 @@ internal fun StyleableExpandedFullScreenSearchBar(
             modifier = modifier,
             collapsedShape = styleScope.shape,
             containerColor = styleScope.containerColor,
-            contentColor = contentColorFor(styleScope.containerColor),
+            contentColor = styleScope.contentColor,
             tonalElevation = styleScope.tonalElevation,
             shadowElevation = styleScope.shadowElevation,
             windowInsets = windowInsets(),
@@ -959,6 +964,8 @@ private fun ExpandedFullScreenSearchBarImpl(
  *   properties which limit the dialog's size (e.g. [DialogProperties.usePlatformDefaultWidth]) are
  *   ignored.
  * @param content the content of this search bar to display search results below the [inputField].
+ *
+ * @material3expressive
  */
 @Composable
 public fun ExpandedDockedSearchBarWithGap(
@@ -3014,8 +3021,7 @@ public class SearchBarColors(
 ) {
     @Deprecated(
         message = "Use overload that takes `inputFieldColors`",
-        replaceWith =
-            ReplaceWith("SearchBarColors(containerColor, dividerColor, inputFieldColors)"),
+        replaceWith = ReplaceWith("SearchBarColors(containerColor, dividerColor, inputFieldColors)"),
     )
     public constructor(
         containerColor: Color,
@@ -3669,9 +3675,7 @@ private fun DockedSearchBarLayout(
                     enter =
                         slideIn(
                             animationSpec = slideInSpec,
-                            initialOffset = {
-                                IntOffset(x = 0, y = (-it.height / 2f).roundToInt())
-                            },
+                            initialOffset = { IntOffset(x = 0, y = (-it.height / 2f).roundToInt()) },
                         ),
                     exit =
                         slideOut(
@@ -3742,9 +3746,8 @@ private fun DockedSearchBarLayoutImpl(
                 )
             val looseConstraints = constraints.copy(minWidth = 0, minHeight = 0)
 
-            val inputFieldPlaceables = inputFieldMeasurables.fastMap {
-                it.measure(looseConstraints)
-            }
+            val inputFieldPlaceables =
+                inputFieldMeasurables.fastMap { it.measure(looseConstraints) }
             val inputFieldWidth = inputFieldPlaceables.fastMaxOfOrNull { it.width } ?: 0
             val inputFieldHeight = inputFieldPlaceables.fastMaxOfOrNull { it.height } ?: 0
 
@@ -3783,26 +3786,24 @@ private fun FullScreenSearchBarLayout(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val backEvent by remember { derivedStateOf { predictiveBackState.value } }
-    val firstInProgressValue = remember {
-        mutableStateOf<BackEventProgress.InProgress?>(null)
-    }
-        .apply {
-            when (val event = backEvent) {
-                is BackEventProgress.InProgress -> if (value == null) value = event
-                BackEventProgress.NotRunning -> value = null
-                BackEventProgress.Completed -> Unit
+    val firstInProgressValue =
+        remember { mutableStateOf<BackEventProgress.InProgress?>(null) }
+            .apply {
+                when (val event = backEvent) {
+                    is BackEventProgress.InProgress -> if (value == null) value = event
+                    BackEventProgress.NotRunning -> value = null
+                    BackEventProgress.Completed -> Unit
+                }
             }
-        }
-    val lastInProgressValue = remember {
-        mutableStateOf<BackEventProgress.InProgress?>(null)
-    }
-        .apply {
-            when (val event = backEvent) {
-                is BackEventProgress.InProgress -> value = event
-                BackEventProgress.NotRunning -> value = null
-                BackEventProgress.Completed -> Unit
+    val lastInProgressValue =
+        remember { mutableStateOf<BackEventProgress.InProgress?>(null) }
+            .apply {
+                when (val event = backEvent) {
+                    is BackEventProgress.InProgress -> value = event
+                    BackEventProgress.NotRunning -> value = null
+                    BackEventProgress.Completed -> Unit
+                }
             }
-        }
 
     val density = LocalDensity.current
     val fullScreenShape = SearchBarDefaults.fullScreenShape

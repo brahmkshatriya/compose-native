@@ -76,10 +76,7 @@ class SelectionContainerInteractionTest {
             selectionState.selectedText() == text
         }
 
-        assertEquals(
-            listOf(text),
-            selectionState.selectedTexts.map { it.text },
-        )
+        assertEquals(listOf(text), selectionState.selectedTexts.map { it.text })
     }
 
     @Test
@@ -91,10 +88,7 @@ class SelectionContainerInteractionTest {
 
         selectWordAt(selectionState, offset = 5, word = text)
 
-        assertEquals(
-            listOf(text),
-            selectionState.selectedTexts.map { it.text },
-        )
+        assertEquals(listOf(text), selectionState.selectedTexts.map { it.text })
     }
 
     @Test
@@ -105,10 +99,11 @@ class SelectionContainerInteractionTest {
 
         selectWordAt(selectionState, offset = 6, word = "quick")
 
-        val handles = assertNotNull(
-            selectionHandles(),
-            "expected the selected '${selectionState.selectedText()}' to show handles",
-        )
+        val handles =
+            assertNotNull(
+                selectionHandles(),
+                "expected the selected '${selectionState.selectedText()}' to show handles",
+            )
         assertEquals(
             listOf(TestSelectionHandleAnchor.Left, TestSelectionHandleAnchor.Right),
             listOf(handles.start.info.anchor, handles.end.info.anchor),
@@ -127,7 +122,8 @@ class SelectionContainerInteractionTest {
         findNodeWithTag(FirstTextTag).dragSelectionHandle(TestHandle.SelectionEnd, toOffset = 18)
         waitForIdle()
 
-        // A SelectionContainer publishes no selection to aim a handle drag against, so the edge lands
+        // A SelectionContainer publishes no selection to aim a handle drag against, so the edge
+        // lands
         // only approximately: all that can be asserted is that the selection grew past the word.
         val selectedText = selectionState.selectedText()
         assertTrue(
@@ -159,8 +155,7 @@ class SelectionContainerInteractionTest {
 
             waitUntil("SelectionContainer should extend the selection across lines") {
                 val selectedText = selectionState.selectedText()
-                selectedText.contains("\n") &&
-                    selectedText.substringAfter('\n').isNotEmpty()
+                selectedText.contains("\n") && selectedText.substringAfter('\n').isNotEmpty()
             }
 
             val selectedText = selectionState.selectedText()
@@ -222,15 +217,11 @@ class SelectionContainerInteractionTest {
                         modifier = Modifier.width(SelectableTextWidth).testTag(FirstTextTag),
                     )
                     DisableSelection {
-                        BasicText(
-                            text = "hidden",
-                            modifier = Modifier.width(SelectableTextWidth),
-                        )
+                        BasicText(text = "hidden", modifier = Modifier.width(SelectableTextWidth))
                     }
                     BasicText(
                         text = textAfterDisabled,
-                        modifier =
-                            Modifier.width(SelectableTextWidth).testTag(textAfterDisabledTag),
+                        modifier = Modifier.width(SelectableTextWidth).testTag(textAfterDisabledTag),
                     )
                 }
             }
@@ -263,10 +254,11 @@ class SelectionContainerInteractionTest {
             setSelectionContainerContent(state = selectionState, text = text)
 
             awaitNodeLaidOut(Tag)
-            findNodeWithTag(Tag).openToolbarForLeadingWord(
-                DoubleTapPreparationDelayMillis,
-                ManualDoubleTapIntervalDelayMillis
-            )
+            findNodeWithTag(Tag)
+                .openToolbarForLeadingWord(
+                    DoubleTapPreparationDelayMillis,
+                    ManualDoubleTapIntervalDelayMillis,
+                )
             waitUntil("SelectionContainer should create the expected word selection before Copy") {
                 selectionState.selectedText() == firstWord
             }
@@ -350,7 +342,11 @@ class SelectionContainerInteractionTest {
         }
     }
 
-    private fun UIKitInstrumentedTest.selectWordAt(state: SelectionState, offset: Int, word: String) {
+    private fun UIKitInstrumentedTest.selectWordAt(
+        state: SelectionState,
+        offset: Int,
+        word: String,
+    ) {
         awaitNodeLaidOut(FirstTextTag)
         findNodeWithTag(FirstTextTag).tapCharacter(offset)
         delay(DoubleTapPreparationDelayMillis)
@@ -400,11 +396,12 @@ class SelectionContainerInteractionTest {
     private fun UIKitInstrumentedTest.assertNoContextMenu() {
         assertNull(
             firstNodeOrNull { node ->
-                node.element?.let { it::class.simpleName } == if (available(OS.Ios to OSVersion(16))) {
-                    "_UIEditMenuContainerView"
-                } else {
-                    "UICalloutBar"
-                }
+                node.element?.let { it::class.simpleName } ==
+                    if (available(OS.Ios to OSVersion(16))) {
+                        "_UIEditMenuContainerView"
+                    } else {
+                        "UICalloutBar"
+                    }
             },
             "Expected no SelectionContainer context menu host to be present.",
         )
@@ -413,6 +410,7 @@ class SelectionContainerInteractionTest {
     private fun SelectionState.selectedText(): String =
         selectedTexts.joinToString(separator = "") { it.text }
 
+    @Suppress("ConstPropertyName")
     private companion object {
         private const val Tag = "SelectionContainer"
         private const val FirstTextTag = "SelectionContainerFirstText"

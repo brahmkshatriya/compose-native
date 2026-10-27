@@ -16,10 +16,10 @@
 
 package androidx.compose.ui.window
 
+import androidx.compose.ui.platform.TextEditingDelegate
 import androidx.compose.ui.platform.TextInputPosition
 import androidx.compose.ui.platform.TextInputRange
 import androidx.compose.ui.platform.TextInputStringTokenizer
-import androidx.compose.ui.platform.TextEditingDelegate
 import androidx.compose.ui.platform.caretRectForPosition
 import androidx.compose.ui.platform.selectTextNearCursor
 import androidx.compose.ui.platform.toTextRange
@@ -28,7 +28,6 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.uikit.utils.CMPEditMenuView
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.toCGRect
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.DurationUnit
 import kotlinx.cinterop.CValue
@@ -36,7 +35,6 @@ import kotlinx.cinterop.readValue
 import kotlinx.cinterop.useContents
 import platform.CoreGraphics.CGPoint
 import platform.CoreGraphics.CGRect
-import platform.CoreGraphics.CGRectMake
 import platform.CoreGraphics.CGRectNull
 import platform.CoreGraphics.CGRectZero
 import platform.Foundation.NSComparisonResult
@@ -73,21 +71,26 @@ import platform.UIKit.UIView
 import platform.UIKit.UIWritingToolsBehavior
 import platform.darwin.NSInteger
 
-/**
- * Hidden UIView to interact with iOS Keyboard and TextInput system.
- */
+/** Hidden UIView to interact with iOS Keyboard and TextInput system. */
 internal class ComposeTextInputView(
     private val doubleTapTimeoutMillis: Long,
     // Do not rename to `input`: shadowing the property below makes this view outlive its scene.
     initialInput: TextEditingDelegate,
-) : CMPEditMenuView(frame = CGRectZero.readValue()),
-    UIKeyInputProtocol, UITextInputProtocol {
+) : CMPEditMenuView(frame = CGRectZero.readValue()), UIKeyInputProtocol, UITextInputProtocol {
     private var _inputDelegate: UITextInputDelegateProtocol? = null
     var input: TextEditingDelegate = initialInput
         set(value) {
-            field = value
-            if (!value.isInteractive) {
-                hideTextMenu()
+            if (field != value) {
+                if (isFirstResponder) {
+                    field.onResignFocus()
+                }
+                field = value
+                if (isFirstResponder) {
+                    field?.onFocus()
+                }
+                if (!field.isInteractive) {
+                    hideTextMenu()
+                }
             }
         }
 
@@ -95,6 +98,7 @@ internal class ComposeTextInputView(
 
     override fun becomeFirstResponder(): Boolean =
         if (input.isInteractive) {
+            input.onFocus()
             super.becomeFirstResponder()
         } else {
             false
@@ -125,11 +129,10 @@ internal class ComposeTextInputView(
         paste: (() -> Unit)?,
         select: (() -> Unit)?,
         selectAll: (() -> Unit)?,
-        customActions: List<*>?
+        customActions: List<*>?,
     ) {
-        val patchedSelect = select ?: {
-            this.select()
-        }.takeIf { selectAll != null && showSelectMenu }
+        val patchedSelect =
+            select ?: { this.select() }.takeIf { selectAll != null && showSelectMenu }
 
         super.showEditMenuAtRect(
             targetRect = targetRect,
@@ -160,9 +163,10 @@ internal class ComposeTextInputView(
     }
 
     /**
-     * Inserts a character into the displayed text.
-     * Add the character text to your class’s backing store at the index corresponding to the cursor and redisplay the text.
+     * Inserts a character into the displayed text. Add the character text to your class’s backing
+     * store at the index corresponding to the cursor and redisplay the text.
      * https://developer.apple.com/documentation/uikit/uikeyinput/1614543-inserttext
+     *
      * @param text A string object representing the character typed on the system keyboard.
      */
     override fun insertText(text: String) {
@@ -170,8 +174,8 @@ internal class ComposeTextInputView(
     }
 
     /**
-     * Deletes a character from the displayed text.
-     * Remove the character just before the cursor from your class’s backing store and redisplay the text.
+     * Deletes a character from the displayed text. Remove the character just before the cursor from
+     * your class’s backing store and redisplay the text.
      * https://developer.apple.com/documentation/uikit/uikeyinput/1614572-deletebackward
      */
     override fun deleteBackward() {
@@ -189,6 +193,7 @@ internal class ComposeTextInputView(
     /**
      * Returns the text in the specified range.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614527-text
+     *
      * @param range A range of text in a document.
      * @return A substring of a document that falls within the specified range.
      */
@@ -200,6 +205,7 @@ internal class ComposeTextInputView(
     /**
      * Replaces the text in a document that is in the specified range.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614558-replace
+     *
      * @param range A range of text in a document.
      * @param withText A string to replace the text in range.
      */
@@ -214,10 +220,9 @@ internal class ComposeTextInputView(
     }
 
     /**
-     * The range of selected text in a document.
-     * If the text range has a length, it indicates the currently selected text.
-     * If it has zero length, it indicates the caret (insertion point).
-     * If the text-range object is nil, it indicates that there is no current selection.
+     * The range of selected text in a document. If the text range has a length, it indicates the
+     * currently selected text. If it has zero length, it indicates the caret (insertion point). If
+     * the text-range object is nil, it indicates that there is no current selection.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614541-selectedtextrange
      */
     override fun selectedTextRange(): UITextRange? {
@@ -225,11 +230,10 @@ internal class ComposeTextInputView(
     }
 
     /**
-     * The range of currently marked text in a document.
-     * If there is no marked text, the value of the property is nil.
-     * Marked text is provisionally inserted text that requires user confirmation;
-     * it occurs in multistage text input.
-     * The current selection, which can be a caret or an extended range, always occurs within the marked text.
+     * The range of currently marked text in a document. If there is no marked text, the value of
+     * the property is nil. Marked text is provisionally inserted text that requires user
+     * confirmation; it occurs in multistage text input. The current selection, which can be a caret
+     * or an extended range, always occurs within the marked text.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614489-markedtextrange
      */
     override fun markedTextRange(): UITextRange? {
@@ -245,27 +249,28 @@ internal class ComposeTextInputView(
     }
 
     /**
-     * Inserts the provided text and marks it to indicate that it is part of an active input session.
-     * Setting marked text either replaces the existing marked text or,
-     * if none is present, inserts it in place of the current selection.
+     * Inserts the provided text and marks it to indicate that it is part of an active input
+     * session. Setting marked text either replaces the existing marked text or, if none is present,
+     * inserts it in place of the current selection.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614465-setmarkedtext
+     *
      * @param markedText The text to be marked.
-     * @param selectedRange A range within markedText that indicates the current selection.
-     * This range is always relative to markedText.
+     * @param selectedRange A range within markedText that indicates the current selection. This
+     *   range is always relative to markedText.
      */
     override fun setMarkedText(markedText: String?, selectedRange: CValue<NSRange>) {
-        val relativeTextRange = selectedRange.useContents {
-            val loc = location.toInt()
-            TextRange(loc, loc + length.toInt())
-        }
+        val relativeTextRange =
+            selectedRange.useContents {
+                val loc = location.toInt()
+                TextRange(loc, loc + length.toInt())
+            }
 
         input.setMarkedText(markedText, relativeTextRange)
     }
 
     /**
-     * Unmarks the currently marked text.
-     * After this method is called, the value of markedTextRange is nil.
-     * https://developer.apple.com/documentation/uikit/uitextinput/1614512-unmarktext
+     * Unmarks the currently marked text. After this method is called, the value of markedTextRange
+     * is nil. https://developer.apple.com/documentation/uikit/uitextinput/1614512-unmarktext
      */
     override fun unmarkText() {
         input.unmarkText()
@@ -283,30 +288,30 @@ internal class ComposeTextInputView(
         return TextInputPosition(input.endOfDocument())
     }
 
-    /**
-     * Attention! fromPosition and toPosition may be null
-     */
+    /** Attention! fromPosition and toPosition may be null */
     override fun textRangeFromPosition(
         fromPosition: UITextPosition,
-        toPosition: UITextPosition
+        toPosition: UITextPosition,
     ): UITextRange? {
         val from = (fromPosition as? TextInputPosition)?.position ?: return null
         val to = (toPosition as? TextInputPosition)?.position ?: return null
         return TextInputRange(
             TextInputPosition(minOf(from, to)),
-            TextInputPosition(maxOf(from, to))
+            TextInputPosition(maxOf(from, to)),
         )
     }
 
     /**
      * Attention! position may be null
+     *
      * @param position a custom UITextPosition object that represents a location in a document.
      * @param offset a character offset from position. It can be a positive or negative value.
-     * Offset should be considered as a number of Unicode characters. One Unicode character can contain several bytes.
+     *   Offset should be considered as a number of Unicode characters. One Unicode character can
+     *   contain several bytes.
      */
     override fun positionFromPosition(
         position: UITextPosition,
-        offset: NSInteger
+        offset: NSInteger,
     ): UITextPosition? {
         val p = (position as? TextInputPosition)?.position ?: return null
         return input.positionFromPosition(position = p, offset = offset.toInt())?.let {
@@ -316,17 +321,18 @@ internal class ComposeTextInputView(
 
     private fun positionFromPositionVertical(
         position: UITextPosition,
-        offset: NSInteger
+        offset: NSInteger,
     ): UITextPosition? {
         val p = (position as? TextInputPosition)?.position ?: return null
-        return input.verticalPositionFromPosition(position = p, verticalOffset = offset.toInt())
+        return input
+            .verticalPositionFromPosition(position = p, verticalOffset = offset.toInt())
             ?.let { TextInputPosition(it) }
     }
 
     override fun positionFromPosition(
         position: UITextPosition,
         inDirection: UITextLayoutDirection,
-        offset: NSInteger
+        offset: NSInteger,
     ): UITextPosition? {
         return when (inDirection) {
             UITextLayoutDirectionLeft -> positionFromPosition(position, -offset)
@@ -337,22 +343,21 @@ internal class ComposeTextInputView(
         }
     }
 
-    /**
-     * Attention! position and toPosition may be null
-     */
+    /** Attention! position and toPosition may be null */
     override fun comparePosition(
         position: UITextPosition,
-        toPosition: UITextPosition
+        toPosition: UITextPosition,
     ): NSComparisonResult {
         val from = (position as? TextInputPosition)?.position ?: return NSOrderedSame
         val to = (toPosition as? TextInputPosition)?.position ?: return NSOrderedSame
-        val result = if (from < to) {
-            NSOrderedAscending
-        } else if (from > to) {
-            NSOrderedDescending
-        } else {
-            NSOrderedSame
-        }
+        val result =
+            if (from < to) {
+                NSOrderedAscending
+            } else if (from > to) {
+                NSOrderedDescending
+            } else {
+                NSOrderedSame
+            }
         return result
     }
 
@@ -365,21 +370,22 @@ internal class ComposeTextInputView(
 
     override fun characterOffsetOfPosition(
         position: UITextPosition,
-        withinRange: UITextRange
+        withinRange: UITextRange,
     ): NSInteger = 0L
 
     override fun positionWithinRange(
         range: UITextRange,
-        farthestInDirection: UITextLayoutDirection
+        farthestInDirection: UITextLayoutDirection,
     ): UITextPosition = TextInputPosition(0)
 
     override fun characterRangeByExtendingPosition(
         position: UITextPosition,
-        inDirection: UITextLayoutDirection
+        inDirection: UITextLayoutDirection,
     ): UITextRange? {
         val oldPosition = position as? TextInputPosition ?: return null
-        val newPosition = positionFromPosition(oldPosition, inDirection = inDirection, offset = 1)
-            as? TextInputPosition ?: return null
+        val newPosition =
+            positionFromPosition(oldPosition, inDirection = inDirection, offset = 1)
+                as? TextInputPosition ?: return null
         return if (newPosition.position < oldPosition.position) {
             TextInputRange(newPosition, oldPosition)
         } else {
@@ -389,37 +395,35 @@ internal class ComposeTextInputView(
 
     override fun baseWritingDirectionForPosition(
         position: UITextPosition,
-        inDirection: UITextStorageDirection
+        inDirection: UITextStorageDirection,
     ): NSWritingDirection {
         return NSWritingDirectionNatural
     }
 
     override fun setBaseWritingDirection(
         writingDirection: NSWritingDirection,
-        forRange: UITextRange
+        forRange: UITextRange,
     ) {}
 
-    override fun firstRectForRange(range: UITextRange): CValue<CGRect> =
-        CGRectNull.readValue()
+    override fun firstRectForRange(range: UITextRange): CValue<CGRect> = CGRectNull.readValue()
 
     override fun caretRectForPosition(position: UITextPosition): CValue<CGRect> =
         input.caretRectForPosition(position)
 
-    override fun selectionRectsForRange(range: UITextRange): List<*> =
-        listOf<UITextSelectionRect>()
+    override fun selectionRectsForRange(range: UITextRange): List<*> = listOf<UITextSelectionRect>()
 
     override fun closestPositionToPoint(point: CValue<CGPoint>): UITextPosition? = null
 
     override fun closestPositionToPoint(
         point: CValue<CGPoint>,
-        withinRange: UITextRange
+        withinRange: UITextRange,
     ): UITextPosition? = null
 
     override fun characterRangeAtPoint(point: CValue<CGPoint>): UITextRange? = null
 
     override fun textStylingAtPosition(
         position: UITextPosition,
-        inDirection: UITextStorageDirection
+        inDirection: UITextStorageDirection,
     ): Map<Any?, *> {
         return NSDictionary.dictionary()
     }
@@ -435,12 +439,19 @@ internal class ComposeTextInputView(
     }
 
     override fun inputView(): UIView? = input.inputTraits.inputView()
+
     override fun inputAccessoryView(): UIView? = input.inputTraits.inputAccessoryView()
+
     override fun keyboardType(): UIKeyboardType = input.inputTraits.keyboardType()
+
     override fun keyboardAppearance(): UIKeyboardAppearance = input.inputTraits.keyboardAppearance()
+
     override fun returnKeyType(): UIReturnKeyType = input.inputTraits.returnKeyType()
+
     override fun textContentType(): UITextContentType = input.inputTraits.textContentType()
+
     override fun isSecureTextEntry(): Boolean = input.inputTraits.isSecureTextEntry()
+
     override fun enablesReturnKeyAutomatically(): Boolean =
         input.inputTraits.enablesReturnKeyAutomatically()
 
@@ -456,30 +467,22 @@ internal class ComposeTextInputView(
     override fun writingToolsBehavior(): UIWritingToolsBehavior =
         input.inputTraits.writingToolsBehavior()
 
-    /**
-     * Call when something changes in text data
-     */
+    /** Call when something changes in text data */
     fun textWillChange() {
         _inputDelegate?.textWillChange(this)
     }
 
-    /**
-     * Call when something changes in text data
-     */
+    /** Call when something changes in text data */
     fun textDidChange() {
         _inputDelegate?.textDidChange(this)
     }
 
-    /**
-     * Call when something changes in text data
-     */
+    /** Call when something changes in text data */
     fun selectionWillChange() {
         _inputDelegate?.selectionWillChange(this)
     }
 
-    /**
-     * Call when something changes in text data
-     */
+    /** Call when something changes in text data */
     fun selectionDidChange() {
         _inputDelegate?.selectionDidChange(this)
     }
@@ -495,8 +498,10 @@ internal class ComposeTextInputView(
 
     fun isTextMenuShown() = isEditMenuShown
 
-    private val _tokenizer = TextInputStringTokenizer(textInput = this) {
-        input.textInRange(TextRange(0, input.endOfDocument()))
-    }
+    private val _tokenizer =
+        TextInputStringTokenizer(textInput = this) {
+            input.textInRange(TextRange(0, input.endOfDocument()))
+        }
+
     override fun tokenizer(): UITextInputTokenizerProtocol = _tokenizer
 }

@@ -52,6 +52,8 @@ internal interface TextEditingDelegate {
 
     val inputTraits: SkikoUITextInputTraits
 
+    fun onFocus()
+
     fun onResignFocus()
 
     fun beginFloatingCursor(offset: DpOffset)
@@ -67,16 +69,17 @@ internal interface TextEditingDelegate {
     fun hasText(): Boolean
 
     /**
-     * Inserts a character into the displayed text.
-     * Add the character text to your class’s backing store at the index corresponding to the cursor and redisplay the text.
+     * Inserts a character into the displayed text. Add the character text to your class’s backing
+     * store at the index corresponding to the cursor and redisplay the text.
      * https://developer.apple.com/documentation/uikit/uikeyinput/1614543-inserttext
+     *
      * @param text A string object representing the character typed on the system keyboard.
      */
     fun insertText(text: String)
 
     /**
-     * Deletes a character from the displayed text.
-     * Remove the character just before the cursor from your class’s backing store and redisplay the text.
+     * Deletes a character from the displayed text. Remove the character just before the cursor from
+     * your class’s backing store and redisplay the text.
      * https://developer.apple.com/documentation/uikit/uikeyinput/1614572-deletebackward
      */
     fun deleteBackward()
@@ -88,10 +91,9 @@ internal interface TextEditingDelegate {
     fun endOfDocument(): Int
 
     /**
-     * The range of selected text in a document.
-     * If the text range has a length, it indicates the currently selected text.
-     * If it has zero length, it indicates the caret (insertion point).
-     * If the text-range object is nil, it indicates that there is no current selection.
+     * The range of selected text in a document. If the text range has a length, it indicates the
+     * currently selected text. If it has zero length, it indicates the caret (insertion point). If
+     * the text-range object is nil, it indicates that there is no current selection.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614541-selectedtextrange
      */
     fun getSelectedTextRange(): TextRange?
@@ -103,6 +105,7 @@ internal interface TextEditingDelegate {
     /**
      * Returns the text in the specified range.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614527-text
+     *
      * @param range A range of text in a document.
      * @return A substring of a document that falls within the specified range.
      */
@@ -111,68 +114,68 @@ internal interface TextEditingDelegate {
     /**
      * Replaces the text in a document that is in the specified range.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614558-replace
+     *
      * @param range A range of text in a document.
      * @param text A string to replace the text in range.
      */
     fun replaceRange(range: TextRange, text: String)
 
     /**
-     * Inserts the provided text and marks it to indicate that it is part of an active input session.
-     * Setting marked text either replaces the existing marked text or,
-     * if none is present, inserts it in place of the current selection.
+     * Inserts the provided text and marks it to indicate that it is part of an active input
+     * session. Setting marked text either replaces the existing marked text or, if none is present,
+     * inserts it in place of the current selection.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614465-setmarkedtext
+     *
      * @param markedText The text to be marked.
-     * @param selectedRange A range within markedText that indicates the current selection.
-     * This range is always relative to markedText.
+     * @param selectedRange A range within markedText that indicates the current selection. This
+     *   range is always relative to markedText.
      */
     fun setMarkedText(markedText: String?, selectedRange: TextRange)
 
     /**
-     * The range of currently marked text in a document.
-     * If there is no marked text, the value of the property is nil.
-     * Marked text is provisionally inserted text that requires user confirmation;
-     * it occurs in multistage text input.
-     * The current selection, which can be a caret or an extended range, always occurs within the marked text.
+     * The range of currently marked text in a document. If there is no marked text, the value of
+     * the property is nil. Marked text is provisionally inserted text that requires user
+     * confirmation; it occurs in multistage text input. The current selection, which can be a caret
+     * or an extended range, always occurs within the marked text.
      * https://developer.apple.com/documentation/uikit/uitextinput/1614489-markedtextrange
      */
     fun markedTextRange(): TextRange?
 
     /**
-     * Unmarks the currently marked text.
-     * After this method is called, the value of markedTextRange is nil.
-     * https://developer.apple.com/documentation/uikit/uitextinput/1614512-unmarktext
+     * Unmarks the currently marked text. After this method is called, the value of markedTextRange
+     * is nil. https://developer.apple.com/documentation/uikit/uitextinput/1614512-unmarktext
      */
     fun unmarkText()
 
     /**
-     * Returns the text position at a specified offset from another text position.
-     * Returned value must be in range between 0 and length of text (inclusive).
+     * Returns the text position at a specified offset from another text position. Returned value
+     * must be in range between 0 and length of text (inclusive).
      */
     fun positionFromPosition(position: Int, offset: Int): Int?
 
     /**
-     * Returns the text position at a specified offset from another text position.
-     * Returned value must be in range between 0 and length of the text (inclusive).
+     * Returns the text position at a specified offset from another text position. Returned value
+     * must be in range between 0 and length of the text (inclusive).
      */
     fun verticalPositionFromPosition(position: Int, verticalOffset: Int): Int?
 
     /**
      * Returns the caret rectangle for a given text position.
      * https://developer.apple.com/documentation/uikit/uitextinput/caretrect(for:)
+     *
      * @param position A text position within the document.
-     * @return A rectangle, in dp, that encloses the caret at the specified position, or `null`
-     * if the position is invalid.
+     * @return A rectangle, in dp, that encloses the caret at the specified position, or `null` if
+     *   the position is invalid.
      */
     fun caretDpRectForPosition(position: Int): DpRect?
 }
 
-/**
- * Extension of [TextEditingDelegate] for the Native iOS Text Input path.
- */
+/** Extension of [TextEditingDelegate] for the Native iOS Text Input path. */
 internal interface NativeTextEditingDelegate : TextEditingDelegate {
     /**
      * Returns the selection rectangles that enclose a range of text.
      * https://developer.apple.com/documentation/uikit/uitextinput/selectionrects(for:)
+     *
      * @param range A range of text in the document.
      * @return A list of rectangles, in dp, that tightly bound the visual selection for the range.
      */
@@ -181,6 +184,7 @@ internal interface NativeTextEditingDelegate : TextEditingDelegate {
     /**
      * Returns the first rectangle that encloses a range of text.
      * https://developer.apple.com/documentation/uikit/uitextinput/firstrect(for:)
+     *
      * @param range A range of text in the document.
      * @return The first selection rectangle, in dp, or `null` if the range is invalid or empty.
      */
@@ -189,6 +193,7 @@ internal interface NativeTextEditingDelegate : TextEditingDelegate {
     /**
      * Returns the text position that is closest to the specified point.
      * https://developer.apple.com/documentation/uikit/uitextinput/closestposition(to:)
+     *
      * @param point A point, in dp, in the coordinate space of the text input.
      * @return The position closest to the point, or `null` if none can be determined.
      */
@@ -197,6 +202,7 @@ internal interface NativeTextEditingDelegate : TextEditingDelegate {
     /**
      * Returns the text position that is closest to the specified point within range.
      * https://developer.apple.com/documentation/uikit/uitextinput/closestposition(to:within:)
+     *
      * @param point A point, in dp, in the coordinate space of the text input.
      * @param withinRange A range that limits the returned position.
      * @return The closest position within the given range, or `null` if none exists.
@@ -206,6 +212,7 @@ internal interface NativeTextEditingDelegate : TextEditingDelegate {
     /**
      * Returns the character range at the specified dp point.
      * https://developer.apple.com/documentation/uikit/uitextinput/characterrange(at:)
+     *
      * @param point A point, in dp, in the coordinate space of the text input.
      * @return The range of the character at the point, or `null` if none.
      */
@@ -214,6 +221,7 @@ internal interface NativeTextEditingDelegate : TextEditingDelegate {
     /**
      * Returns the position in a specified direction that is farthest within a given range.
      * https://developer.apple.com/documentation/uikit/uitextinput/position(within:farthestin:)
+     *
      * @param range The limiting range.
      * @param farthestInDirection A direction constant (left, right, up, or down).
      * @return The farthest position within the range in the given direction, or `null` if none.
@@ -227,6 +235,8 @@ internal class DetachedTextEditingDelegate(
     override val inputTraits: SkikoUITextInputTraits = EmptyInputTraits,
 ) : NativeTextEditingDelegate {
     override val isInteractive: Boolean = false
+
+    override fun onFocus() = Unit
 
     override fun onResignFocus() = Unit
 
@@ -281,18 +291,18 @@ internal class DetachedTextEditingDelegate(
 
     override fun positionWithinRange(
         range: TextRange,
-        farthestInDirection: TextLayoutDirection
+        farthestInDirection: TextLayoutDirection,
     ): Int? = null
 }
 
-internal fun NativeTextEditingDelegate.detachedCopy() = DetachedTextEditingDelegate(
-    text = textInRange(TextRange(0, endOfDocument())).orEmpty(),
-    selection = getSelectedTextRange(),
-    inputTraits = inputTraits,
-)
+internal fun NativeTextEditingDelegate.detachedCopy() =
+    DetachedTextEditingDelegate(
+        text = textInRange(TextRange(0, endOfDocument())).orEmpty(),
+        selection = getSelectedTextRange(),
+        inputTraits = inputTraits,
+    )
 
-internal fun TextRange.isValidIn(length: Int): Boolean =
-    start >= 0 && start <= end && end <= length
+internal fun TextRange.isValidIn(length: Int): Boolean = start >= 0 && start <= end && end <= length
 
 internal fun String.movePositionByGraphemes(position: Int, offset: Int): Int? {
     val newPosition = position + offset
@@ -307,11 +317,12 @@ internal fun String.movePositionByGraphemes(position: Int, offset: Int): Int? {
     iterator.setText(this)
 
     repeat(offset.absoluteValue) {
-        val iteratorResult = if (offset > 0) {
-            iterator.following(resultPosition)
-        } else {
-            iterator.preceding(resultPosition)
-        }
+        val iteratorResult =
+            if (offset > 0) {
+                iterator.following(resultPosition)
+            } else {
+                iterator.preceding(resultPosition)
+            }
 
         if (iteratorResult == BreakIterator.DONE) {
             return resultPosition
@@ -341,15 +352,14 @@ internal fun TextEditingDelegate.caretRectForPosition(position: UITextPosition):
 }
 
 /**
- * Computes the range that the "Select" edit action should select for a collapsed caret at
- * [cursor]: The behavior must mimic iOS Select text field action:
- *
- * 1. If a visible (non-whitespace) character immediately follows the caret, the word that
- *    character belongs to is selected.
+ * Computes the range that the "Select" edit action should select for a collapsed caret at [cursor]:
+ * The behavior must mimic iOS Select text field action:
+ * 1. If a visible (non-whitespace) character immediately follows the caret, the word that character
+ *    belongs to is selected.
  * 2. Otherwise, if a word precedes the caret, that word is selected together with any space
  *    characters between the word's end and the caret (newlines excluded).
- * 3. Otherwise (no word precedes the caret), the run of space characters following the caret,
- *    up to the first visible character, is selected (newlines excluded).
+ * 3. Otherwise (no word precedes the caret), the run of space characters following the caret, up to
+ *    the first visible character, is selected (newlines excluded).
  *
  * Returns `null` if there is nothing to select.
  */
@@ -395,7 +405,9 @@ private fun wordStartPreceding(text: String, wordEnd: Int): Int {
 
 private fun Char.isNewlineForSelection(): Boolean =
     NSCharacterSet.newlineCharacterSet.characterIsMember(code.toUShort())
+
 private fun Char.isSelectableSpace(): Boolean = isWhitespace() && !isNewlineForSelection()
+
 private fun Char.isVisibleForSelection(): Boolean = !isWhitespace()
 
 internal class TextInputPosition(val position: Int = 0) : UITextPosition() {
@@ -409,17 +421,14 @@ internal class TextInputPosition(val position: Int = 0) : UITextPosition() {
 }
 
 internal fun TextInputRange(start: Int, end: Int) =
-    TextInputRange(
-        _start = TextInputPosition(start),
-        _end = TextInputPosition(end)
-    )
+    TextInputRange(_start = TextInputPosition(start), _end = TextInputPosition(end))
 
-internal class TextInputRange(
-    val _start: TextInputPosition,
-    val _end: TextInputPosition
-) : UITextRange() {
+internal class TextInputRange(val _start: TextInputPosition, val _end: TextInputPosition) :
+    UITextRange() {
     override fun isEmpty() = (_end.position - _start.position) <= 0
+
     override fun start(): UITextPosition = _start
+
     override fun end(): UITextPosition = _end
 
     override fun description(): String {
@@ -427,95 +436,107 @@ internal class TextInputRange(
     }
 }
 
-// Despite UITextRange being declared as non-null, iOS can still pass null to methods that take a UITextRange parameter.
+// Despite UITextRange being declared as non-null, iOS can still pass null to methods that take a
+// UITextRange parameter.
 internal fun UITextRange.toTextRange(): TextRange? {
     val start = (start() as? TextInputPosition)?.position ?: return null
     val end = (end() as? TextInputPosition)?.position ?: return null
     return TextRange(start, end)
 }
 
-internal fun TextRange.toUITextRange(): UITextRange =
-    TextInputRange(start = start, end = end)
+// A TextRange for a backward selection is reversed. UIKit callers measure a range from its start to
+// its end: the Writing Tools button on a Mac reads a negative length and crashes, and isEmpty()
+// reports a reversed range as empty. Order it before handing it to UIKit.
+internal fun TextRange.toUITextRange(): UITextRange = TextInputRange(start = min, end = max)
 
 internal class TextInputSelectionRect(
     private var _rect: CValue<CGRect>,
     private val _writingDirection: UITextWritingDirection,
     private val _containsStart: Boolean,
     private val _containsEnd: Boolean,
-    private val _isVertical: Boolean
+    private val _isVertical: Boolean,
 ) : UITextSelectionRect() {
     constructor(
         dpRect: DpRect,
         writingDirection: TextDirection,
         containsStart: Boolean,
         containsEnd: Boolean,
-        isVertical: Boolean
+        isVertical: Boolean,
     ) : this(
         dpRect.toCGRect(),
         writingDirection.toUITextWritingDirection(),
         containsStart,
         containsEnd,
-        isVertical
+        isVertical,
     )
 
     override fun rect(): CValue<CGRect> = _rect
+
     override fun writingDirection(): NSWritingDirection = _writingDirection
+
     override fun containsStart(): Boolean = _containsStart
+
     override fun containsEnd(): Boolean = _containsEnd
+
     override fun isVertical(): Boolean = _isVertical
 }
 
-private fun TextDirection.toUITextWritingDirection(): UITextWritingDirection = when (this) {
-    TextDirection.Ltr, TextDirection.ContentOrLtr -> NSWritingDirectionLeftToRight
-    TextDirection.Rtl, TextDirection.ContentOrRtl -> NSWritingDirectionRightToLeft
-    else -> NSWritingDirectionNatural
-}
+private fun TextDirection.toUITextWritingDirection(): UITextWritingDirection =
+    when (this) {
+        TextDirection.Ltr,
+        TextDirection.ContentOrLtr -> NSWritingDirectionLeftToRight
+        TextDirection.Rtl,
+        TextDirection.ContentOrRtl -> NSWritingDirectionRightToLeft
+        else -> NSWritingDirectionNatural
+    }
 
 private fun Char.isNewLineCharacter(): Boolean =
     NSCharacterSet.newlineCharacterSet.characterIsMember(code.toUShort())
 
-internal class TextInputStringTokenizer(
-    textInput: UIResponder,
-    val getString: () -> String?
-): CMPTextInputStringTokenizer(textInput) {
+internal class TextInputStringTokenizer(textInput: UIResponder, val getString: () -> String?) :
+    CMPTextInputStringTokenizer(textInput) {
 
     override fun positionFromPosition(
         position: UITextPosition,
         toBoundary: UITextGranularity,
-        inDirection: UITextDirection
+        inDirection: UITextDirection,
     ): UITextPosition? {
         val textPosition = position as? TextInputPosition ?: return null
-        val isForward = inDirection == UITextStorageDirectionForward ||
-            inDirection == UITextLayoutDirectionRight ||
-            inDirection == UITextLayoutDirectionDown
+        val isForward =
+            inDirection == UITextStorageDirectionForward ||
+                inDirection == UITextLayoutDirectionRight ||
+                inDirection == UITextLayoutDirectionDown
 
-        val iterator = when (toBoundary) {
-            UITextGranularity.UITextGranularityCharacter -> BreakIterator.makeCharacterInstance()
-            UITextGranularity.UITextGranularityWord -> BreakIterator.makeWordInstance()
-            UITextGranularity.UITextGranularitySentence -> BreakIterator.makeSentenceInstance()
-            UITextGranularity.UITextGranularityLine -> BreakIterator.makeLineInstance()
-            UITextGranularity.UITextGranularityParagraph ->
-                return positionFromPositionToParagraphBoundary(position, isForward)
+        val iterator =
+            when (toBoundary) {
+                UITextGranularity.UITextGranularityCharacter ->
+                    BreakIterator.makeCharacterInstance()
+                UITextGranularity.UITextGranularityWord -> BreakIterator.makeWordInstance()
+                UITextGranularity.UITextGranularitySentence -> BreakIterator.makeSentenceInstance()
+                UITextGranularity.UITextGranularityLine -> BreakIterator.makeLineInstance()
+                UITextGranularity.UITextGranularityParagraph ->
+                    return positionFromPositionToParagraphBoundary(position, isForward)
 
-            else -> return super.positionFromPosition(position, toBoundary, inDirection)
-        }
+                else -> return super.positionFromPosition(position, toBoundary, inDirection)
+            }
 
         val string = getString() ?: ""
         iterator.setText(string)
 
-        val iteratorResult = if (isForward) {
-            if (textPosition.position >= string.length - 1) {
-                string.length
+        val iteratorResult =
+            if (isForward) {
+                if (textPosition.position >= string.length - 1) {
+                    string.length
+                } else {
+                    iterator.following(textPosition.position)
+                }
             } else {
-                iterator.following(textPosition.position)
+                if (textPosition.position <= 0) {
+                    0
+                } else {
+                    iterator.preceding(textPosition.position)
+                }
             }
-        } else {
-            if (textPosition.position <= 0) {
-                0
-            } else {
-                iterator.preceding(textPosition.position)
-            }
-        }
 
         return TextInputPosition(iteratorResult)
     }
@@ -523,20 +544,22 @@ internal class TextInputStringTokenizer(
     override fun isPositionAtBoundary(
         position: UITextPosition,
         atBoundary: UITextGranularity,
-        inDirection: UITextDirection
+        inDirection: UITextDirection,
     ): Boolean {
         val textPosition = position as? TextInputPosition ?: return false
 
-        val iterator = when (atBoundary) {
-            UITextGranularity.UITextGranularityCharacter -> BreakIterator.makeCharacterInstance()
-            UITextGranularity.UITextGranularityWord -> BreakIterator.makeWordInstance()
-            UITextGranularity.UITextGranularitySentence -> BreakIterator.makeSentenceInstance()
-            UITextGranularity.UITextGranularityLine -> BreakIterator.makeLineInstance()
-            UITextGranularity.UITextGranularityParagraph -> {
-                return isAtParagraphBoundary(getString() ?: "", textPosition.position)
+        val iterator =
+            when (atBoundary) {
+                UITextGranularity.UITextGranularityCharacter ->
+                    BreakIterator.makeCharacterInstance()
+                UITextGranularity.UITextGranularityWord -> BreakIterator.makeWordInstance()
+                UITextGranularity.UITextGranularitySentence -> BreakIterator.makeSentenceInstance()
+                UITextGranularity.UITextGranularityLine -> BreakIterator.makeLineInstance()
+                UITextGranularity.UITextGranularityParagraph -> {
+                    return isAtParagraphBoundary(getString() ?: "", textPosition.position)
+                }
+                else -> return super.isPositionAtBoundary(position, atBoundary, inDirection)
             }
-            else -> return super.isPositionAtBoundary(position, atBoundary, inDirection)
-        }
 
         iterator.setText(getString() ?: "")
         return iterator.isBoundary(textPosition.position)
@@ -544,7 +567,7 @@ internal class TextInputStringTokenizer(
 
     private fun positionFromPositionToParagraphBoundary(
         position: UITextPosition,
-        isForward: Boolean
+        isForward: Boolean,
     ): UITextPosition? {
         val textPosition = position as? TextInputPosition ?: return null
 

@@ -59,7 +59,6 @@ import platform.UIKit.willMoveToParentViewController
 
 @OptIn(NativeRuntimeApi::class, BetaInteropApi::class)
 class ComposeContainerLifecycleTest {
-    @OptIn(BetaInteropApi::class)
     @Test
     fun composeViewControllerLifecycleResumed() = runBlocking {
         val testViewController = TestContainerViewController()
@@ -69,16 +68,14 @@ class ComposeContainerLifecycleTest {
         var disposedCount = 0
 
         run {
-            val compose = ComposeUIViewController({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                DisposableEffect(Unit) {
-                    launchesCount++
-                    onDispose {
-                        disposedCount++
+            val compose =
+                ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                    DisposableEffect(Unit) {
+                        launchesCount++
+                        onDispose { disposedCount++ }
                     }
                 }
-            } as ComposeHostingViewController
+                    as ComposeHostingViewController
 
             testViewController.showChildViewController(compose)
             compose.waitForIdle()
@@ -102,7 +99,6 @@ class ComposeContainerLifecycleTest {
         appDelegate.cleanUp()
     }
 
-    @OptIn(BetaInteropApi::class)
     @Test
     fun composeViewLifecycleResumed() = runBlocking {
         val testViewController = TestContainerViewController()
@@ -112,16 +108,14 @@ class ComposeContainerLifecycleTest {
         var disposedCount = 0
 
         run {
-            val compose = ComposeUIView({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                DisposableEffect(Unit) {
-                    launchesCount++
-                    onDispose {
-                        disposedCount++
+            val compose =
+                ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
+                    DisposableEffect(Unit) {
+                        launchesCount++
+                        onDispose { disposedCount++ }
                     }
                 }
-            } as ComposeHostingView
+                    as ComposeHostingView
 
             testViewController.showChildView(compose)
             compose.waitForIdle()
@@ -145,7 +139,6 @@ class ComposeContainerLifecycleTest {
         appDelegate.cleanUp()
     }
 
-    @OptIn(BetaInteropApi::class)
     @Test
     fun composeViewControllerViewModelInitialisedAndCleared() = runBlocking {
         val testViewController = TestContainerViewController()
@@ -155,19 +148,13 @@ class ComposeContainerLifecycleTest {
         var disposedCount = 0
 
         run {
-            val compose = ComposeUIViewController({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                val vm = viewModel {
-                    viewModel.also { it.createdCount++ }
+            val compose =
+                ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                    val vm = viewModel { viewModel.also { it.createdCount++ } }
+                    DisposableEffect(Unit) { onDispose { disposedCount++ } }
+                    Text("${vm.hashCode()}")
                 }
-                DisposableEffect(Unit) {
-                    onDispose {
-                        disposedCount++
-                    }
-                }
-                Text("${vm.hashCode()}")
-            } as ComposeHostingViewController
+                    as ComposeHostingViewController
 
             testViewController.showChildViewController(compose)
             compose.waitForIdle()
@@ -192,7 +179,6 @@ class ComposeContainerLifecycleTest {
         }
     }
 
-    @OptIn(BetaInteropApi::class)
     @Test
     fun composeViewViewModelInitialisedAndCleared() = runBlocking {
         val testViewController = TestContainerViewController()
@@ -202,19 +188,13 @@ class ComposeContainerLifecycleTest {
         var disposedCount = 0
 
         run {
-            val compose = ComposeUIView({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                val vm = viewModel {
-                    viewModel.also { it.createdCount++ }
+            val compose =
+                ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
+                    val vm = viewModel { viewModel.also { it.createdCount++ } }
+                    DisposableEffect(Unit) { onDispose { disposedCount++ } }
+                    Text("${vm.hashCode()}")
                 }
-                DisposableEffect(Unit) {
-                    onDispose {
-                        disposedCount++
-                    }
-                }
-                Text("${vm.hashCode()}")
-            } as ComposeHostingView
+                    as ComposeHostingView
 
             testViewController.showChildView(compose)
             compose.waitForIdle()
@@ -239,7 +219,6 @@ class ComposeContainerLifecycleTest {
         }
     }
 
-    @OptIn(BetaInteropApi::class)
     @Test
     fun composeViewControllerSavedStateRestored() = runBlocking {
         val testViewController = TestContainerViewController()
@@ -250,24 +229,20 @@ class ComposeContainerLifecycleTest {
         var rememberedSavableValue = 0
 
         run {
-            val compose = ComposeUIViewController({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                DisposableEffect(Unit) {
-                    onDispose {
-                        disposedCount++
+            val compose =
+                ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
+                    DisposableEffect(Unit) { onDispose { disposedCount++ } }
+                    var value1 by remember { mutableStateOf(0) }
+                    var value2 by rememberSaveable { mutableStateOf(0) }
+                    LaunchedEffect(Unit) {
+                        value1++
+                        value2++
+
+                        rememberedValue = value1
+                        rememberedSavableValue = value2
                     }
                 }
-                var value1 by remember { mutableStateOf(0) }
-                var value2 by rememberSaveable { mutableStateOf(0) }
-                LaunchedEffect(Unit) {
-                    value1++
-                    value2++
-
-                    rememberedValue = value1
-                    rememberedSavableValue = value2
-                }
-            } as ComposeHostingViewController
+                    as ComposeHostingViewController
 
             testViewController.showChildViewController(compose)
             compose.waitForIdle()
@@ -289,8 +264,6 @@ class ComposeContainerLifecycleTest {
         appDelegate.cleanUp()
     }
 
-
-    @OptIn(BetaInteropApi::class)
     @Test
     fun composeViewSavedStateRestored() = runBlocking {
         val testViewController = TestContainerViewController()
@@ -301,24 +274,20 @@ class ComposeContainerLifecycleTest {
         var rememberedSavableValue = 0
 
         run {
-            val compose = ComposeUIView({
-                enforceStrictPlistSanityCheck = false
-            }) {
-                DisposableEffect(Unit) {
-                    onDispose {
-                        disposedCount++
+            val compose =
+                ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
+                    DisposableEffect(Unit) { onDispose { disposedCount++ } }
+                    val value1 = remember { mutableStateOf(0) }
+                    val value2 = rememberSaveable { mutableStateOf(0) }
+                    LaunchedEffect(Unit) {
+                        value1.value++
+                        value2.value++
+
+                        rememberedValue = value1.value
+                        rememberedSavableValue = value2.value
                     }
                 }
-                val value1 = remember { mutableStateOf(0) }
-                val value2 = rememberSaveable { mutableStateOf(0) }
-                LaunchedEffect(Unit) {
-                    value1.value++
-                    value2.value++
-
-                    rememberedValue = value1.value
-                    rememberedSavableValue = value2.value
-                }
-            } as ComposeHostingView
+                    as ComposeHostingView
 
             testViewController.showChildView(compose)
             compose.waitForIdle()
@@ -344,23 +313,23 @@ class ComposeContainerLifecycleTest {
         val duration = 100.milliseconds
         val timeout = 5.seconds
         repeat((timeout / duration).toInt()) {
-            NSRunLoop.currentRunLoop().runUntilDate(
-                limitDate = NSDate.dateWithTimeIntervalSinceNow(
-                    secs = duration.toDouble(DurationUnit.SECONDS)
+            NSRunLoop.currentRunLoop()
+                .runUntilDate(
+                    limitDate =
+                        NSDate.dateWithTimeIntervalSinceNow(
+                            secs = duration.toDouble(DurationUnit.SECONDS)
+                        )
                 )
-            )
-            delay(duration.inWholeMilliseconds)
+            delay(duration)
             if (statement()) return
         }
 
-        val result = autoreleasepool {
-            statement()
-        }
+        val result = autoreleasepool { statement() }
         assertTrue(result)
     }
 }
 
-private class TestContainerViewController: UIViewController(nibName = null, bundle = null) {
+private class TestContainerViewController : UIViewController(nibName = null, bundle = null) {
 
     private var childViewController: UIViewController? = null
     private var childView: UIView? = null
@@ -401,7 +370,7 @@ private class TestContainerViewController: UIViewController(nibName = null, bund
     }
 }
 
-class TestViewModel: androidx.lifecycle.ViewModel() {
+class TestViewModel : androidx.lifecycle.ViewModel() {
     var createdCount = 0
     var cleared = false
 
@@ -409,4 +378,3 @@ class TestViewModel: androidx.lifecycle.ViewModel() {
         cleared = true
     }
 }
-

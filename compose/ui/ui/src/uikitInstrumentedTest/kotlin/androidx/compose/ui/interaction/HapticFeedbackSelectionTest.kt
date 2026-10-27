@@ -65,30 +65,34 @@ class HapticFeedbackSelectionTest {
         fun assertLongPressHapticPerformed() {
             assertTrue(
                 performedHaptics.contains(HapticFeedbackType.LongPress),
-                "Expected LongPress haptic feedback, but got: $performedHaptics"
+                "Expected LongPress haptic feedback, but got: $performedHaptics",
             )
             assertTrue(
                 performedHaptics.none { it != HapticFeedbackType.LongPress },
-                "Expected LongPress haptic feedback, but got: $performedHaptics"
+                "Expected LongPress haptic feedback, but got: $performedHaptics",
             )
         }
 
         fun assertNoHaptic() {
             assertTrue(
                 performedHaptics.isEmpty(),
-                "Did not expect LongPress haptic feedback, but got: $performedHaptics"
+                "Did not expect LongPress haptic feedback, but got: $performedHaptics",
             )
+        }
+    }
+
+    private fun TestHapticFeedback.waitForLongPressPerformed() {
+        UIKitInstrumentedTest.waitUntil("Long press should trigger haptic feedback") {
+            HapticFeedbackType.LongPress in performedHaptics
         }
     }
 
     @Composable
     private fun WithTestHapticFeedback(
         hapticFeedback: TestHapticFeedback,
-        content: @Composable () -> Unit
+        content: @Composable () -> Unit,
     ) {
-        CompositionLocalProvider(LocalHapticFeedback provides hapticFeedback) {
-            content()
-        }
+        CompositionLocalProvider(LocalHapticFeedback provides hapticFeedback) { content() }
     }
 
     @Test
@@ -99,13 +103,12 @@ class HapticFeedbackSelectionTest {
         setContent {
             WithTestHapticFeedback(hapticFeedback) {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = textFieldValue,
                         onValueChange = { textFieldValue = it },
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .testTag("TextField")
-                            .padding(16.dp)
+                        modifier =
+                            Modifier.align(Alignment.Center).testTag("TextField").padding(16.dp),
                     )
                 }
             }
@@ -114,9 +117,8 @@ class HapticFeedbackSelectionTest {
         // Perform long press
         val textFieldNode = findNodeWithTag("TextField")
         val touch = textFieldNode.touchDown()
-        delay(600) // Wait for long press timeout
         touch.hold()
-        delay(100)
+        hapticFeedback.waitForLongPressPerformed()
         touch.up()
 
         waitForIdle()
@@ -134,20 +136,19 @@ class HapticFeedbackSelectionTest {
         setContent {
             WithTestHapticFeedback(hapticFeedback) {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = textFieldValue,
                         onValueChange = { textFieldValue = it },
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .testTag("TextField")
-                            .padding(16.dp)
-                            .focusRequester(focusRequester)
+                        modifier =
+                            Modifier.align(Alignment.Center)
+                                .testTag("TextField")
+                                .padding(16.dp)
+                                .focusRequester(focusRequester),
                     )
                 }
             }
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
         }
 
         // Perform double tap
@@ -170,10 +171,8 @@ class HapticFeedbackSelectionTest {
                 Box(modifier = Modifier.fillMaxSize()) {
                     BasicTextField(
                         state = textFieldState,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .testTag("TextField")
-                            .padding(16.dp)
+                        modifier =
+                            Modifier.align(Alignment.Center).testTag("TextField").padding(16.dp),
                     )
                 }
             }
@@ -182,9 +181,8 @@ class HapticFeedbackSelectionTest {
         // Perform long press
         val textFieldNode = findNodeWithTag("TextField")
         val touch = textFieldNode.touchDown()
-        delay(600) // Wait for long press timeout
         touch.hold()
-        delay(100)
+        hapticFeedback.waitForLongPressPerformed()
         touch.up()
 
         waitForIdle()
@@ -204,17 +202,15 @@ class HapticFeedbackSelectionTest {
                 Box(modifier = Modifier.fillMaxSize()) {
                     BasicTextField(
                         state = textFieldState,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .testTag("TextField")
-                            .padding(16.dp)
-                            .focusRequester(focusRequester)
+                        modifier =
+                            Modifier.align(Alignment.Center)
+                                .testTag("TextField")
+                                .padding(16.dp)
+                                .focusRequester(focusRequester),
                     )
                 }
             }
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
         }
 
         findNodeWithTag("TextField").doubleTap()
@@ -234,14 +230,9 @@ class HapticFeedbackSelectionTest {
             WithTestHapticFeedback(hapticFeedback) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     SelectionContainer(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .testTag("SelectionContainer")
+                        modifier = Modifier.align(Alignment.Center).testTag("SelectionContainer")
                     ) {
-                        Text(
-                            text = "Hello World",
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        Text(text = "Hello World", modifier = Modifier.padding(16.dp))
                     }
                 }
             }
@@ -250,9 +241,8 @@ class HapticFeedbackSelectionTest {
         // Perform long press
         val textNode = findNodeWithTag("SelectionContainer")
         val touch = textNode.touchDown()
-        delay(600) // Wait for long press timeout
         touch.hold()
-        delay(100)
+        hapticFeedback.waitForLongPressPerformed()
         touch.up()
 
         waitForIdle()
@@ -269,14 +259,9 @@ class HapticFeedbackSelectionTest {
             WithTestHapticFeedback(hapticFeedback) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     SelectionContainer(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .testTag("SelectionContainer")
+                        modifier = Modifier.align(Alignment.Center).testTag("SelectionContainer")
                     ) {
-                        Text(
-                            text = "Hello World",
-                            modifier = Modifier.padding(16.dp)
-                        )
+                        Text(text = "Hello World", modifier = Modifier.padding(16.dp))
                     }
                 }
             }

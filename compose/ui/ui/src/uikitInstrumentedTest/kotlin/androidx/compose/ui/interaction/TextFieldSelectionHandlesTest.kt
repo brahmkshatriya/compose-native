@@ -48,47 +48,153 @@ import platform.UIKit.endEditing
 
 class TextFieldSelectionHandlesTest {
 
-    @Test fun selectionHandles_ltr_btf1() = runUIKitInstrumentedTest { checkSelectionHandlesLtr(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun selectionHandles_ltr_btf2() = runUIKitInstrumentedTest { checkSelectionHandlesLtr(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun selectionHandles_ltr_nitiBtf1() = runUIKitInstrumentedTest { checkSelectionHandlesLtr(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun selectionHandles_ltr_nitiBtf2() = runUIKitInstrumentedTest { checkSelectionHandlesLtr(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun selectionHandles_ltr_btf1() = runUIKitInstrumentedTest {
+        checkSelectionHandlesLtr(BasicTextFieldType.V1, nativeInput = false)
+    }
 
-    @Test fun noSelectionHandlesForCaret_ltr_btf1() = runUIKitInstrumentedTest { checkNoSelectionHandlesForCaretLtr(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun noSelectionHandlesForCaret_ltr_btf2() = runUIKitInstrumentedTest { checkNoSelectionHandlesForCaretLtr(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun noSelectionHandlesForCaret_ltr_nitiBtf1() = runUIKitInstrumentedTest { checkNoSelectionHandlesForCaretLtr(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun noSelectionHandlesForCaret_ltr_nitiBtf2() = runUIKitInstrumentedTest { checkNoSelectionHandlesForCaretLtr(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun selectionHandles_ltr_btf2() = runUIKitInstrumentedTest {
+        checkSelectionHandlesLtr(BasicTextFieldType.V2, nativeInput = false)
+    }
 
-    @Test fun dragEndSelectionHandle_ltr_btf1() = runUIKitInstrumentedTest { checkDragEndSelectionHandleLtr(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun dragEndSelectionHandle_ltr_btf2() = runUIKitInstrumentedTest { checkDragEndSelectionHandleLtr(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun dragEndSelectionHandle_ltr_nitiBtf1() = runUIKitInstrumentedTest { checkDragEndSelectionHandleLtr(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun dragEndSelectionHandle_ltr_nitiBtf2() = runUIKitInstrumentedTest { checkDragEndSelectionHandleLtr(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun selectionHandles_ltr_nitiBtf1() = runUIKitInstrumentedTest {
+        checkSelectionHandlesLtr(BasicTextFieldType.V1, nativeInput = true)
+    }
 
-    @Test fun dragStartSelectionHandle_ltr_btf1() = runUIKitInstrumentedTest { checkDragStartSelectionHandleLtr(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun dragStartSelectionHandle_ltr_btf2() = runUIKitInstrumentedTest { checkDragStartSelectionHandleLtr(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun dragStartSelectionHandle_ltr_nitiBtf1() = runUIKitInstrumentedTest { checkDragStartSelectionHandleLtr(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun dragStartSelectionHandle_ltr_nitiBtf2() = runUIKitInstrumentedTest { checkDragStartSelectionHandleLtr(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun selectionHandles_ltr_nitiBtf2() = runUIKitInstrumentedTest {
+        checkSelectionHandlesLtr(BasicTextFieldType.V2, nativeInput = true)
+    }
 
-    @Test fun dragEndSelectionHandleAcrossLines_ltr_btf1() = runUIKitInstrumentedTest { checkDragEndSelectionHandleAcrossLinesLtr(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun dragEndSelectionHandleAcrossLines_ltr_btf2() = runUIKitInstrumentedTest { checkDragEndSelectionHandleAcrossLinesLtr(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun dragEndSelectionHandleAcrossLines_ltr_nitiBtf1() = runUIKitInstrumentedTest { checkDragEndSelectionHandleAcrossLinesLtr(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun dragEndSelectionHandleAcrossLines_ltr_nitiBtf2() = runUIKitInstrumentedTest { checkDragEndSelectionHandleAcrossLinesLtr(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun noSelectionHandlesForCaret_ltr_btf1() = runUIKitInstrumentedTest {
+        checkNoSelectionHandlesForCaretLtr(BasicTextFieldType.V1, nativeInput = false)
+    }
 
-    @Test fun dragStartSelectionHandleAcrossLines_ltr_btf1() = runUIKitInstrumentedTest { checkDragStartSelectionHandleAcrossLinesLtr(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun dragStartSelectionHandleAcrossLines_ltr_btf2() = runUIKitInstrumentedTest { checkDragStartSelectionHandleAcrossLinesLtr(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun dragStartSelectionHandleAcrossLines_ltr_nitiBtf1() = runUIKitInstrumentedTest { checkDragStartSelectionHandleAcrossLinesLtr(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun dragStartSelectionHandleAcrossLines_ltr_nitiBtf2() = runUIKitInstrumentedTest { checkDragStartSelectionHandleAcrossLinesLtr(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun noSelectionHandlesForCaret_ltr_btf2() = runUIKitInstrumentedTest {
+        checkNoSelectionHandlesForCaretLtr(BasicTextFieldType.V2, nativeInput = false)
+    }
 
-    @Test fun crossSelectionHandles_ltr_btf1() = runUIKitInstrumentedTest { checkCrossSelectionHandlesLtr(BasicTextFieldType.V1, nativeInput = false) }
-    @Test fun crossSelectionHandles_ltr_btf2() = runUIKitInstrumentedTest { checkCrossSelectionHandlesLtr(BasicTextFieldType.V2, nativeInput = false) }
-    @Test fun crossSelectionHandles_ltr_nitiBtf1() = runUIKitInstrumentedTest { checkCrossSelectionHandlesLtr(BasicTextFieldType.V1, nativeInput = true) }
-    @Test fun crossSelectionHandles_ltr_nitiBtf2() = runUIKitInstrumentedTest { checkCrossSelectionHandlesLtr(BasicTextFieldType.V2, nativeInput = true) }
+    @Test
+    fun noSelectionHandlesForCaret_ltr_nitiBtf1() = runUIKitInstrumentedTest {
+        checkNoSelectionHandlesForCaretLtr(BasicTextFieldType.V1, nativeInput = true)
+    }
+
+    @Test
+    fun noSelectionHandlesForCaret_ltr_nitiBtf2() = runUIKitInstrumentedTest {
+        checkNoSelectionHandlesForCaretLtr(BasicTextFieldType.V2, nativeInput = true)
+    }
+
+    @Test
+    fun dragEndSelectionHandle_ltr_btf1() = runUIKitInstrumentedTest {
+        checkDragEndSelectionHandleLtr(BasicTextFieldType.V1, nativeInput = false)
+    }
+
+    @Test
+    fun dragEndSelectionHandle_ltr_btf2() = runUIKitInstrumentedTest {
+        checkDragEndSelectionHandleLtr(BasicTextFieldType.V2, nativeInput = false)
+    }
+
+    @Test
+    fun dragEndSelectionHandle_ltr_nitiBtf1() = runUIKitInstrumentedTest {
+        checkDragEndSelectionHandleLtr(BasicTextFieldType.V1, nativeInput = true)
+    }
+
+    @Test
+    fun dragEndSelectionHandle_ltr_nitiBtf2() = runUIKitInstrumentedTest {
+        checkDragEndSelectionHandleLtr(BasicTextFieldType.V2, nativeInput = true)
+    }
+
+    @Test
+    fun dragStartSelectionHandle_ltr_btf1() = runUIKitInstrumentedTest {
+        checkDragStartSelectionHandleLtr(BasicTextFieldType.V1, nativeInput = false)
+    }
+
+    @Test
+    fun dragStartSelectionHandle_ltr_btf2() = runUIKitInstrumentedTest {
+        checkDragStartSelectionHandleLtr(BasicTextFieldType.V2, nativeInput = false)
+    }
+
+    @Test
+    fun dragStartSelectionHandle_ltr_nitiBtf1() = runUIKitInstrumentedTest {
+        checkDragStartSelectionHandleLtr(BasicTextFieldType.V1, nativeInput = true)
+    }
+
+    @Test
+    fun dragStartSelectionHandle_ltr_nitiBtf2() = runUIKitInstrumentedTest {
+        checkDragStartSelectionHandleLtr(BasicTextFieldType.V2, nativeInput = true)
+    }
+
+    @Test
+    fun dragEndSelectionHandleAcrossLines_ltr_btf1() = runUIKitInstrumentedTest {
+        checkDragEndSelectionHandleAcrossLinesLtr(BasicTextFieldType.V1, nativeInput = false)
+    }
+
+    @Test
+    fun dragEndSelectionHandleAcrossLines_ltr_btf2() = runUIKitInstrumentedTest {
+        checkDragEndSelectionHandleAcrossLinesLtr(BasicTextFieldType.V2, nativeInput = false)
+    }
+
+    @Test
+    fun dragEndSelectionHandleAcrossLines_ltr_nitiBtf1() = runUIKitInstrumentedTest {
+        checkDragEndSelectionHandleAcrossLinesLtr(BasicTextFieldType.V1, nativeInput = true)
+    }
+
+    @Test
+    fun dragEndSelectionHandleAcrossLines_ltr_nitiBtf2() = runUIKitInstrumentedTest {
+        checkDragEndSelectionHandleAcrossLinesLtr(BasicTextFieldType.V2, nativeInput = true)
+    }
+
+    @Test
+    fun dragStartSelectionHandleAcrossLines_ltr_btf1() = runUIKitInstrumentedTest {
+        checkDragStartSelectionHandleAcrossLinesLtr(BasicTextFieldType.V1, nativeInput = false)
+    }
+
+    @Test
+    fun dragStartSelectionHandleAcrossLines_ltr_btf2() = runUIKitInstrumentedTest {
+        checkDragStartSelectionHandleAcrossLinesLtr(BasicTextFieldType.V2, nativeInput = false)
+    }
+
+    @Test
+    fun dragStartSelectionHandleAcrossLines_ltr_nitiBtf1() = runUIKitInstrumentedTest {
+        checkDragStartSelectionHandleAcrossLinesLtr(BasicTextFieldType.V1, nativeInput = true)
+    }
+
+    @Test
+    fun dragStartSelectionHandleAcrossLines_ltr_nitiBtf2() = runUIKitInstrumentedTest {
+        checkDragStartSelectionHandleAcrossLinesLtr(BasicTextFieldType.V2, nativeInput = true)
+    }
+
+    @Test
+    fun crossSelectionHandles_ltr_btf1() = runUIKitInstrumentedTest {
+        checkCrossSelectionHandlesLtr(BasicTextFieldType.V1, nativeInput = false)
+    }
+
+    @Test
+    fun crossSelectionHandles_ltr_btf2() = runUIKitInstrumentedTest {
+        checkCrossSelectionHandlesLtr(BasicTextFieldType.V2, nativeInput = false)
+    }
+
+    @Test
+    fun crossSelectionHandles_ltr_nitiBtf1() = runUIKitInstrumentedTest {
+        checkCrossSelectionHandlesLtr(BasicTextFieldType.V1, nativeInput = true)
+    }
+
+    @Test
+    fun crossSelectionHandles_ltr_nitiBtf2() = runUIKitInstrumentedTest {
+        checkCrossSelectionHandlesLtr(BasicTextFieldType.V2, nativeInput = true)
+    }
 }
 
 private const val FIELD_TAG = "textField"
 
 private const val TEXT = "The quick brown fox jumps"
 
-private const val THREE_LINE_TEXT = "The quick brown fox\njumps over the lazy dog\nand back to the kennel"
+private const val THREE_LINE_TEXT =
+    "The quick brown fox\njumps over the lazy dog\nand back to the kennel"
 
 private val SECOND_LINE_BREAK_OFFSET = THREE_LINE_TEXT.lastIndexOf('\n')
 
@@ -101,7 +207,8 @@ private fun String.rangeOf(word: String, from: Int = 0): TextRange {
     return TextRange(start, start + word.length)
 }
 
-private val TextRange.middle: Int get() = (min + max) / 2
+private val TextRange.middle: Int
+    get() = (min + max) / 2
 
 private fun UIKitInstrumentedTest.dropNativeSelection() {
     viewController.view.endEditing(force = true)
@@ -114,12 +221,14 @@ private fun UIKitInstrumentedTest.setUpField(
     btf: BasicTextFieldType,
     nativeInput: Boolean,
 ): () -> TextRange {
-    val ime = KeyboardOptions(
-        // Disable autocorrect/spell-check so the native iOS replacement-suggestion bubble does not
-        // pop over the selection during the test (spellCheckingType defaults to follow this).
-        autoCorrectEnabled = false,
-        platformImeOptions = PlatformImeOptions { usingNativeTextInput(nativeInput) }
-    )
+    val ime =
+        KeyboardOptions(
+            // Disable autocorrect/spell-check so the native iOS replacement-suggestion bubble does
+            // not
+            // pop over the selection during the test (spellCheckingType defaults to follow this).
+            autoCorrectEnabled = false,
+            platformImeOptions = PlatformImeOptions { usingNativeTextInput(nativeInput) },
+        )
     val focusRequester = FocusRequester()
     return when (btf) {
         BasicTextFieldType.V1 -> {
@@ -127,14 +236,15 @@ private fun UIKitInstrumentedTest.setUpField(
             setContent {
                 LaunchedEffect(Unit) { focusRequester.requestFocus() }
                 Box(Modifier.fillMaxSize()) {
+                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = value.value,
                         onValueChange = { value.value = it },
                         keyboardOptions = ime,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .focusRequester(focusRequester)
-                            .testTag(FIELD_TAG),
+                        modifier =
+                            Modifier.align(Alignment.Center)
+                                .focusRequester(focusRequester)
+                                .testTag(FIELD_TAG),
                     )
                 }
             }
@@ -148,10 +258,10 @@ private fun UIKitInstrumentedTest.setUpField(
                     BasicTextField(
                         state = state,
                         keyboardOptions = ime,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .focusRequester(focusRequester)
-                            .testTag(FIELD_TAG),
+                        modifier =
+                            Modifier.align(Alignment.Center)
+                                .focusRequester(focusRequester)
+                                .testTag(FIELD_TAG),
                     )
                 }
             }
@@ -160,17 +270,18 @@ private fun UIKitInstrumentedTest.setUpField(
     }
 }
 
-private fun UIKitInstrumentedTest.checkSelectionHandlesLtr(btf: BasicTextFieldType, nativeInput: Boolean) {
+private fun UIKitInstrumentedTest.checkSelectionHandlesLtr(
+    btf: BasicTextFieldType,
+    nativeInput: Boolean,
+) {
     val selection = setUpField(TEXT, btf, nativeInput)
     val quick = TEXT.rangeOf("quick")
 
     getActiveTextFieldNode().multiTapCharacter(offset = quick.middle, count = 2)
     waitForIdle()
 
-    val handles = assertNotNull(
-        selectionHandles(),
-        "expected 'quick' selected at $quick, got ${selection()}",
-    )
+    val handles =
+        assertNotNull(selectionHandles(), "expected 'quick' selected at $quick, got ${selection()}")
     assertEquals(
         listOf(TestSelectionHandleAnchor.Left, TestSelectionHandleAnchor.Right),
         listOf(handles.start.info.anchor, handles.end.info.anchor),
@@ -179,7 +290,10 @@ private fun UIKitInstrumentedTest.checkSelectionHandlesLtr(btf: BasicTextFieldTy
     if (nativeInput) dropNativeSelection()
 }
 
-private fun UIKitInstrumentedTest.checkNoSelectionHandlesForCaretLtr(btf: BasicTextFieldType, nativeInput: Boolean) {
+private fun UIKitInstrumentedTest.checkNoSelectionHandlesForCaretLtr(
+    btf: BasicTextFieldType,
+    nativeInput: Boolean,
+) {
     val selection = setUpField(TEXT, btf, nativeInput)
 
     getActiveTextFieldNode().tapCharacter(offset = TEXT.rangeOf("quick").middle)
@@ -190,7 +304,10 @@ private fun UIKitInstrumentedTest.checkNoSelectionHandlesForCaretLtr(btf: BasicT
     assertNull(selectionHandles(), "a caret must expose no selection handles")
 }
 
-private fun UIKitInstrumentedTest.checkDragEndSelectionHandleLtr(btf: BasicTextFieldType, nativeInput: Boolean) {
+private fun UIKitInstrumentedTest.checkDragEndSelectionHandleLtr(
+    btf: BasicTextFieldType,
+    nativeInput: Boolean,
+) {
     val selection = setUpField(TEXT, btf, nativeInput)
     val fox = TEXT.rangeOf("fox")
 
@@ -204,12 +321,19 @@ private fun UIKitInstrumentedTest.checkDragEndSelectionHandleLtr(btf: BasicTextF
     waitForIdle()
 
     val after = selection()
-    assertEquals(fox.max, after.max, "end handle drag should extend selection to the end of 'fox': $before -> $after")
+    assertEquals(
+        fox.max,
+        after.max,
+        "end handle drag should extend selection to the end of 'fox': $before -> $after",
+    )
     assertEquals(before.min, after.min, "start should not move: $before -> $after")
     if (nativeInput) dropNativeSelection()
 }
 
-private fun UIKitInstrumentedTest.checkDragStartSelectionHandleLtr(btf: BasicTextFieldType, nativeInput: Boolean) {
+private fun UIKitInstrumentedTest.checkDragStartSelectionHandleLtr(
+    btf: BasicTextFieldType,
+    nativeInput: Boolean,
+) {
     val selection = setUpField(TEXT, btf, nativeInput)
     val quick = TEXT.rangeOf("quick")
 
@@ -223,12 +347,19 @@ private fun UIKitInstrumentedTest.checkDragStartSelectionHandleLtr(btf: BasicTex
     waitForIdle()
 
     val after = selection()
-    assertEquals(quick.min, after.min, "start handle drag should extend selection to the start of 'quick': $before -> $after")
+    assertEquals(
+        quick.min,
+        after.min,
+        "start handle drag should extend selection to the start of 'quick': $before -> $after",
+    )
     assertEquals(before.max, after.max, "end should not move: $before -> $after")
     if (nativeInput) dropNativeSelection()
 }
 
-private fun UIKitInstrumentedTest.checkDragEndSelectionHandleAcrossLinesLtr(btf: BasicTextFieldType, nativeInput: Boolean) {
+private fun UIKitInstrumentedTest.checkDragEndSelectionHandleAcrossLinesLtr(
+    btf: BasicTextFieldType,
+    nativeInput: Boolean,
+) {
     val selection = setUpField(THREE_LINE_TEXT, btf, nativeInput)
     val quick = THREE_LINE_TEXT.rangeOf("quick")
     val theOnLastLine = THREE_LINE_TEXT.rangeOf("the", from = SECOND_LINE_BREAK_OFFSET)
@@ -239,26 +370,36 @@ private fun UIKitInstrumentedTest.checkDragEndSelectionHandleAcrossLinesLtr(btf:
     assertTrue(!before.collapsed, "expected a word selection on the first line, got $before")
 
     // Aimed at a word boundary — word acceleration, see dragSelectionHandle.
-    getActiveTextFieldNode().dragSelectionHandle(TestHandle.SelectionEnd, toOffset = theOnLastLine.max)
+    getActiveTextFieldNode()
+        .dragSelectionHandle(TestHandle.SelectionEnd, toOffset = theOnLastLine.max)
     waitForIdle()
 
     val after = selection()
-    assertEquals(theOnLastLine.max, after.max, "end handle should cross both line breaks and land on the end of 'the': $before -> $after")
+    assertEquals(
+        theOnLastLine.max,
+        after.max,
+        "end handle should cross both line breaks and land on the end of 'the': $before -> $after",
+    )
     assertEquals(before.min, after.min, "start should not move: $before -> $after")
 
     val handles = assertNotNull(selectionHandles(), "expected the selection $after to show handles")
     assertTrue(
-        handles.start.grabPoint.y < getActiveTextFieldNode().characterPosition(offset = quick.middle).y,
+        handles.start.grabPoint.y <
+            getActiveTextFieldNode().characterPosition(offset = quick.middle).y,
         "start handle should sit above the first line, was ${handles.start.grabPoint}",
     )
     assertTrue(
-        handles.end.grabPoint.y > getActiveTextFieldNode().characterPosition(offset = theOnLastLine.max).y,
+        handles.end.grabPoint.y >
+            getActiveTextFieldNode().characterPosition(offset = theOnLastLine.max).y,
         "end handle should sit below the third line, was ${handles.end.grabPoint}",
     )
     if (nativeInput) dropNativeSelection()
 }
 
-private fun UIKitInstrumentedTest.checkDragStartSelectionHandleAcrossLinesLtr(btf: BasicTextFieldType, nativeInput: Boolean) {
+private fun UIKitInstrumentedTest.checkDragStartSelectionHandleAcrossLinesLtr(
+    btf: BasicTextFieldType,
+    nativeInput: Boolean,
+) {
     val selection = setUpField(THREE_LINE_TEXT, btf, nativeInput)
     val quick = THREE_LINE_TEXT.rangeOf("quick")
     val theOnLastLine = THREE_LINE_TEXT.rangeOf("the", from = SECOND_LINE_BREAK_OFFSET)
@@ -273,12 +414,19 @@ private fun UIKitInstrumentedTest.checkDragStartSelectionHandleAcrossLinesLtr(bt
     waitForIdle()
 
     val after = selection()
-    assertEquals(quick.min, after.min, "start handle should cross both line breaks and land on the start of 'quick': $before -> $after")
+    assertEquals(
+        quick.min,
+        after.min,
+        "start handle should cross both line breaks and land on the start of 'quick': $before -> $after",
+    )
     assertEquals(before.max, after.max, "end should not move: $before -> $after")
     if (nativeInput) dropNativeSelection()
 }
 
-private fun UIKitInstrumentedTest.checkCrossSelectionHandlesLtr(btf: BasicTextFieldType, nativeInput: Boolean) {
+private fun UIKitInstrumentedTest.checkCrossSelectionHandlesLtr(
+    btf: BasicTextFieldType,
+    nativeInput: Boolean,
+) {
     val selection = setUpField(TEXT, btf, nativeInput)
 
     getActiveTextFieldNode().multiTapCharacter(offset = TEXT.rangeOf("brown").middle, count = 2)
@@ -287,15 +435,20 @@ private fun UIKitInstrumentedTest.checkCrossSelectionHandlesLtr(btf: BasicTextFi
     assertTrue(!before.collapsed, "expected a word selection, got $before")
 
     // Past the other edge, into the first word of the text.
-    getActiveTextFieldNode().dragSelectionHandle(TestHandle.SelectionEnd, toOffset = TEXT.rangeOf("The").middle)
+    getActiveTextFieldNode()
+        .dragSelectionHandle(TestHandle.SelectionEnd, toOffset = TEXT.rangeOf("The").middle)
     waitForIdle()
 
     val after = selection()
     assertTrue(!after.collapsed, "crossing the handles should keep a selection, got $after")
-    assertTrue(after.min < before.min, "the dragged edge should have crossed the other one: $before -> $after")
+    assertTrue(
+        after.min < before.min,
+        "the dragged edge should have crossed the other one: $before -> $after",
+    )
     assertEquals(before.min, after.max, "the fixed edge moved: $before -> $after")
 
-    val handles = assertNotNull(selectionHandles(), "expected the crossed selection $after to show handles")
+    val handles =
+        assertNotNull(selectionHandles(), "expected the crossed selection $after to show handles")
     assertEquals(
         setOf(TestSelectionHandleAnchor.Left, TestSelectionHandleAnchor.Right),
         setOf(handles.start.info.anchor, handles.end.info.anchor),

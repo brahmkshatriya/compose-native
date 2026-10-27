@@ -50,19 +50,12 @@ class WindowInsetsTest {
     fun composableDoesNotRecomposeOnWindowInsetsImeChange() {
         val imeInsets = mutableStateOf(PlatformInsets.Zero)
 
-        runInternalSkikoComposeUiTest(
-            windowInsets = TestWindowInsets(imeInsets)
-        ) {
+        runInternalSkikoComposeUiTest(windowInsets = TestWindowInsets(imeInsets)) {
             var compositionCount = 0
             var initialTextFieldBounds: Rect
             var textFieldBounds = Rect.Zero
 
-            setContent {
-                TestContent(
-                    { compositionCount++ },
-                    { textFieldBounds = it }
-                )
-            }
+            setContent { TestContent({ compositionCount++ }, { textFieldBounds = it }) }
 
             initialTextFieldBounds = textFieldBounds
 
@@ -72,7 +65,15 @@ class WindowInsetsTest {
             imeInsets.value = PlatformInsets(bottom = 100)
             waitForIdle()
 
-            assertEquals(Rect(initialTextFieldBounds.left, initialTextFieldBounds.top - 100, initialTextFieldBounds.right, initialTextFieldBounds.bottom - 100), textFieldBounds)
+            assertEquals(
+                Rect(
+                    initialTextFieldBounds.left,
+                    initialTextFieldBounds.top - 100,
+                    initialTextFieldBounds.right,
+                    initialTextFieldBounds.bottom - 100,
+                ),
+                textFieldBounds,
+            )
             assertEquals(1, compositionCount)
         }
     }
@@ -81,20 +82,13 @@ class WindowInsetsTest {
     fun composableDoesNotRecomposeOnWindowInsetsImeConsecutiveChange() {
         val imeInsets = mutableStateOf(PlatformInsets.Zero)
 
-        runInternalSkikoComposeUiTest(
-            windowInsets = TestWindowInsets(imeInsets)
-        ) {
+        runInternalSkikoComposeUiTest(windowInsets = TestWindowInsets(imeInsets)) {
             var compositionCount = 0
             val maxBottomInset = 100
             var initialTextFieldBounds: Rect
             var textFieldBounds = Rect.Zero
 
-            setContent {
-                TestContent(
-                    { compositionCount++ },
-                    { textFieldBounds = it }
-                )
-            }
+            setContent { TestContent({ compositionCount++ }, { textFieldBounds = it }) }
 
             initialTextFieldBounds = textFieldBounds
 
@@ -106,7 +100,15 @@ class WindowInsetsTest {
                 waitForIdle()
             }
 
-            assertEquals(Rect(initialTextFieldBounds.left, initialTextFieldBounds.top - maxBottomInset, initialTextFieldBounds.right, initialTextFieldBounds.bottom - maxBottomInset), textFieldBounds)
+            assertEquals(
+                Rect(
+                    initialTextFieldBounds.left,
+                    initialTextFieldBounds.top - maxBottomInset,
+                    initialTextFieldBounds.right,
+                    initialTextFieldBounds.bottom - maxBottomInset,
+                ),
+                textFieldBounds,
+            )
             assertEquals(1, compositionCount)
         }
     }
@@ -115,20 +117,13 @@ class WindowInsetsTest {
     fun composableDoesNotRecomposeOnWindowInsetsImeChangeAndReset() {
         val imeInsets = mutableStateOf(PlatformInsets.Zero)
 
-        runInternalSkikoComposeUiTest(
-            windowInsets = TestWindowInsets(imeInsets)
-        ) {
+        runInternalSkikoComposeUiTest(windowInsets = TestWindowInsets(imeInsets)) {
             var compositionCount = 0
             val maxBottomInset = 100
             var initialTextFieldBounds: Rect
             var textFieldBounds = Rect.Zero
 
-            setContent {
-                TestContent(
-                    { compositionCount++ },
-                    { textFieldBounds = it }
-                )
-            }
+            setContent { TestContent({ compositionCount++ }, { textFieldBounds = it }) }
 
             initialTextFieldBounds = textFieldBounds
 
@@ -151,37 +146,42 @@ class WindowInsetsTest {
     }
 
     /**
-     * Previously a non-optimized implementation of PlatformWindowInsets caused
-     * recomposition when inset values change. Use of a simple object implementation that directly
-     * returns the state value without using lambda getters caused unnecessary recompositions.
-     * This should no longer happen due to window insets implementation using Modifier.Node().
+     * Previously a non-optimized implementation of PlatformWindowInsets caused recomposition when
+     * inset values change. Use of a simple object implementation that directly returns the state
+     * value without using lambda getters caused unnecessary recompositions. This should no longer
+     * happen due to window insets implementation using Modifier.Node().
      */
     @Test
     fun testDirectStateAccessDoesNotCausesRecompositionOnInsetsChange() {
         val imeInsets = mutableStateOf(PlatformInsets.Zero)
 
         runInternalSkikoComposeUiTest(
-            windowInsets = object : PlatformWindowInsets {
-                override val ime: PlatformInsets get() = imeInsets.value
-            }
+            windowInsets =
+                object : PlatformWindowInsets {
+                    override val ime: PlatformInsets
+                        get() = imeInsets.value
+                }
         ) {
             var compositionCount = 0
             var initialTextFieldBounds: Rect
             var textFieldBounds = Rect.Zero
 
-            setContent {
-                TestContent(
-                    { compositionCount++ },
-                    { textFieldBounds = it }
-                )
-            }
+            setContent { TestContent({ compositionCount++ }, { textFieldBounds = it }) }
 
             initialTextFieldBounds = textFieldBounds
 
             imeInsets.value = PlatformInsets(bottom = 100)
             waitForIdle()
 
-            assertEquals(Rect(initialTextFieldBounds.left, initialTextFieldBounds.top - 100, initialTextFieldBounds.right, initialTextFieldBounds.bottom - 100), textFieldBounds)
+            assertEquals(
+                Rect(
+                    initialTextFieldBounds.left,
+                    initialTextFieldBounds.top - 100,
+                    initialTextFieldBounds.right,
+                    initialTextFieldBounds.bottom - 100,
+                ),
+                textFieldBounds,
+            )
             assertEquals(1, compositionCount)
         }
     }
@@ -192,75 +192,85 @@ class WindowInsetsTest {
         var innerBoxRect = Rect.Zero
 
         setContent {
-            Box(Modifier
-                .fillMaxSize()
-                .consumeWindowInsets(WindowInsets(top = 100.dp))
-                .background(Color.Red)
-                .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
+            Box(
+                Modifier.fillMaxSize()
+                    .consumeWindowInsets(WindowInsets(top = 100.dp))
+                    .background(Color.Red)
+                    .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
             ) {
-                Box(Modifier
-                    .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets(top = 101.dp))
-                    .background(Color.Blue)
-                    .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
+                Box(
+                    Modifier.fillMaxSize()
+                        .windowInsetsPadding(WindowInsets(top = 101.dp))
+                        .background(Color.Blue)
+                        .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
                 )
             }
         }
 
-        assertEquals(Rect(outerBoxRect.left, 1f, outerBoxRect.right, outerBoxRect.bottom), innerBoxRect)
+        assertEquals(
+            Rect(outerBoxRect.left, 1f, outerBoxRect.right, outerBoxRect.bottom),
+            innerBoxRect,
+        )
     }
 
     @Test
-    fun testConsumeSystemWindowInsetsWithSystemPadding() = runInternalSkikoComposeUiTest(
-        windowInsets = TestWindowInsets(systemBarsInsets = mutableStateOf(PlatformInsets(top = 100)))
-    ) {
-        var outerBoxRect = Rect.Zero
-        var innerBoxRect = Rect.Zero
+    fun testConsumeSystemWindowInsetsWithSystemPadding() =
+        runInternalSkikoComposeUiTest(
+            windowInsets =
+                TestWindowInsets(systemBarsInsets = mutableStateOf(PlatformInsets(top = 100)))
+        ) {
+            var outerBoxRect = Rect.Zero
+            var innerBoxRect = Rect.Zero
 
-        setContent {
-            Box(Modifier
-                .fillMaxSize()
-                .consumeWindowInsets(WindowInsets.systemBars)
-                .background(Color.Red)
-                .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
-            ) {
-                Box(Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
-                    .background(Color.Blue)
-                    .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
-                )
+            setContent {
+                Box(
+                    Modifier.fillMaxSize()
+                        .consumeWindowInsets(WindowInsets.systemBars)
+                        .background(Color.Red)
+                        .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
+                ) {
+                    Box(
+                        Modifier.fillMaxSize()
+                            .systemBarsPadding()
+                            .background(Color.Blue)
+                            .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
+                    )
+                }
             }
-        }
 
-        assertEquals(outerBoxRect, innerBoxRect)
-    }
+            assertEquals(outerBoxRect, innerBoxRect)
+        }
 
     @Test
-    fun testConsumeWindowInsetsWithSystemPadding() = runInternalSkikoComposeUiTest(
-        windowInsets = TestWindowInsets(systemBarsInsets = mutableStateOf(PlatformInsets(top = 101)))
-    ) {
-        var outerBoxRect = Rect.Zero
-        var innerBoxRect = Rect.Zero
+    fun testConsumeWindowInsetsWithSystemPadding() =
+        runInternalSkikoComposeUiTest(
+            windowInsets =
+                TestWindowInsets(systemBarsInsets = mutableStateOf(PlatformInsets(top = 101)))
+        ) {
+            var outerBoxRect = Rect.Zero
+            var innerBoxRect = Rect.Zero
 
-        setContent {
-            Box(Modifier
-                .fillMaxSize()
-                .consumeWindowInsets(WindowInsets(top = 100.dp))
-                .background(Color.Red)
-                .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
-            ) {
-                Box(Modifier
-                    .fillMaxSize()
-                    .systemBarsPadding()
-                    .background(Color.Blue)
-                    .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
-                )
+            setContent {
+                Box(
+                    Modifier.fillMaxSize()
+                        .consumeWindowInsets(WindowInsets(top = 100.dp))
+                        .background(Color.Red)
+                        .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
+                ) {
+                    Box(
+                        Modifier.fillMaxSize()
+                            .systemBarsPadding()
+                            .background(Color.Blue)
+                            .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
+                    )
+                }
             }
-        }
 
-        assertEquals(Rect(outerBoxRect.left, 1f, outerBoxRect.right, outerBoxRect.bottom), innerBoxRect)
-    }
+            assertEquals(
+                Rect(outerBoxRect.left, 1f, outerBoxRect.right, outerBoxRect.bottom),
+                innerBoxRect,
+            )
+        }
 
     @Test
     fun testConsumeWindowInsetsPaddingOnSystemInsetsChange() {
@@ -273,17 +283,17 @@ class WindowInsetsTest {
             var innerBoxRect = Rect.Zero
 
             setContent {
-                Box(Modifier
-                    .fillMaxSize()
-                    .consumeWindowInsets(WindowInsets(top = 100.dp))
-                    .background(Color.Red)
-                    .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
+                Box(
+                    Modifier.fillMaxSize()
+                        .consumeWindowInsets(WindowInsets(top = 100.dp))
+                        .background(Color.Red)
+                        .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
                 ) {
-                    Box(Modifier
-                        .fillMaxSize()
-                        .systemBarsPadding()
-                        .background(Color.Blue)
-                        .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
+                    Box(
+                        Modifier.fillMaxSize()
+                            .systemBarsPadding()
+                            .background(Color.Blue)
+                            .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
                     )
                 }
             }
@@ -293,7 +303,10 @@ class WindowInsetsTest {
             systemBarsInsets.value = PlatformInsets(top = 101)
             waitForIdle()
 
-            assertEquals(Rect(outerBoxRect.left, 1f, outerBoxRect.right, outerBoxRect.bottom), innerBoxRect)
+            assertEquals(
+                Rect(outerBoxRect.left, 1f, outerBoxRect.right, outerBoxRect.bottom),
+                innerBoxRect,
+            )
         }
     }
 
@@ -309,17 +322,17 @@ class WindowInsetsTest {
             val maxBottomInset = 100
 
             setContent {
-                Box(Modifier
-                    .fillMaxSize()
-                    .consumeWindowInsets(WindowInsets.systemBars)
-                    .background(Color.Red)
-                    .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
+                Box(
+                    Modifier.fillMaxSize()
+                        .consumeWindowInsets(WindowInsets.systemBars)
+                        .background(Color.Red)
+                        .onGloballyPositioned { outerBoxRect = it.boundsInRoot() }
                 ) {
-                    Box(Modifier
-                        .fillMaxSize()
-                        .systemBarsPadding()
-                        .background(Color.Blue)
-                        .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
+                    Box(
+                        Modifier.fillMaxSize()
+                            .systemBarsPadding()
+                            .background(Color.Blue)
+                            .onGloballyPositioned { innerBoxRect = it.boundsInRoot() }
                     )
                 }
             }
@@ -336,17 +349,16 @@ class WindowInsetsTest {
 }
 
 @Composable
-private fun TestContent(
-    onComposition: () -> Unit,
-    onTextFieldPositioned: (Rect) -> Unit
-) {
-    Box(modifier = Modifier.fillMaxSize().imePadding()){
+private fun TestContent(onComposition: () -> Unit, onTextFieldPositioned: (Rect) -> Unit) {
+    Box(modifier = Modifier.fillMaxSize().imePadding()) {
+        @Suppress("DEPRECATION")
         TextField(
             value = "",
             onValueChange = {},
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .onGloballyPositioned { onTextFieldPositioned(it.boundsInRoot()) }
+            modifier =
+                Modifier.align(Alignment.BottomCenter).onGloballyPositioned {
+                    onTextFieldPositioned(it.boundsInRoot())
+                },
         )
         onComposition()
     }
@@ -354,19 +366,24 @@ private fun TestContent(
 
 private fun TestWindowInsets(
     imeInsets: MutableState<PlatformInsets> = mutableStateOf(PlatformInsets.Zero),
-    systemBarsInsets: MutableState<PlatformInsets> = mutableStateOf(PlatformInsets.Zero)
-): PlatformWindowInsets = object : PlatformWindowInsets {
-    override val ime: PlatformInsets get() = PlatformInsets(
-        getBottom = { imeInsets.value.bottom },
-        getTop = { imeInsets.value.top },
-        getLeft = { imeInsets.value.left },
-        getRight = { imeInsets.value.right }
-    )
+    systemBarsInsets: MutableState<PlatformInsets> = mutableStateOf(PlatformInsets.Zero),
+): PlatformWindowInsets =
+    object : PlatformWindowInsets {
+        override val ime: PlatformInsets
+            get() =
+                PlatformInsets(
+                    getBottom = { imeInsets.value.bottom },
+                    getTop = { imeInsets.value.top },
+                    getLeft = { imeInsets.value.left },
+                    getRight = { imeInsets.value.right },
+                )
 
-    override val systemBars: PlatformInsets get() = PlatformInsets(
-        getBottom = { systemBarsInsets.value.bottom },
-        getTop = { systemBarsInsets.value.top },
-        getLeft = { systemBarsInsets.value.left },
-        getRight = { systemBarsInsets.value.right }
-    )
-}
+        override val systemBars: PlatformInsets
+            get() =
+                PlatformInsets(
+                    getBottom = { systemBarsInsets.value.bottom },
+                    getTop = { systemBarsInsets.value.top },
+                    getLeft = { systemBarsInsets.value.left },
+                    getRight = { systemBarsInsets.value.right },
+                )
+    }

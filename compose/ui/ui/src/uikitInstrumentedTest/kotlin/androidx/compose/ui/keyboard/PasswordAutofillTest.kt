@@ -38,6 +38,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSSelectorFromString
@@ -55,10 +56,7 @@ internal class PasswordAutofillTest {
         private const val PASSWORD = "hunter2"
     }
 
-    private data class Config(
-        val useNativeTextInput: Boolean,
-        val useBTF2: Boolean,
-    ) {
+    private data class Config(val useNativeTextInput: Boolean, val useBTF2: Boolean) {
         override fun toString(): String {
             val backend = if (useNativeTextInput) "NativeTextInput" else "ComposeTextInput"
             val generation = if (useBTF2) "BasicTextField2" else "BasicTextField"
@@ -66,27 +64,27 @@ internal class PasswordAutofillTest {
         }
     }
 
-    private val configurations = listOf(
-        Config(useNativeTextInput = false, useBTF2 = false),
-        Config(useNativeTextInput = false, useBTF2 = true),
-        Config(useNativeTextInput = true, useBTF2 = false),
-        Config(useNativeTextInput = true, useBTF2 = true),
-    )
+    private val configurations =
+        listOf(
+            Config(useNativeTextInput = false, useBTF2 = false),
+            Config(useNativeTextInput = false, useBTF2 = true),
+            Config(useNativeTextInput = true, useBTF2 = false),
+            Config(useNativeTextInput = true, useBTF2 = true),
+        )
 
     @Test
     fun testBothCredentialInputViewsAreAttachedWhileOnlyOneIsFocused() =
         runUIKitInstrumentedTest(params = configurations) { config ->
             setCredentialsContent(config)
 
-            val contentTypes = findAllUITextInputViews().map {
-                (it as UITextInputTraitsProtocol).textContentType
-            }
+            val contentTypes =
+                findAllUITextInputViews().map { (it as UITextInputTraitsProtocol).textContentType }
 
             assertEquals(
                 setOf(UITextContentTypeUsername, UITextContentTypePassword),
                 contentTypes.toSet(),
                 "$config: expected a username and a password input view attached at the same time, " +
-                    "got $contentTypes."
+                    "got $contentTypes.",
             )
             assertEquals(2, contentTypes.size, "$config: unexpected number of input views.")
         }
@@ -100,12 +98,12 @@ internal class PasswordAutofillTest {
 
             assertFalse(
                 passwordView.isFirstResponder,
-                "$config: the password field was expected to stay unfocused."
+                "$config: the password field was expected to stay unfocused.",
             )
             assertEquals(
                 PASSWORD,
                 passwordView.textInputDocumentText(),
-                "$config: the unfocused password input view didn't expose its text."
+                "$config: the unfocused password input view didn't expose its text.",
             )
         }
 
@@ -118,27 +116,28 @@ internal class PasswordAutofillTest {
             assertTrue(
                 findUITextInputView(UITextContentTypePassword).isKindOfClass(UITextField),
                 "$config: the secure input view must report itself as a UITextField, otherwise iOS " +
-                    "never offers to save the password."
+                    "never offers to save the password.",
             )
             assertFalse(
                 findUITextInputView(UITextContentTypeUsername).isKindOfClass(UITextField),
-                "$config: only secure input views should masquerade as a UITextField."
+                "$config: only secure input views should masquerade as a UITextField.",
             )
         }
 
-    @OptIn(BetaInteropApi::class, ExperimentalForeignApi::class)
+    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testSecureInputViewTextSelectorReturnsWholeDocument() =
         runUIKitInstrumentedTest(params = configurations) { config ->
             setCredentialsContent(config)
 
-            val text = findUITextInputView(UITextContentTypePassword)
-                .performSelector(NSSelectorFromString("text"))
+            val text =
+                findUITextInputView(UITextContentTypePassword)
+                    .performSelector(NSSelectorFromString("text"))
 
             assertEquals(
                 PASSWORD,
                 text,
-                "$config: -text must return the whole document for a secure input view."
+                "$config: -text must return the whole document for a secure input view.",
             )
         }
 
@@ -153,7 +152,11 @@ internal class PasswordAutofillTest {
                 }
             }
             waitForIdle()
-            assertEquals(2, findAllUITextInputViews().size, "$config: input views weren't attached.")
+            assertEquals(
+                2,
+                findAllUITextInputViews().size,
+                "$config: input views weren't attached.",
+            )
 
             visible.value = false
             waitForIdle()
@@ -163,7 +166,7 @@ internal class PasswordAutofillTest {
             }
         }
 
-    @OptIn(BetaInteropApi::class, ExperimentalForeignApi::class)
+    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testDetachedCredentialViewsStillHoldTheirValues() =
         runUIKitInstrumentedTest(params = configurations) { config ->
@@ -181,22 +184,22 @@ internal class PasswordAutofillTest {
 
             visible.value = false
             waitForIdle()
-            delay(1000)
+            delay(1.seconds)
 
             assertEquals(
                 USERNAME,
                 usernameView.textInputDocumentText(),
-                "$config: the detached username view lost its text."
+                "$config: the detached username view lost its text.",
             )
             assertEquals(
                 PASSWORD,
                 passwordView.textInputDocumentText(),
-                "$config: the detached password view lost its text."
+                "$config: the detached password view lost its text.",
             )
             assertEquals(
                 PASSWORD,
                 passwordView.performSelector(NSSelectorFromString("text")),
-                "$config: -text on the detached password view no longer returns the credential."
+                "$config: -text on the detached password view no longer returns the credential.",
             )
         }
 
@@ -206,9 +209,7 @@ internal class PasswordAutofillTest {
         setContent {
             CredentialFields(config, focusRequester)
 
-            LaunchedEffect(Unit) {
-                focusRequester.requestFocus()
-            }
+            LaunchedEffect(Unit) { focusRequester.requestFocus() }
         }
 
         waitForIdle()
@@ -217,23 +218,25 @@ internal class PasswordAutofillTest {
     @OptIn(ExperimentalComposeUiApi::class)
     @Composable
     private fun CredentialFields(config: Config, focusRequester: FocusRequester?) {
-        val usernameOptions = KeyboardOptions(
-            platformImeOptions = PlatformImeOptions {
-                textContentType(UITextContentTypeUsername)
-                isSecureTextEntry(false)
-                usingNativeTextInput(config.useNativeTextInput)
-            }
-        )
-        val passwordOptions = KeyboardOptions(
-            platformImeOptions = PlatformImeOptions {
-                textContentType(UITextContentTypePassword)
-                isSecureTextEntry(true)
-                usingNativeTextInput(config.useNativeTextInput)
-            }
-        )
-        val usernameModifier = focusRequester
-            ?.let { Modifier.focusRequester(it) }
-            ?: Modifier
+        val usernameOptions =
+            KeyboardOptions(
+                platformImeOptions =
+                    PlatformImeOptions {
+                        textContentType(UITextContentTypeUsername)
+                        isSecureTextEntry(false)
+                        usingNativeTextInput(config.useNativeTextInput)
+                    }
+            )
+        val passwordOptions =
+            KeyboardOptions(
+                platformImeOptions =
+                    PlatformImeOptions {
+                        textContentType(UITextContentTypePassword)
+                        isSecureTextEntry(true)
+                        usingNativeTextInput(config.useNativeTextInput)
+                    }
+            )
+        val usernameModifier = focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier
 
         Column {
             if (config.useBTF2) {
@@ -248,12 +251,14 @@ internal class PasswordAutofillTest {
                     textObfuscationMode = TextObfuscationMode.Hidden,
                 )
             } else {
+                @Suppress("DEPRECATION")
                 BasicTextField(
                     value = USERNAME,
                     onValueChange = {},
                     modifier = usernameModifier,
                     keyboardOptions = usernameOptions,
                 )
+                @Suppress("DEPRECATION")
                 BasicTextField(
                     value = PASSWORD,
                     onValueChange = {},
@@ -265,24 +270,26 @@ internal class PasswordAutofillTest {
     }
 
     private fun UIKitInstrumentedTest.findUITextInputView(contentType: UITextContentType): UIView {
-        val matching = findAllUITextInputViews().filter {
-            (it as UITextInputTraitsProtocol).textContentType == contentType
-        }
+        val matching =
+            findAllUITextInputViews().filter {
+                (it as UITextInputTraitsProtocol).textContentType == contentType
+            }
         assertEquals(
             1,
             matching.size,
             "Expected exactly one text input view with content type $contentType, " +
-                "found ${matching.size}."
+                "found ${matching.size}.",
         )
         return matching.single()
     }
 
     private fun UIView.textInputDocumentText(): String? {
         val input = this as UITextInputProtocol
-        val range = input.textRangeFromPosition(
-            fromPosition = input.beginningOfDocument,
-            toPosition = input.endOfDocument
-        ) ?: return null
+        val range =
+            input.textRangeFromPosition(
+                fromPosition = input.beginningOfDocument,
+                toPosition = input.endOfDocument,
+            ) ?: return null
         return input.textInRange(range)
     }
 }

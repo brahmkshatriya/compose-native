@@ -34,31 +34,35 @@ import org.w3c.dom.HTMLElement
 
 class ComposeWindowLifecycleTest : OnCanvasTests {
     @Test
-    @Ignore // ignored while investigating CI issues: this test opens a new browser window which can be the cause
+    @Ignore // ignored while investigating CI issues: this test opens a new browser window which can
+            // be the cause
     fun allEvents() = runTest {
         val canvas = getCanvas()
         canvas.focus()
 
-        val composeWindow = ComposeWindow(
-            canvas = canvas,
-            rootNode = getShadowRoot(),
-            viewportContainer = document.body!!,
-            layerRoot = document.createElement("div") as HTMLElement,
-            interopContainerElement = document.createElement("div") as HTMLDivElement,
-            a11yContainerElement = null,
-            content = {},
-            configuration = ComposeViewportConfiguration(),
-            state = DefaultWindowState(document.documentElement!!)
-        )
+        val composeWindow =
+            ComposeWindow(
+                htmlCanvas = canvas,
+                rootNode = getShadowRoot(),
+                viewportContainer = document.body!!,
+                layerRoot = document.createElement("div") as HTMLElement,
+                interopContainerElement = document.createElement("div") as HTMLDivElement,
+                a11yContainerElement = null,
+                content = {},
+                configuration = ComposeViewportConfiguration(),
+                state = DefaultWindowState(document.documentElement!!),
+            )
 
         val eventsChannel = Channel<Lifecycle.Event>(10)
 
         val lifecycle = composeWindow.archComponentsOwner.lifecycle
-        lifecycle.addObserver(object : LifecycleEventObserver {
-            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
-                eventsChannel.sendFromScope(event)
+        lifecycle.addObserver(
+            object : LifecycleEventObserver {
+                override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
+                    eventsChannel.sendFromScope(event)
+                }
             }
-        })
+        )
 
         assertEquals(Lifecycle.State.CREATED, eventsChannel.receive().targetState)
         assertEquals(Lifecycle.State.STARTED, eventsChannel.receive().targetState)

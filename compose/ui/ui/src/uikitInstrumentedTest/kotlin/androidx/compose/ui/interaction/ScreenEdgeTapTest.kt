@@ -44,13 +44,17 @@ import kotlin.test.assertTrue
 import platform.UIKit.UITraitEnvironmentLayoutDirectionLeftToRight
 import platform.UIKit.UITraitEnvironmentLayoutDirectionRightToLeft
 
-internal class ScreenEdgeTapInHostingViewTest : ScreenEdgeTapTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
-)
+@Suppress("unused")
+internal class ScreenEdgeTapInHostingViewTest :
+    ScreenEdgeTapTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
+    )
 
-internal class ScreenEdgeTapInHostingViewControllerTest : ScreenEdgeTapTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
-)
+@Suppress("unused")
+internal class ScreenEdgeTapInHostingViewControllerTest :
+    ScreenEdgeTapTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
+    )
 
 internal abstract class ScreenEdgeTapTest(
     private val runUIKitInstrumentedTest: (UIKitInstrumentedTest.() -> Unit) -> Unit
@@ -60,7 +64,7 @@ internal abstract class ScreenEdgeTapTest(
         runRepeatedEdgeTapTest(
             initialLayoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight,
             edge = Edge.Left,
-            expectedMessagePrefix = "left edge taps should reach Compose in LTR"
+            expectedMessagePrefix = "left edge taps should reach Compose in LTR",
         )
     }
 
@@ -69,7 +73,7 @@ internal abstract class ScreenEdgeTapTest(
         runRepeatedEdgeTapTest(
             initialLayoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight,
             edge = Edge.Right,
-            expectedMessagePrefix = "right edge taps should reach Compose in LTR"
+            expectedMessagePrefix = "right edge taps should reach Compose in LTR",
         )
     }
 
@@ -78,7 +82,7 @@ internal abstract class ScreenEdgeTapTest(
         runRepeatedEdgeTapTest(
             initialLayoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft,
             edge = Edge.Left,
-            expectedMessagePrefix = "left edge taps should reach Compose in RTL"
+            expectedMessagePrefix = "left edge taps should reach Compose in RTL",
         )
     }
 
@@ -87,7 +91,7 @@ internal abstract class ScreenEdgeTapTest(
         runRepeatedEdgeTapTest(
             initialLayoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft,
             edge = Edge.Right,
-            expectedMessagePrefix = "right edge taps should reach Compose in RTL"
+            expectedMessagePrefix = "right edge taps should reach Compose in RTL",
         )
     }
 
@@ -103,12 +107,14 @@ internal abstract class ScreenEdgeTapTest(
                 onTapCountChanged = { tapCount = it },
                 onTransitionStateChanged = { transitionState = it },
                 onBackCompletedCountChanged = { backCompletedCount = it },
-                onComposeLayoutDirectionChanged = { composeLayoutDirection = it }
+                onComposeLayoutDirectionChanged = { composeLayoutDirection = it },
             )
         }
 
         waitUntil("tap surface should be ready in LTR") {
-            tapCount == 0 && backCompletedCount == 0 && composeLayoutDirection == LayoutDirection.Ltr
+            tapCount == 0 &&
+                backCompletedCount == 0 &&
+                composeLayoutDirection == LayoutDirection.Ltr
         }
 
         assertRepeatedEdgeTapsTriggerComposeClicks(
@@ -117,7 +123,7 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = "left edge taps should reach Compose before switching to RTL"
+            messagePrefix = "left edge taps should reach Compose before switching to RTL",
         )
         assertRepeatedEdgeTapsTriggerComposeClicks(
             edge = Edge.Right,
@@ -125,7 +131,7 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = "right edge taps should reach Compose before switching to RTL"
+            messagePrefix = "right edge taps should reach Compose before switching to RTL",
         )
 
         setLayoutDirection(UITraitEnvironmentLayoutDirectionRightToLeft)
@@ -140,7 +146,7 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = "left edge taps should still reach Compose after switching to RTL"
+            messagePrefix = "left edge taps should still reach Compose after switching to RTL",
         )
         assertRepeatedEdgeTapsTriggerComposeClicks(
             edge = Edge.Right,
@@ -148,7 +154,7 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = "right edge taps should still reach Compose after switching to RTL"
+            messagePrefix = "right edge taps should still reach Compose after switching to RTL",
         )
     }
 
@@ -164,12 +170,14 @@ internal abstract class ScreenEdgeTapTest(
                 onTapCountChanged = { tapCount = it },
                 onTransitionStateChanged = { transitionState = it },
                 onBackCompletedCountChanged = { backCompletedCount = it },
-                onComposeLayoutDirectionChanged = { composeLayoutDirection = it }
+                onComposeLayoutDirectionChanged = { composeLayoutDirection = it },
             )
         }
 
         waitUntil("tap surface should be ready in RTL") {
-            tapCount == 0 && backCompletedCount == 0 && composeLayoutDirection == LayoutDirection.Rtl
+            tapCount == 0 &&
+                backCompletedCount == 0 &&
+                composeLayoutDirection == LayoutDirection.Rtl
         }
 
         assertRepeatedEdgeTapsTriggerComposeClicks(
@@ -178,7 +186,7 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = "left edge taps should reach Compose before switching to LTR"
+            messagePrefix = "left edge taps should reach Compose before switching to LTR",
         )
         assertRepeatedEdgeTapsTriggerComposeClicks(
             edge = Edge.Right,
@@ -186,7 +194,7 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = "right edge taps should reach Compose before switching to LTR"
+            messagePrefix = "right edge taps should reach Compose before switching to LTR",
         )
 
         setLayoutDirection(UITraitEnvironmentLayoutDirectionLeftToRight)
@@ -201,7 +209,7 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = "left edge taps should still reach Compose after switching to LTR"
+            messagePrefix = "left edge taps should still reach Compose after switching to LTR",
         )
         assertRepeatedEdgeTapsTriggerComposeClicks(
             edge = Edge.Right,
@@ -209,14 +217,14 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = "right edge taps should still reach Compose after switching to LTR"
+            messagePrefix = "right edge taps should still reach Compose after switching to LTR",
         )
     }
 
     private fun UIKitInstrumentedTest.runRepeatedEdgeTapTest(
         initialLayoutDirection: Long,
         edge: Edge,
-        expectedMessagePrefix: String
+        expectedMessagePrefix: String,
     ) {
         var tapCount = -1
         var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
@@ -226,13 +234,11 @@ internal abstract class ScreenEdgeTapTest(
             TapTestContent(
                 onTapCountChanged = { tapCount = it },
                 onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+                onBackCompletedCountChanged = { backCompletedCount = it },
             )
         }
 
-        waitUntil("tap surface should be ready") {
-            tapCount == 0 && backCompletedCount == 0
-        }
+        waitUntil("tap surface should be ready") { tapCount == 0 && backCompletedCount == 0 }
 
         assertRepeatedEdgeTapsTriggerComposeClicks(
             edge = edge,
@@ -240,7 +246,7 @@ internal abstract class ScreenEdgeTapTest(
             currentTapCount = { tapCount },
             currentTransitionState = { transitionState },
             currentBackCompletedCount = { backCompletedCount },
-            messagePrefix = expectedMessagePrefix
+            messagePrefix = expectedMessagePrefix,
         )
     }
 
@@ -250,31 +256,30 @@ internal abstract class ScreenEdgeTapTest(
         currentTapCount: () -> Int,
         currentTransitionState: () -> NavigationEventTransitionState,
         currentBackCompletedCount: () -> Int,
-        messagePrefix: String
+        messagePrefix: String,
     ) {
         val tapPositions = edgeTapPositions(edge)
-        tapPositions.forEach { position ->
-            tapFromEdge(position)
-        }
+        tapPositions.forEach { position -> tapFromEdge(position) }
 
         val expectedTapCount = startingTapCount + tapPositions.size
         waitUntil(
-            "$messagePrefix: " +
-                "expected $expectedTapCount clicks got ${currentTapCount()} clicks"
-        ) { currentTapCount() == expectedTapCount }
+            "$messagePrefix: " + "expected $expectedTapCount clicks got ${currentTapCount()} clicks"
+        ) {
+            currentTapCount() == expectedTapCount
+        }
         assertEquals(
             expectedTapCount,
             currentTapCount(),
-            message = "$messagePrefix: all edge taps should be delivered to Compose"
+            message = "$messagePrefix: all edge taps should be delivered to Compose",
         )
         assertTrue(
             currentTransitionState() is NavigationEventTransitionState.Idle,
-            message = "$messagePrefix: taps should not start back navigation"
+            message = "$messagePrefix: taps should not start back navigation",
         )
         assertEquals(
             0,
             currentBackCompletedCount(),
-            message = "$messagePrefix: taps should not complete back navigation"
+            message = "$messagePrefix: taps should not complete back navigation",
         )
     }
 
@@ -299,19 +304,18 @@ private fun TapTestContent(
     onTapCountChanged: (Int) -> Unit = {},
     onTransitionStateChanged: (NavigationEventTransitionState) -> Unit = {},
     onBackCompletedCountChanged: (Int) -> Unit = {},
-    onComposeLayoutDirectionChanged: (LayoutDirection) -> Unit = {}
+    onComposeLayoutDirectionChanged: (LayoutDirection) -> Unit = {},
 ) {
     var tapCount by remember { mutableIntStateOf(0) }
     var backCompletedCount by remember { mutableIntStateOf(0) }
-    val navigationEventState = rememberNavigationEventState(
-        currentInfo = NavigationEventInfo.None,
-        backInfo = listOf<NavigationEventInfo>(NavigationEventInfo.None)
-    )
+    val navigationEventState =
+        rememberNavigationEventState(
+            currentInfo = NavigationEventInfo.None,
+            backInfo = listOf<NavigationEventInfo>(NavigationEventInfo.None),
+        )
 
     val composeLayoutDirection = LocalLayoutDirection.current
-    SideEffect {
-        onComposeLayoutDirectionChanged(composeLayoutDirection)
-    }
+    SideEffect { onComposeLayoutDirectionChanged(composeLayoutDirection) }
 
     onTapCountChanged(tapCount)
     onTransitionStateChanged(navigationEventState.transitionState)
@@ -319,24 +323,15 @@ private fun TapTestContent(
 
     NavigationBackHandler(
         state = navigationEventState,
-        onBackCompleted = {
-            backCompletedCount += 1
-        }
+        onBackCompleted = { backCompletedCount += 1 },
     )
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(TAP_SURFACE)
-            .clickable {
-                tapCount += 1
-            }
-    )
+    Box(modifier = Modifier.fillMaxSize().testTag(TAP_SURFACE).clickable { tapCount += 1 })
 }
 
 private const val TAP_SURFACE = "tapSurface"
 
 private enum class Edge {
     Left,
-    Right
+    Right,
 }

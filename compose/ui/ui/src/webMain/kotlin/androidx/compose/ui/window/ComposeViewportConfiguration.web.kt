@@ -18,24 +18,32 @@ package androidx.compose.ui.window
 
 import androidx.compose.ui.ComposeUiFlags
 import androidx.compose.ui.isClearFocusOnMouseDownEnabled
+import androidx.compose.ui.platform.FONT_FALLBACK_BASE_URL
 
-/**
- * Configuration of [ComposeViewport] behavior.
- */
+/** Configuration of [ComposeViewport] behavior. */
 class ComposeViewportConfiguration internal constructor() {
 
     /**
-     * Indicates whether accessibility (a11y) is enabled for the associated Compose viewport.
-     * When it's enabled, the Compose Viewport will maintain a DOM tree mirroring the Compose semantics nodes.
-     * That DOM tree is visibly hidden, but reachable by the accessibility tools.
-     * It can be disabled to avoid the overhead of maintaining the DOM tree.
-     * By default, it is set to `true`.
+     * Indicates whether accessibility (a11y) is enabled for the associated Compose viewport. When
+     * it's enabled, the Compose Viewport will maintain a DOM tree mirroring the Compose semantics
+     * nodes. That DOM tree is visibly hidden, but reachable by the accessibility tools. It can be
+     * disabled to avoid the overhead of maintaining the DOM tree. By default, it is set to `true`.
      */
     var isA11YEnabled: Boolean = true
 
     /**
-     * Controls whether a mouse clicks on an unfocused element clears focus.
-     * It's clearing focus on mouse down by default.
+     * Base URL used to download Noto fallback fonts for unresolved glyphs.
+     *
+     * The URL is concatenated directly with each fallback font's relative URL. Set this to `null`
+     * to disable automatic fallback font downloads.
+     *
+     * By default, fonts are downloaded from `fonts.gstatic.com/s/`
+     */
+    var fontFallbackUrl: String? = FONT_FALLBACK_BASE_URL
+
+    /**
+     * Controls whether a mouse clicks on an unfocused element clears focus. It's clearing focus on
+     * mouse down by default.
      */
     var isClearFocusOnMouseDownEnabled: Boolean = ComposeUiFlags.isClearFocusOnMouseDownEnabled
 
@@ -52,16 +60,17 @@ class ComposeViewportConfiguration internal constructor() {
      * ```html
      * <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
      * ```
+     *
      * Without `viewport-fit=cover`, the browser applies safe area padding automatically and all
      * `env(safe-area-inset-*)` variables return `0px`, so insets will always be zero.
      *
      * By default, this is `false` and the scene reports zero insets.
      *
-     * **Scrollable containers:** insets are re-read on `window resize` and keyboard geometry events,
-     * but not on page scroll. If the [composeScene] is inside a scrollable page, its viewport position
-     * changes as the user scrolls, so the insets may become invalid. In that case
-     * it is recommended to disable inset handling entirely (`enableBrowserWindowInsets = false`) and
-     * manage padding manually.
+     * **Scrollable containers:** insets are re-read on `window resize` and keyboard geometry
+     * events, but not on page scroll. If the [composeScene] is inside a scrollable page, its
+     * viewport position changes as the user scrolls, so the insets may become invalid. In that case
+     * it is recommended to disable inset handling entirely (`enableBrowserWindowInsets = false`)
+     * and manage padding manually.
      */
     var enableBrowserWindowInsets: Boolean = false
 }

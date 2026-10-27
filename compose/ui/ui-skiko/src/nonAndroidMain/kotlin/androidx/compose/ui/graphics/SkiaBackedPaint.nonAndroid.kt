@@ -26,9 +26,7 @@ import org.jetbrains.skia.PaintMode as SkPaintMode
 import org.jetbrains.skia.PaintStrokeCap as SkPaintStrokeCap
 import org.jetbrains.skia.PaintStrokeJoin as SkPaintStrokeJoin
 
-/**
- * Convert the [org.jetbrains.skia.Paint] instance into a Compose-compatible Paint
- */
+/** Convert the [org.jetbrains.skia.Paint] instance into a Compose-compatible Paint */
 // TODO: Multiple calls will NOT return the same instance,
 //  consider to replace to `fun Paint(skiaPaint: org.jetbrains.skia.Paint)`
 fun SkPaint.asComposePaint(): Paint = SkiaBackedPaint(this)
@@ -47,9 +45,7 @@ val Paint.skiaPaint: SkPaint
         return internalSkiaPaint
     }
 
-internal class SkiaBackedPaint(
-    val internalSkiaPaint: SkPaint = SkPaint()
-) : Paint {
+internal class SkiaBackedPaint(val internalSkiaPaint: SkPaint = SkPaint()) : Paint {
     @Deprecated(
         message = "Use [Paint.nativePaint] extension instead",
         replaceWith = ReplaceWith("skiaPaint", "androidx.compose.ui.graphics.skiaPaint"),
@@ -99,19 +95,19 @@ internal class SkiaBackedPaint(
             field = value
         }
 
-    override var strokeJoin: StrokeJoin = StrokeJoin.Round
+    override var strokeJoin: StrokeJoin = StrokeJoin.Miter
         set(value) {
             internalSkiaPaint.strokeJoin = value.toSkia()
             field = value
         }
 
-    override var strokeMiterLimit: Float = 0f
+    override var strokeMiterLimit: Float = 4f
         set(value) {
             internalSkiaPaint.strokeMiter = value
             field = value
         }
 
-    override var filterQuality: FilterQuality = FilterQuality.Medium
+    override var filterQuality: FilterQuality = FilterQuality.Low
 
     override var shader: Shader? = null
         set(value) {
@@ -131,23 +127,26 @@ internal class SkiaBackedPaint(
             field = value
         }
 
-    private fun PaintingStyle.toSkia() = when (this) {
-        PaintingStyle.Fill -> SkPaintMode.FILL
-        PaintingStyle.Stroke -> SkPaintMode.STROKE
-        else -> SkPaintMode.FILL
-    }
+    private fun PaintingStyle.toSkia() =
+        when (this) {
+            PaintingStyle.Fill -> SkPaintMode.FILL
+            PaintingStyle.Stroke -> SkPaintMode.STROKE
+            else -> SkPaintMode.FILL
+        }
 
-    private fun StrokeCap.toSkia() = when (this) {
-        StrokeCap.Butt -> SkPaintStrokeCap.BUTT
-        StrokeCap.Round -> SkPaintStrokeCap.ROUND
-        StrokeCap.Square -> SkPaintStrokeCap.SQUARE
-        else -> SkPaintStrokeCap.BUTT
-    }
+    private fun StrokeCap.toSkia() =
+        when (this) {
+            StrokeCap.Butt -> SkPaintStrokeCap.BUTT
+            StrokeCap.Round -> SkPaintStrokeCap.ROUND
+            StrokeCap.Square -> SkPaintStrokeCap.SQUARE
+            else -> SkPaintStrokeCap.BUTT
+        }
 
-    private fun StrokeJoin.toSkia() = when (this) {
-        StrokeJoin.Miter -> SkPaintStrokeJoin.MITER
-        StrokeJoin.Round -> SkPaintStrokeJoin.ROUND
-        StrokeJoin.Bevel -> SkPaintStrokeJoin.BEVEL
-        else -> SkPaintStrokeJoin.MITER
-    }
+    private fun StrokeJoin.toSkia() =
+        when (this) {
+            StrokeJoin.Miter -> SkPaintStrokeJoin.MITER
+            StrokeJoin.Round -> SkPaintStrokeJoin.ROUND
+            StrokeJoin.Bevel -> SkPaintStrokeJoin.BEVEL
+            else -> SkPaintStrokeJoin.MITER
+        }
 }

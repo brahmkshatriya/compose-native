@@ -59,34 +59,33 @@ import androidx.navigationevent.compose.LocalNavigationEventDispatcherOwner
 /**
  * Properties used to customize the behavior of a [Popup].
  *
- * @property focusable Whether the popup is focusable. When true, the popup will receive IME
- * events and key presses, such as when the back button is pressed.
- * @property dismissOnBackPress Whether the popup can be dismissed by pressing the back button
- * on Android or escape key on desktop.
- * If true, pressing the back button will call onDismissRequest. Note that [focusable] must be
- * set to true to receive key events such as the back button - if the popup is not focusable then
- * this property does nothing.
+ * @property focusable Whether the popup is focusable. When true, the popup will receive IME events
+ *   and key presses, such as when the back button is pressed.
+ * @property dismissOnBackPress Whether the popup can be dismissed by pressing the back button on
+ *   Android or escape key on desktop. If true, pressing the back button will call onDismissRequest.
+ *   Note that [focusable] must be set to true to receive key events such as the back button - if
+ *   the popup is not focusable then this property does nothing.
  * @property dismissOnClickOutside Whether the popup can be dismissed by clicking outside the
- * popup's bounds. If true, clicking outside the popup will call onDismissRequest.
+ *   popup's bounds. If true, clicking outside the popup will call onDismissRequest.
  * @property clippingEnabled Whether to allow the popup window to extend beyond the bounds of the
- * screen. By default, the window is clipped to the screen boundaries. Setting this to false will
- * allow windows to be accurately positioned.
- * The default value is true.
+ *   screen. By default, the window is clipped to the screen boundaries. Setting this to false will
+ *   allow windows to be accurately positioned. The default value is true.
  * @property usePlatformDefaultWidth Whether the width of the popup's content should be limited to
- * the platform default, which is smaller than the screen width.
+ *   the platform default, which is smaller than the screen width.
  * @property usePlatformInsets Whether the width of the popup's content should be limited by
- * platform insets.
+ *   platform insets.
  */
 @Immutable
-actual class PopupProperties @ExperimentalComposeUiApi constructor(
+actual class PopupProperties
+@ExperimentalComposeUiApi
+constructor(
     actual val focusable: Boolean = false,
     actual val dismissOnBackPress: Boolean = true,
     actual val dismissOnClickOutside: Boolean = true,
     actual val clippingEnabled: Boolean = true,
     actual val usePlatformDefaultWidth: Boolean = false,
     val usePlatformInsets: Boolean = true,
-    @property:ExperimentalComposeUiApi
-    val consumePointerInputOutside: Boolean = focusable,
+    @property:ExperimentalComposeUiApi val consumePointerInputOutside: Boolean = focusable,
 ) {
     constructor(
         focusable: Boolean = false,
@@ -95,7 +94,7 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
         clippingEnabled: Boolean = true,
         usePlatformDefaultWidth: Boolean = false,
         usePlatformInsets: Boolean = true,
-    ): this(
+    ) : this(
         focusable = focusable,
         dismissOnBackPress = dismissOnBackPress,
         dismissOnClickOutside = dismissOnClickOutside,
@@ -110,8 +109,8 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
         dismissOnBackPress: Boolean,
         dismissOnClickOutside: Boolean,
         clippingEnabled: Boolean,
-        usePlatformDefaultWidth: Boolean
-    ): this(
+        usePlatformDefaultWidth: Boolean,
+    ) : this(
         focusable = focusable,
         dismissOnBackPress = dismissOnBackPress,
         dismissOnClickOutside = dismissOnClickOutside,
@@ -167,34 +166,34 @@ actual class PopupProperties @ExperimentalComposeUiApi constructor(
 /**
  * Opens a popup with the given content.
  *
- * The popup is positioned relative to its parent, using the [alignment] and [offset].
- * The popup is visible as long as it is part of the composition hierarchy.
+ * The popup is positioned relative to its parent, using the [alignment] and [offset]. The popup is
+ * visible as long as it is part of the composition hierarchy.
  *
  * @sample androidx.compose.ui.samples.PopupSample
- *
  * @param alignment The alignment relative to the parent.
  * @param offset An offset from the original aligned position of the popup. Offset respects the
- * Ltr/Rtl context, thus in Ltr it will be added to the original aligned position and in Rtl it
- * will be subtracted from it.
+ *   Ltr/Rtl context, thus in Ltr it will be added to the original aligned position and in Rtl it
+ *   will be subtracted from it.
  * @param focusable Indicates if the popup can grab the focus.
  * @param onDismissRequest Executes when the user clicks outside the popup.
  * @param onPreviewKeyEvent This callback is invoked when the user interacts with the hardware
- * keyboard. It gives ancestors of a focused component the chance to intercept a [KeyEvent].
- * Return true to stop propagation of this event. If you return false, the key event will be
- * sent to this [onPreviewKeyEvent]'s child. If none of the children consume the event,
- * it will be sent back up to the root using the onKeyEvent callback.
- * @param onKeyEvent This callback is invoked when the user interacts with the hardware
- * keyboard. While implementing this callback, return true to stop propagation of this event.
- * If you return false, the key event will be sent to this [onKeyEvent]'s parent.
+ *   keyboard. It gives ancestors of a focused component the chance to intercept a [KeyEvent].
+ *   Return true to stop propagation of this event. If you return false, the key event will be sent
+ *   to this [onPreviewKeyEvent]'s child. If none of the children consume the event, it will be sent
+ *   back up to the root using the onKeyEvent callback.
+ * @param onKeyEvent This callback is invoked when the user interacts with the hardware keyboard.
+ *   While implementing this callback, return true to stop propagation of this event. If you return
+ *   false, the key event will be sent to this [onKeyEvent]'s parent.
  * @param content The content to be displayed inside the popup.
  */
 @Deprecated(
     message = "Replaced by Popup with properties parameter",
-    replaceWith = ReplaceWith(
-        "Popup(alignment, offset, onDismissRequest, " +
-            "androidx.compose.ui.window.PopupProperties(focusable = focusable), " +
-            "onPreviewKeyEvent, onKeyEvent, content)"
-    ),
+    replaceWith =
+        ReplaceWith(
+            "Popup(alignment, offset, onDismissRequest, " +
+                "androidx.compose.ui.window.PopupProperties(focusable = focusable), " +
+                "onPreviewKeyEvent, onKeyEvent, content)"
+        ),
     level = DeprecationLevel.ERROR,
 )
 @Composable
@@ -205,21 +204,22 @@ fun Popup(
     onDismissRequest: (() -> Unit)? = null,
     onPreviewKeyEvent: ((KeyEvent) -> Boolean) = { false },
     onKeyEvent: ((KeyEvent) -> Boolean) = { false },
-    content: @Composable () -> Unit
-) = Popup(
-    alignment = alignment,
-    offset = offset,
-    onDismissRequest = onDismissRequest,
-    properties = PopupProperties(
-        focusable = focusable,
-        dismissOnBackPress = true,
-        dismissOnClickOutside = focusable
-
-    ),
-    onPreviewKeyEvent = onPreviewKeyEvent,
-    onKeyEvent = onKeyEvent,
-    content = content
-)
+    content: @Composable () -> Unit,
+) =
+    Popup(
+        alignment = alignment,
+        offset = offset,
+        onDismissRequest = onDismissRequest,
+        properties =
+            PopupProperties(
+                focusable = focusable,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = focusable,
+            ),
+        onPreviewKeyEvent = onPreviewKeyEvent,
+        onKeyEvent = onKeyEvent,
+        content = content,
+    )
 
 /**
  * Opens a popup with the given content.
@@ -227,27 +227,27 @@ fun Popup(
  * The popup is positioned using a custom [popupPositionProvider].
  *
  * @sample androidx.compose.ui.samples.PopupSample
- *
  * @param popupPositionProvider Provides the screen position of the popup.
  * @param onDismissRequest Executes when the user clicks outside the popup.
  * @param focusable Indicates if the popup can grab the focus.
  * @param onPreviewKeyEvent This callback is invoked when the user interacts with the hardware
- * keyboard. It gives ancestors of a focused component the chance to intercept a [KeyEvent].
- * Return true to stop propagation of this event. If you return false, the key event will be
- * sent to this [onPreviewKeyEvent]'s child. If none of the children consume the event,
- * it will be sent back up to the root using the onKeyEvent callback.
- * @param onKeyEvent This callback is invoked when the user interacts with the hardware
- * keyboard. While implementing this callback, return true to stop propagation of this event.
- * If you return false, the key event will be sent to this [onKeyEvent]'s parent.
+ *   keyboard. It gives ancestors of a focused component the chance to intercept a [KeyEvent].
+ *   Return true to stop propagation of this event. If you return false, the key event will be sent
+ *   to this [onPreviewKeyEvent]'s child. If none of the children consume the event, it will be sent
+ *   back up to the root using the onKeyEvent callback.
+ * @param onKeyEvent This callback is invoked when the user interacts with the hardware keyboard.
+ *   While implementing this callback, return true to stop propagation of this event. If you return
+ *   false, the key event will be sent to this [onKeyEvent]'s parent.
  * @param content The content to be displayed inside the popup.
  */
 @Deprecated(
     message = "Replaced by Popup with properties parameter",
-    replaceWith = ReplaceWith(
-        "Popup(popupPositionProvider, onDismissRequest, " +
-            "androidx.compose.ui.window.PopupProperties(focusable = focusable), " +
-            "onPreviewKeyEvent, onKeyEvent, content)"
-    ),
+    replaceWith =
+        ReplaceWith(
+            "Popup(popupPositionProvider, onDismissRequest, " +
+                "androidx.compose.ui.window.PopupProperties(focusable = focusable), " +
+                "onPreviewKeyEvent, onKeyEvent, content)"
+        ),
     level = DeprecationLevel.ERROR,
 )
 @Composable
@@ -257,37 +257,37 @@ fun Popup(
     onPreviewKeyEvent: ((KeyEvent) -> Boolean) = { false },
     onKeyEvent: ((KeyEvent) -> Boolean) = { false },
     focusable: Boolean = false,
-    content: @Composable () -> Unit
-) = Popup(
-    popupPositionProvider = popupPositionProvider,
-    onDismissRequest = onDismissRequest,
-    properties = PopupProperties(
-        focusable = focusable,
-        dismissOnBackPress = true,
-        dismissOnClickOutside = focusable
-
-    ),
-    onPreviewKeyEvent = onPreviewKeyEvent,
-    onKeyEvent = onKeyEvent,
-    content = content
-)
+    content: @Composable () -> Unit,
+) =
+    Popup(
+        popupPositionProvider = popupPositionProvider,
+        onDismissRequest = onDismissRequest,
+        properties =
+            PopupProperties(
+                focusable = focusable,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = focusable,
+            ),
+        onPreviewKeyEvent = onPreviewKeyEvent,
+        onKeyEvent = onKeyEvent,
+        content = content,
+    )
 
 /**
  * Opens a popup with the given content.
  *
- * A popup is a floating container that appears on top of the current activity.
- * It is especially useful for non-modal UI surfaces that remain hidden until they
- * are needed, for example floating menus like Cut/Copy/Paste.
+ * A popup is a floating container that appears on top of the current activity. It is especially
+ * useful for non-modal UI surfaces that remain hidden until they are needed, for example floating
+ * menus like Cut/Copy/Paste.
  *
- * The popup is positioned relative to its parent, using the [alignment] and [offset].
- * The popup is visible as long as it is part of the composition hierarchy.
+ * The popup is positioned relative to its parent, using the [alignment] and [offset]. The popup is
+ * visible as long as it is part of the composition hierarchy.
  *
  * @sample androidx.compose.ui.samples.PopupSample
- *
  * @param alignment The alignment relative to the parent.
  * @param offset An offset from the original aligned position of the popup. Offset respects the
- * Ltr/Rtl context, thus in Ltr it will be added to the original aligned position and in Rtl it
- * will be subtracted from it.
+ *   Ltr/Rtl context, thus in Ltr it will be added to the original aligned position and in Rtl it
+ *   will be subtracted from it.
  * @param onDismissRequest Executes when the user clicks outside the popup.
  * @param properties [PopupProperties] for further customization of this popup's behavior.
  * @param content The content to be displayed inside the popup.
@@ -298,16 +298,17 @@ actual fun Popup(
     offset: IntOffset,
     onDismissRequest: (() -> Unit)?,
     properties: PopupProperties,
-    content: @Composable () -> Unit
-): Unit = Popup(
-    alignment = alignment,
-    offset = offset,
-    onDismissRequest = onDismissRequest,
-    properties = properties,
-    onPreviewKeyEvent = null,
-    onKeyEvent = null,
-    content = content
-)
+    content: @Composable () -> Unit,
+): Unit =
+    Popup(
+        alignment = alignment,
+        offset = offset,
+        onDismissRequest = onDismissRequest,
+        properties = properties,
+        onPreviewKeyEvent = null,
+        onKeyEvent = null,
+        content = content,
+    )
 
 /**
  * Opens a popup with the given content.
@@ -315,7 +316,6 @@ actual fun Popup(
  * The popup is positioned using a custom [popupPositionProvider].
  *
  * @sample androidx.compose.ui.samples.PopupSample
- *
  * @param popupPositionProvider Provides the screen position of the popup.
  * @param onDismissRequest Executes when the user clicks outside the popup.
  * @param properties [PopupProperties] for further customization of this popup's behavior.
@@ -326,42 +326,42 @@ actual fun Popup(
     popupPositionProvider: PopupPositionProvider,
     onDismissRequest: (() -> Unit)?,
     properties: PopupProperties,
-    content: @Composable () -> Unit
-): Unit = Popup(
-    popupPositionProvider = popupPositionProvider,
-    onDismissRequest = onDismissRequest,
-    properties = properties,
-    onPreviewKeyEvent = null,
-    onKeyEvent = null,
-    content = content
-)
+    content: @Composable () -> Unit,
+): Unit =
+    Popup(
+        popupPositionProvider = popupPositionProvider,
+        onDismissRequest = onDismissRequest,
+        properties = properties,
+        onPreviewKeyEvent = null,
+        onKeyEvent = null,
+        content = content,
+    )
 
 /**
  * Opens a popup with the given content.
  *
- * A popup is a floating container that appears on top of the current activity.
- * It is especially useful for non-modal UI surfaces that remain hidden until they
- * are needed, for example floating menus like Cut/Copy/Paste.
+ * A popup is a floating container that appears on top of the current activity. It is especially
+ * useful for non-modal UI surfaces that remain hidden until they are needed, for example floating
+ * menus like Cut/Copy/Paste.
  *
- * The popup is positioned relative to its parent, using the [alignment] and [offset].
- * The popup is visible as long as it is part of the composition hierarchy.
+ * The popup is positioned relative to its parent, using the [alignment] and [offset]. The popup is
+ * visible as long as it is part of the composition hierarchy.
  *
  * @sample androidx.compose.ui.samples.PopupSample
- *
  * @param alignment The alignment relative to the parent.
  * @param offset An offset from the original aligned position of the popup. Offset respects the
- * Ltr/Rtl context, thus in Ltr it will be added to the original aligned position and in Rtl it
- * will be subtracted from it.
+ *   Ltr/Rtl context, thus in Ltr it will be added to the original aligned position and in Rtl it
+ *   will be subtracted from it.
  * @param onDismissRequest Executes when the user clicks outside the popup.
  * @param properties [PopupProperties] for further customization of this popup's behavior.
  * @param onPreviewKeyEvent This callback is invoked when the user interacts with the hardware
- * keyboard. It gives ancestors of a focused component the chance to intercept a [KeyEvent].
- * Return true to stop propagation of this event. If you return false, the key event will be
- * sent to this [onPreviewKeyEvent]'s child. If none of the children consume the event,
- * it will be sent back up to the root using the onKeyEvent callback.
- * @param onKeyEvent This callback is invoked when the user interacts with the hardware
- * keyboard. While implementing this callback, return true to stop propagation of this event.
- * If you return false, the key event will be sent to this [onKeyEvent]'s parent.
+ *   keyboard. It gives ancestors of a focused component the chance to intercept a [KeyEvent].
+ *   Return true to stop propagation of this event. If you return false, the key event will be sent
+ *   to this [onPreviewKeyEvent]'s child. If none of the children consume the event, it will be sent
+ *   back up to the root using the onKeyEvent callback.
+ * @param onKeyEvent This callback is invoked when the user interacts with the hardware keyboard.
+ *   While implementing this callback, return true to stop propagation of this event. If you return
+ *   false, the key event will be sent to this [onKeyEvent]'s parent.
  * @param content The content to be displayed inside the popup.
  */
 @Composable
@@ -372,18 +372,17 @@ fun Popup(
     properties: PopupProperties = PopupProperties(),
     onPreviewKeyEvent: ((KeyEvent) -> Boolean)? = null,
     onKeyEvent: ((KeyEvent) -> Boolean)? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
-    val popupPositioner = remember(alignment, offset) {
-        AlignmentOffsetPositionProvider(alignment, offset)
-    }
+    val popupPositioner =
+        remember(alignment, offset) { AlignmentOffsetPositionProvider(alignment, offset) }
     Popup(
         popupPositionProvider = popupPositioner,
         onDismissRequest = onDismissRequest,
         properties = properties,
         onPreviewKeyEvent = onPreviewKeyEvent,
         onKeyEvent = onKeyEvent,
-        content = content
+        content = content,
     )
 }
 
@@ -393,18 +392,17 @@ fun Popup(
  * The popup is positioned using a custom [popupPositionProvider].
  *
  * @sample androidx.compose.ui.samples.PopupSample
- *
  * @param popupPositionProvider Provides the screen position of the popup.
  * @param onDismissRequest Executes when the user clicks outside the popup.
  * @param properties [PopupProperties] for further customization of this popup's behavior.
  * @param onPreviewKeyEvent This callback is invoked when the user interacts with the hardware
- * keyboard. It gives ancestors of a focused component the chance to intercept a [KeyEvent].
- * Return true to stop propagation of this event. If you return false, the key event will be
- * sent to this [onPreviewKeyEvent]'s child. If none of the children consume the event,
- * it will be sent back up to the root using the onKeyEvent callback.
- * @param onKeyEvent This callback is invoked when the user interacts with the hardware
- * keyboard. While implementing this callback, return true to stop propagation of this event.
- * If you return false, the key event will be sent to this [onKeyEvent]'s parent.
+ *   keyboard. It gives ancestors of a focused component the chance to intercept a [KeyEvent].
+ *   Return true to stop propagation of this event. If you return false, the key event will be sent
+ *   to this [onPreviewKeyEvent]'s child. If none of the children consume the event, it will be sent
+ *   back up to the root using the onKeyEvent callback.
+ * @param onKeyEvent This callback is invoked when the user interacts with the hardware keyboard.
+ *   While implementing this callback, return true to stop propagation of this event. If you return
+ *   false, the key event will be sent to this [onKeyEvent]'s parent.
  * @param content The content to be displayed inside the popup.
  */
 @OptIn(InternalComposeApi::class)
@@ -415,7 +413,33 @@ fun Popup(
     properties: PopupProperties = PopupProperties(),
     onPreviewKeyEvent: ((KeyEvent) -> Boolean)? = null,
     onKeyEvent: ((KeyEvent) -> Boolean)? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
+) {
+    val layer =
+        rememberComposeSceneLayer(
+            focusable = properties.focusable,
+            consumePointerInputOutside = properties.consumePointerInputOutside,
+        )
+    PopupWithLayer(
+        layer = layer,
+        popupPositionProvider = popupPositionProvider,
+        onDismissRequest = onDismissRequest,
+        properties = properties,
+        onPreviewKeyEvent = onPreviewKeyEvent,
+        onKeyEvent = onKeyEvent,
+        content = content,
+    )
+}
+
+@Composable
+internal fun PopupWithLayer(
+    layer: ComposeSceneLayer,
+    popupPositionProvider: PopupPositionProvider,
+    onDismissRequest: (() -> Unit)?,
+    properties: PopupProperties,
+    onPreviewKeyEvent: ((KeyEvent) -> Boolean)?,
+    onKeyEvent: ((KeyEvent) -> Boolean)?,
+    content: @Composable () -> Unit,
 ) {
     val currentOnDismissRequest by rememberUpdatedState(onDismissRequest)
     val currentOnKeyEvent by rememberUpdatedState(onKeyEvent)
@@ -423,35 +447,39 @@ fun Popup(
     // Any focusable [Popup] must consume all back events
     if (properties.focusable) {
         val compositeKey = currentCompositeKeyHashCode
-        val onBackHandler = remember(compositeKey) {
-            OnBackClickEventHandler(compositeKey) { currentOnDismissRequest?.invoke() }
-        }
+        val onBackHandler =
+            remember(compositeKey) {
+                OnBackClickEventHandler(compositeKey) { currentOnDismissRequest?.invoke() }
+            }
         LaunchedEffect(onBackHandler, properties.dismissOnBackPress) {
             onBackHandler.backClickIsEnabled = properties.dismissOnBackPress
         }
         val navigationEventDispatcher =
             requireNotNull(LocalNavigationEventDispatcherOwner.current) {
-                error("NavigationEventDispatcherOwner not found")
-            }.navigationEventDispatcher
+                    error("NavigationEventDispatcherOwner not found")
+                }
+                .navigationEventDispatcher
         DisposableEffect(navigationEventDispatcher, onBackHandler) {
             navigationEventDispatcher.addHandler(onBackHandler)
             onDispose { onBackHandler.remove() }
         }
     }
-    val onOutsidePointerEvent = if (properties.dismissOnClickOutside && onDismissRequest != null) {
-        // No need to remember this lambda, as it doesn't capture any values that can change.
-        { eventType: PointerEventType, _: PointerButton? ->
-            // Popup should react on first event - [PointerEventType.Press],
-            // but at the same time trigger [onDismissRequest] only once per click.
-            // Any mouse buttons should be accepted to match regular dropdown behavior.
-            if (eventType == PointerEventType.Press) {
-                currentOnDismissRequest?.invoke()
+    val onOutsidePointerEvent =
+        if (properties.dismissOnClickOutside && onDismissRequest != null) {
+            // No need to remember this lambda, as it doesn't capture any values that can change.
+            { eventType: PointerEventType, _: PointerButton? ->
+                // Popup should react on first event - [PointerEventType.Press],
+                // but at the same time trigger [onDismissRequest] only once per click.
+                // Any mouse buttons should be accepted to match regular dropdown behavior.
+                if (eventType == PointerEventType.Press) {
+                    currentOnDismissRequest?.invoke()
+                }
             }
+        } else {
+            null
         }
-    } else {
-        null
-    }
     PopupLayout(
+        layer = layer,
         popupPositionProvider = popupPositionProvider,
         properties = properties,
         modifier = Modifier.semantics { popup() },
@@ -464,74 +492,68 @@ fun Popup(
 
 @Composable
 private fun PopupLayout(
+    layer: ComposeSceneLayer,
     popupPositionProvider: PopupPositionProvider,
     properties: PopupProperties,
     modifier: Modifier,
     onPreviewKeyEvent: ((KeyEvent) -> Boolean)? = null,
     onKeyEvent: ((KeyEvent) -> Boolean)? = null,
     onOutsidePointerEvent: ((eventType: PointerEventType, button: PointerButton?) -> Unit)? = null,
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     // Use a MutableState directly to avoid recomposing when the value changes
     val parentBoundsInWindow: MutableState<IntRect?> = remember { mutableStateOf(null) }
     var canCalculatePosition by remember { mutableStateOf(false) }
-    EmptyLayout(Modifier.onPlaced { childCoordinates ->
-        // For a layer in the same scene, this runs before its popup measure policy calculates a
-        // position, so the policy observes the parent bounds in the first frame.
-        childCoordinates.parentCoordinates?.let {
-            // Nodes which read layout coordinates (including, e.g., positionInWindow) in
-            // layout/placement get invalidated when these coordinates change
-            val layoutPosition = it.positionInWindow().round()
-            val layoutSize = it.size
-            parentBoundsInWindow.value = IntRect(layoutPosition, layoutSize)
-            canCalculatePosition = true
+    EmptyLayout(
+        Modifier.onPlaced { childCoordinates ->
+            // For a layer in the same scene, this runs before its popup measure policy calculates a
+            // position, so the policy observes the parent bounds in the first frame.
+            childCoordinates.parentCoordinates?.let {
+                // Nodes which read layout coordinates (including, e.g., positionInWindow) in
+                // layout/placement get invalidated when these coordinates change
+                val layoutPosition = it.positionInWindow().round()
+                val layoutSize = it.size
+                parentBoundsInWindow.value = IntRect(layoutPosition, layoutSize)
+                canCalculatePosition = true
+            }
         }
-    })
+    )
 
     val currentContent by rememberUpdatedState(content)
-    val layer = rememberComposeSceneLayer(
-        focusable = properties.focusable,
-        consumePointerInputOutside = properties.consumePointerInputOutside,
-    )
     layer.setKeyEventListener(onPreviewKeyEvent, onKeyEvent)
     layer.setOutsidePointerEventListener(onOutsidePointerEvent)
     layer.Content {
         val platformInsets = properties.platformInsets
         val containerSize = LocalWindowInfo.current.containerSize
         val layoutDirection = LocalLayoutDirection.current
-        val measurePolicy = rememberPopupMeasurePolicy(
-            layer = layer,
-            popupPositionProvider = popupPositionProvider,
-            properties = properties,
-            containerSize = containerSize,
-            platformInsets = platformInsets,
-            layoutDirection = layoutDirection,
-            parentBoundsInWindow = parentBoundsInWindow
-        )
+        val measurePolicy =
+            rememberPopupMeasurePolicy(
+                layer = layer,
+                popupPositionProvider = popupPositionProvider,
+                properties = properties,
+                containerSize = containerSize,
+                platformInsets = platformInsets,
+                layoutDirection = layoutDirection,
+                parentBoundsInWindow = parentBoundsInWindow,
+            )
 
-        LocalPlatformWindowInsets.current.exclude(
-            properties.usePlatformInsets,
-            false
-        ) {
+        LocalPlatformWindowInsets.current.exclude(properties.usePlatformInsets, false) {
             Layout(
                 content = currentContent,
                 // Compose and measure the popup before it can be positioned, but do not show it
                 // until its anchor bounds are available.
                 modifier = modifier.alpha(if (canCalculatePosition) 1f else 0f),
-                measurePolicy = measurePolicy
+                measurePolicy = measurePolicy,
             )
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            layer.close()
-        }
-    }
+    DisposableEffect(layer) { onDispose { layer.close() } }
 }
 
 private val PopupProperties.platformInsets: PlatformInsets
-    @Composable get() {
+    @Composable
+    get() {
         return if (usePlatformInsets) {
             LocalPlatformWindowInsets.current.systemBars
         } else {
@@ -547,56 +569,58 @@ private fun rememberPopupMeasurePolicy(
     containerSize: IntSize,
     platformInsets: PlatformInsets,
     layoutDirection: LayoutDirection,
-    parentBoundsInWindow: MutableState<IntRect?>
-) = remember(
-    layer,
-    popupPositionProvider,
-    properties,
-    containerSize,
-    platformInsets,
-    layoutDirection,
-    parentBoundsInWindow
-) {
-    ComposeSceneLayerMeasurePolicy(
-        platformInsets = platformInsets,
-        usePlatformDefaultWidth = properties.usePlatformDefaultWidth
-    ) { contentSize ->
-        val parentRectInWindow = parentBoundsInWindow.value
-        if (parentRectInWindow == null) {
-            // Keep an unanchored layer out of the visible window until its content is measured.
-            layer.boundsInWindow = IntRect.Zero
-            return@ComposeSceneLayerMeasurePolicy IntOffset.Zero
-        }
-        val positionWithInsets =
-            positionWithInsets(platformInsets, containerSize) { sizeWithoutInsets ->
-                // Position provider works in coordinates without insets.
-                val boundsWithoutInsets = parentRectInWindow.translate(
-                    -platformInsets.left,
-                    -platformInsets.top
-                )
-                val positionInWindow = popupPositionProvider.calculatePosition(
-                    anchorBounds = boundsWithoutInsets,
-                    windowSize = sizeWithoutInsets,
-                    layoutDirection = layoutDirection,
-                    popupContentSize = contentSize
-                )
-                if (properties.clippingEnabled) {
-                    clipPosition(positionInWindow, contentSize, sizeWithoutInsets)
-                } else {
-                    positionInWindow
-                }
+    parentBoundsInWindow: MutableState<IntRect?>,
+) =
+    remember(
+        layer,
+        popupPositionProvider,
+        properties,
+        containerSize,
+        platformInsets,
+        layoutDirection,
+        parentBoundsInWindow,
+    ) {
+        ComposeSceneLayerMeasurePolicy(
+            platformInsets = platformInsets,
+            usePlatformDefaultWidth = properties.usePlatformDefaultWidth,
+        ) { contentSize ->
+            val parentRectInWindow = parentBoundsInWindow.value
+            if (parentRectInWindow == null) {
+                // Keep an unanchored layer out of the visible window until its content is measured.
+                layer.boundsInWindow = IntRect.Zero
+                return@ComposeSceneLayerMeasurePolicy IntOffset.Zero
             }
-        layer.boundsInWindow = IntRect(positionWithInsets, contentSize)
-        layer.calculateLocalPosition(positionWithInsets)
+            val positionWithInsets =
+                positionWithInsets(platformInsets, containerSize) { sizeWithoutInsets ->
+                    // Position provider works in coordinates without insets.
+                    val boundsWithoutInsets =
+                        parentRectInWindow.translate(-platformInsets.left, -platformInsets.top)
+                    val positionInWindow =
+                        popupPositionProvider.calculatePosition(
+                            anchorBounds = boundsWithoutInsets,
+                            windowSize = sizeWithoutInsets,
+                            layoutDirection = layoutDirection,
+                            popupContentSize = contentSize,
+                        )
+                    if (properties.clippingEnabled) {
+                        clipPosition(positionInWindow, contentSize, sizeWithoutInsets)
+                    } else {
+                        positionInWindow
+                    }
+                }
+            layer.boundsInWindow = IntRect(positionWithInsets, contentSize)
+            layer.calculateLocalPosition(positionWithInsets)
+        }
     }
-}
 
 private fun clipPosition(position: IntOffset, contentSize: IntSize, containerSize: IntSize) =
     IntOffset(
-        x = if (contentSize.width < containerSize.width) {
-            position.x.coerceIn(0, containerSize.width - contentSize.width)
-        } else 0,
-        y = if (contentSize.height < containerSize.height) {
-            position.y.coerceIn(0, containerSize.height - contentSize.height)
-        } else 0
+        x =
+            if (contentSize.width < containerSize.width) {
+                position.x.coerceIn(0, containerSize.width - contentSize.width)
+            } else 0,
+        y =
+            if (contentSize.height < containerSize.height) {
+                position.y.coerceIn(0, containerSize.height - contentSize.height)
+            } else 0,
     )

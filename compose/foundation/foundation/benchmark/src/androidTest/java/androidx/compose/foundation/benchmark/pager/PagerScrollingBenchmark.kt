@@ -248,7 +248,6 @@ class PagerRemeasureTestCase(
     }
 
     override fun setUp() {
-        @Suppress("INVISIBLE_REFERENCE") // b/407927787
         pagerState.prefetchingEnabled = false
         runBlocking { pagerState.scrollToPage(0, 0.0f) }
     }
@@ -289,9 +288,7 @@ val NoOpInfoProvider =
 val VerticalPagerContent:
     @Composable
     PagerRemeasureTestCase.(
-        state: PagerState,
-        useKeys: Boolean,
-        beyondBoundsPageCount: Int,
+        state: PagerState, useKeys: Boolean, beyondBoundsPageCount: Int,
     ) -> Unit =
     { state, useKeys, beyondBoundsPageCount ->
         val flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProvider = NoOpInfoProvider)
@@ -315,9 +312,7 @@ val VerticalPagerContent:
 val HorizontalPagerContent:
     @Composable
     PagerRemeasureTestCase.(
-        state: PagerState,
-        useKeys: Boolean,
-        beyondBoundsPageCount: Int,
+        state: PagerState, useKeys: Boolean, beyondBoundsPageCount: Int,
     ) -> Unit =
     { state, useKeys, beyondBoundsPageCount ->
         val flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProvider = NoOpInfoProvider)

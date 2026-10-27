@@ -16,8 +16,8 @@
 
 package androidx.compose.ui.window
 
-import androidx.compose.ui.uikit.utils.CMPContainerView
 import androidx.compose.ui.node.WeakReference
+import androidx.compose.ui.uikit.utils.CMPContainerView
 import androidx.compose.ui.unit.toDpSize
 import kotlin.math.max
 import kotlinx.cinterop.CValue
@@ -45,7 +45,7 @@ import platform.UIKit.UIWindow
 internal class ComposeContainerView(
     private val useOpaqueConfiguration: Boolean,
     private val transparentForTouches: Boolean,
-): CMPContainerView(frame = UIScreen.mainScreen.bounds) {
+) : CMPContainerView(frame = UIScreen.mainScreen.bounds) {
     init {
         setClipsToBounds(true)
         setOpaque(useOpaqueConfiguration)
@@ -63,7 +63,11 @@ internal class ComposeContainerView(
     var onSizeThatFits: (CValue<CGSize>) -> CValue<CGSize>? = { null }
     var onIntrinsicContentSize: () -> CValue<CGSize>? = { null }
 
-    val redrawer: MetalRedrawer? get() = metalView?.redrawer
+    val redrawer: MetalRedrawer?
+        get() = metalView?.redrawer
+
+    val hasInvalidations: Boolean
+        get() = redrawer?.hasInvalidations ?: false
 
     override fun canBecomeFirstResponder(): Boolean {
         return true
@@ -96,15 +100,16 @@ internal class ComposeContainerView(
     }
 
     private fun updateBackgroundColor() {
-        backgroundColor = if (useOpaqueConfiguration) {
-            when (traitCollection.userInterfaceStyle) {
-                UIUserInterfaceStyle.UIUserInterfaceStyleDark -> UIColor.blackColor
-                UIUserInterfaceStyle.UIUserInterfaceStyleLight -> UIColor.whiteColor
-                else -> UIColor.whiteColor
+        backgroundColor =
+            if (useOpaqueConfiguration) {
+                when (traitCollection.userInterfaceStyle) {
+                    UIUserInterfaceStyle.UIUserInterfaceStyleDark -> UIColor.blackColor
+                    UIUserInterfaceStyle.UIUserInterfaceStyleLight -> UIColor.whiteColor
+                    else -> UIColor.whiteColor
+                }
+            } else {
+                UIColor.clearColor
             }
-        } else {
-            UIColor.clearColor
-        }
     }
 
     fun updateMetalView(
@@ -125,9 +130,7 @@ internal class ComposeContainerView(
         this.onTraitCollectionDidChange = onTraitCollectionDidChange
         this.onDraw = onDraw
 
-        metalView?.let {
-            addSubview(metalView.view)
-        }
+        metalView?.let { addSubview(metalView.view) }
         updateLayout()
         window?.let(onWillMoveToWindow)
         window?.let(onDidMoveToWindow)
@@ -138,13 +141,13 @@ internal class ComposeContainerView(
             foregroundStateListener?.dispose()
             foregroundStateListener = null
         } else {
-            foregroundStateListener = SceneForegroundStateListener(getScene = {
-                window?.windowScene
-            }) { isSceneInForeground ->
-                if (!isSceneInForeground) {
-                    metalView.redrawer.awaitRenderingCompletion()
+            foregroundStateListener =
+                SceneForegroundStateListener(getScene = { window?.windowScene }) {
+                    isSceneInForeground ->
+                    if (!isSceneInForeground) {
+                        metalView.redrawer.awaitRenderingCompletion()
+                    }
                 }
-            }
         }
         updateRedrawerState()
     }
@@ -172,9 +175,7 @@ internal class ComposeContainerView(
     private var isAnimating: Boolean = false
 
     override fun layoutSubviews() {
-        performWithoutAnimation {
-            super.layoutSubviews()
-        }
+        performWithoutAnimation { super.layoutSubviews() }
 
         onLayoutSubviews()
         updateLayout()
@@ -210,14 +211,15 @@ internal class ComposeContainerView(
     private var needsSynchronousDraw = true
 
     /**
-     * Flag indicating whether the `presentWithTransaction` feature of the render pipeline
-     * should be disabled for the next draw operation. It causes a resizing issues when disabling
-     * this feature before the next draw operation.
+     * Flag indicating whether the `presentWithTransaction` feature of the render pipeline should be
+     * disabled for the next draw operation. It causes a resizing issues when disabling this feature
+     * before the next draw operation.
      */
     private var needsDisablePresentWithTransactionOnNextDraw = false
 
     /**
-     * Raise the flag to indicate that the view needs to be drawn synchronously with the next layout.
+     * Raise the flag to indicate that the view needs to be drawn synchronously with the next
+     * layout.
      */
     private fun setNeedsSynchronousDraw() {
         needsSynchronousDraw = true
@@ -229,24 +231,21 @@ internal class ComposeContainerView(
         if (isAnimating) {
             val oldSize = metalView.view.frame.useContents { size.toDpSize() }
             val newSize = bounds.useContents { size.toDpSize() }
-            val targetRect = CGRectMake(
-                0.0,
-                0.0,
-                max(oldSize.width.value, newSize.width.value).toDouble(),
-                max(oldSize.height.value, newSize.height.value).toDouble()
-            )
+            val targetRect =
+                CGRectMake(
+                    0.0,
+                    0.0,
+                    max(oldSize.width.value, newSize.width.value).toDouble(),
+                    max(oldSize.height.value, newSize.height.value).toDouble(),
+                )
             if (!CGRectEqualToRect(metalView.view.frame, targetRect)) {
                 setNeedsSynchronousDraw()
-                performWithoutAnimation {
-                    metalView.view.setFrame(targetRect)
-                }
+                performWithoutAnimation { metalView.view.setFrame(targetRect) }
             }
         } else {
             if (!CGRectEqualToRect(metalView.view.frame, bounds)) {
                 setNeedsSynchronousDraw()
-                performWithoutAnimation {
-                    metalView.view.setFrame(bounds)
-                }
+                performWithoutAnimation { metalView.view.setFrame(bounds) }
             }
         }
     }
@@ -268,9 +267,7 @@ internal class ComposeContainerView(
             }
         }
 
-        return {
-            imageView.alpha = 0.0
-        }
+        return { imageView.alpha = 0.0 }
     }
 
     fun animateSizeTransition(scope: CoroutineScope, animations: suspend () -> Unit) {
@@ -297,19 +294,11 @@ internal class ComposeContainerView(
 
     private fun viewContentImage(): UIImage {
         val renderer = UIGraphicsImageRenderer(bounds = bounds)
-        return renderer.imageWithActions {
-            this.drawViewHierarchyInRect(bounds, false)
-        }
+        return renderer.imageWithActions { this.drawViewHierarchyInRect(bounds, false) }
     }
 
-    fun <T : Any> setIntrinsicContentSizeInvalidationHandler(
-        owner: T,
-        handler: T.() -> Unit
-    ) {
+    fun <T : Any> setIntrinsicContentSizeInvalidationHandler(owner: T, handler: T.() -> Unit) {
         val ownerRef = WeakReference(owner)
-        onIntrinsicContentSizeInvalidated = {
-            ownerRef.get()?.handler()
-        }
+        onIntrinsicContentSizeInvalidated = { ownerRef.get()?.handler() }
     }
-
 }

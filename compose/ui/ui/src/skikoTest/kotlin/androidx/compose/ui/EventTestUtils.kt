@@ -50,14 +50,24 @@ fun Events.assertReceivedNoEvents() =
 fun Events.assertReceived(type: PointerEventType, offset: Offset) =
     received().assertHas(type, offset)
 
-@OptIn(ExperimentalComposeUiApi::class)
 fun Events.assertReceived(type: PointerEventType, vararg pointers: ComposeScenePointer) =
     received().assertHas(type, *pointers)
 
 fun Events.assertReceivedLast(type: PointerEventType, offset: Offset) =
     receivedLast().assertHas(type, offset)
 
+/**
+ * Asserts that a Move event without position change (for example, a synthetic Move sent after
+ * relayout) is received, if such events are delivered, see
+ * [ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled]
+ */
 @OptIn(ExperimentalComposeUiApi::class)
+fun Events.assertReceivedMoveWithoutPositionChange(offset: Offset) {
+    if (ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled) {
+        assertReceived(PointerEventType.Move, offset)
+    }
+}
+
 fun Events.assertReceivedLast(type: PointerEventType, vararg pointers: ComposeScenePointer) =
     receivedLast().assertHas(type, *pointers)
 
@@ -66,28 +76,20 @@ fun PointerEvent.assertHas(type: PointerEventType, offset: Offset) {
     assertThat(changes.first().position).isEqualTo(offset)
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
 fun PointerEvent.assertHas(type: PointerEventType, vararg pointers: ComposeScenePointer) {
     assertThat(this.type).isEqualTo(type)
-    val actualPointers = changes.map {
-        ComposeScenePointer(
-            it.id,
-            it.position,
-            it.pressed,
-            it.type,
-            it.pressure
-        )
-    }
+    val actualPointers =
+        changes.map { ComposeScenePointer(it.id, it.position, it.pressed, it.type, it.pressure) }
     assertThat(actualPointers).containsExactly(*pointers)
 }
 
-@OptIn(ExperimentalComposeUiApi::class)
-fun touch(x: Float, y: Float, pressed: Boolean, id: Int = 0) = ComposeScenePointer(
-    id = PointerId(id.toLong()),
-    position = Offset(x, y),
-    pressed = pressed,
-    type = PointerType.Touch
-)
+fun touch(x: Float, y: Float, pressed: Boolean, id: Int = 0) =
+    ComposeScenePointer(
+        id = PointerId(id.toLong()),
+        position = Offset(x, y),
+        pressed = pressed,
+        type = PointerType.Touch,
+    )
 
 class Events {
     val list = mutableListOf<PointerEvent>()
@@ -99,7 +101,9 @@ class Events {
     fun receivedLast(): PointerEvent {
         require(list.isNotEmpty()) { "The were no events" }
         val event = list.removeFirst()
-        require(list.isEmpty()) { "The event $event isn't the last.\nAlso received:\n${list.joinToString("\n")}" }
+        require(list.isEmpty()) {
+            "The event $event isn't the last.\nAlso received:\n${list.joinToString("\n")}"
+        }
         return event
     }
 
@@ -111,21 +115,13 @@ class Events {
     }
 }
 
-class FillBox(
-    private val onClick: () -> Unit = {}
-) {
+class FillBox(private val onClick: () -> Unit = {}) {
     val events = Events()
     val tag = "background"
 
     @Composable
     fun Content() {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clickable(onClick = onClick)
-                .collectEvents(events)
-                .testTag(tag)
-        )
+        Box(Modifier.fillMaxSize().clickable(onClick = onClick).collectEvents(events).testTag(tag))
     }
 }
 
@@ -134,9 +130,11 @@ class PopupState(
     private val focusable: Boolean = false,
     private val consumePointerInputOutside: Boolean = focusable,
     private val dismissOnClickOutside: Boolean = focusable,
-    private val onDismissRequest: () -> Unit = {}
+    private val onDismissRequest: () -> Unit = {},
 ) {
-    val origin get() = bounds.topLeft.toOffset()
+    val origin
+        get() = bounds.topLeft.toOffset()
+
     val events = Events()
     val tag = "popup"
 
@@ -144,26 +142,27 @@ class PopupState(
     fun Content() {
         @OptIn(ExperimentalComposeUiApi::class)
         Popup(
-            popupPositionProvider = object : PopupPositionProvider {
-                override fun calculatePosition(
-                    anchorBounds: IntRect,
-                    windowSize: IntSize,
-                    layoutDirection: LayoutDirection,
-                    popupContentSize: IntSize
-                ) = bounds.topLeft
-            },
+            popupPositionProvider =
+                object : PopupPositionProvider {
+                    override fun calculatePosition(
+                        anchorBounds: IntRect,
+                        windowSize: IntSize,
+                        layoutDirection: LayoutDirection,
+                        popupContentSize: IntSize,
+                    ) = bounds.topLeft
+                },
             onDismissRequest = onDismissRequest,
-            properties = PopupProperties(
-                focusable = focusable,
-                dismissOnClickOutside = dismissOnClickOutside,
-                clippingEnabled = false,
-                consumePointerInputOutside = consumePointerInputOutside,
-            )
+            properties =
+                PopupProperties(
+                    focusable = focusable,
+                    dismissOnClickOutside = dismissOnClickOutside,
+                    clippingEnabled = false,
+                    consumePointerInputOutside = consumePointerInputOutside,
+                ),
         ) {
             with(LocalDensity.current) {
                 Box(
-                    Modifier
-                        .requiredSize(bounds.width.toDp(), bounds.height.toDp())
+                    Modifier.requiredSize(bounds.width.toDp(), bounds.height.toDp())
                         .collectEvents(events)
                         .testTag(tag)
                 )
@@ -175,7 +174,7 @@ class PopupState(
 class DialogState(
     val size: IntSize,
     private val dismissOnClickOutside: Boolean = true,
-    private val onDismissRequest: () -> Unit = {}
+    private val onDismissRequest: () -> Unit = {},
 ) {
     val events = Events()
     val tag = "dialog"
@@ -184,15 +183,15 @@ class DialogState(
     fun Content() {
         Dialog(
             onDismissRequest = onDismissRequest,
-            properties = DialogProperties(
-                dismissOnClickOutside = dismissOnClickOutside,
-                usePlatformInsets = false
-            )
+            properties =
+                DialogProperties(
+                    dismissOnClickOutside = dismissOnClickOutside,
+                    usePlatformInsets = false,
+                ),
         ) {
             with(LocalDensity.current) {
                 Box(
-                    Modifier
-                        .requiredSize(size.width.toDp(), size.height.toDp())
+                    Modifier.requiredSize(size.width.toDp(), size.height.toDp())
                         .collectEvents(events)
                         .testTag(tag)
                 )
@@ -201,47 +200,44 @@ class DialogState(
     }
 }
 
-fun Modifier.collectEvents(events: Events) = pointerInput(Unit) {
-    awaitPointerEventScope {
-        while (true) {
-            events.add(awaitPointerEvent())
+fun Modifier.collectEvents(events: Events) =
+    pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                events.add(awaitPointerEvent())
+            }
         }
     }
-}
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun ImageComposeScene.sendPointerEvent(
     type: PointerEventType,
-    vararg pointers: ComposeScenePointer
+    vararg pointers: ComposeScenePointer,
 ) = sendPointerEvent(type, pointers = pointers.toList())
 
-@OptIn(ExperimentalComposeUiApi::class)
-internal fun event(
-    type: PointerEventType,
-    vararg pointers: Pair<Int, ComposeScenePointer>
-) = PointerInputEvent(
-    type,
-    0,
-    pointers.map {
-        val id = it.first
-        val pointer = it.second
-        PointerInputEventData(
-            PointerId(id.toLong()),
-            uptime = 0,
-            pointer.position,
-            pointer.position,
-            pointer.pressed,
-            pointer.pressure,
-            pointer.type,
-            scrollDelta = Offset.Zero,
-            historical = emptyList(),
-            scaleGestureFactor = 1f,
-            panGestureOffset = Offset.Zero,
-        )
-    },
-)
+internal fun event(type: PointerEventType, vararg pointers: Pair<Int, ComposeScenePointer>) =
+    PointerInputEvent(
+        type,
+        0,
+        pointers.map {
+            val id = it.first
+            val pointer = it.second
+            PointerInputEventData(
+                PointerId(id.toLong()),
+                uptime = 0,
+                pointer.position,
+                pointer.position,
+                pointer.pressed,
+                pointer.pressure,
+                pointer.type,
+                scrollDelta = Offset.Zero,
+                historical = emptyList(),
+                scaleGestureFactor = 1f,
+                panGestureOffset = Offset.Zero,
+            )
+        },
+    )
 
-@OptIn(ExperimentalComposeUiApi::class)
 internal fun mouseEvent(
     type: PointerEventType,
     x: Float,
@@ -249,50 +245,52 @@ internal fun mouseEvent(
     pressed: Boolean,
     scrollDelta: Offset = Offset.Zero,
     scaleGestureFactor: Float = 1f,
-    panGestureOffset:Offset = Offset.Zero,
-    nativeEvent: Any? = null
-) = PointerInputEvent(
-    type,
-    0,
-    listOf(
-        PointerInputEventData(
-            id = PointerId(0),
-            uptime = 0,
-            Offset(x, y),
-            Offset(x, y),
-            down = pressed,
-            pressure = 1f,
-            type = PointerType.Mouse,
-            scrollDelta = scrollDelta,
-            activeHover = true,
-            historical = emptyList(),
-            scaleGestureFactor = scaleGestureFactor,
-            panGestureOffset = panGestureOffset,
-        )
-    ),
-    buttons = PointerButtons(isPrimaryPressed = pressed),
-    nativeEvent = nativeEvent
-)
+    panGestureOffset: Offset = Offset.Zero,
+    nativeEvent: Any? = null,
+) =
+    PointerInputEvent(
+        type,
+        0,
+        listOf(
+            PointerInputEventData(
+                id = PointerId(0),
+                uptime = 0,
+                Offset(x, y),
+                Offset(x, y),
+                down = pressed,
+                pressure = 1f,
+                type = PointerType.Mouse,
+                scrollDelta = scrollDelta,
+                activeHover = true,
+                historical = emptyList(),
+                scaleGestureFactor = scaleGestureFactor,
+                panGestureOffset = panGestureOffset,
+            )
+        ),
+        buttons = PointerButtons(isPrimaryPressed = pressed),
+        nativeEvent = nativeEvent,
+    )
 
 internal infix fun List<PointerInputEvent>.positionAndDownShouldEqual(
     expected: List<PointerInputEvent>
 ) {
     assertContentEquals(
         expected.map { it.formatPositionAndDown() },
-        map { it.formatPositionAndDown() }
+        map { it.formatPositionAndDown() },
     )
 }
 
 internal fun PointerInputEvent.formatPositionAndDown(): String {
-    val pointers = if (pointers.size == 1) {
-        pointers.first().formatPositionAndDown()
-    } else {
-        pointers.joinToString(" ") {
-            val id = it.id.value
-            val data = it.formatPositionAndDown()
-            "$id-$data"
+    val pointers =
+        if (pointers.size == 1) {
+            pointers.first().formatPositionAndDown()
+        } else {
+            pointers.joinToString(" ") {
+                val id = it.id.value
+                val data = it.formatPositionAndDown()
+                "$id-$data"
+            }
         }
-    }
     return "$eventType $pointers"
 }
 

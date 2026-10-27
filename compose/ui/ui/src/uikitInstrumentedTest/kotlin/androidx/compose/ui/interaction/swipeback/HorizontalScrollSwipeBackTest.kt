@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.UIKitInstrumentedTest
 import androidx.compose.ui.test.findNodeWithTag
-import androidx.compose.ui.test.findNodeWithTagOrNull
 import androidx.compose.ui.test.runUIKitInstrumentedTest
 import androidx.compose.ui.test.utils.hold
 import androidx.compose.ui.test.utils.up
@@ -53,124 +52,134 @@ import kotlin.test.assertFalse
 import platform.UIKit.UITraitEnvironmentLayoutDirectionLeftToRight
 import platform.UIKit.UITraitEnvironmentLayoutDirectionRightToLeft
 
-internal class HorizontalScrollSwipeBackInHostingViewTest : HorizontalScrollSwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
-)
+@Suppress("unused")
+internal class HorizontalScrollSwipeBackInHostingViewTest :
+    HorizontalScrollSwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
+    )
 
-internal class HorizontalScrollSwipeBackInHostingViewControllerTest : HorizontalScrollSwipeBackTest(
-    runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
-)
+@Suppress("unused")
+internal class HorizontalScrollSwipeBackInHostingViewControllerTest :
+    HorizontalScrollSwipeBackTest(
+        runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }
+    )
 
 internal abstract class HorizontalScrollSwipeBackTest(
     private val runUIKitInstrumentedTest: (UIKitInstrumentedTest.() -> Unit) -> Unit
 ) {
     @Test
-    fun testEdgeBackSwipeOverHorizontalScrollDoesNotScrollComposeContentLtr() = runUIKitInstrumentedTest {
-        var scrollOffset = Float.NaN
-        var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
-        var backCompletedCount = -1
+    fun testEdgeBackSwipeOverHorizontalScrollDoesNotScrollComposeContentLtr() =
+        runUIKitInstrumentedTest {
+            var scrollOffset = Float.NaN
+            var transitionState: NavigationEventTransitionState =
+                NavigationEventTransitionState.Idle
+            var backCompletedCount = -1
 
-        setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
-            HorizontalScrollBackGestureContent(
-                onScrollOffsetChanged = { scrollOffset = it },
-                onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+            setContent(layoutDirection = UITraitEnvironmentLayoutDirectionLeftToRight) {
+                HorizontalScrollBackGestureContent(
+                    onScrollOffsetChanged = { scrollOffset = it },
+                    onTransitionStateChanged = { transitionState = it },
+                    onBackCompletedCountChanged = { backCompletedCount = it },
+                )
+            }
+
+            val backSwipe = swipeFromLeftEdge().hold()
+            waitUntil("Back swipe over horizontal scroll content should start") {
+                transitionState is InProgress
+            }
+
+            assertEquals(
+                expected = NavigationEvent.EDGE_LEFT,
+                actual = (transitionState as InProgress).latestEvent.swipeEdge,
+                message =
+                    "Back swipe over horizontal scroll content should report the expected edge",
             )
+            assertEquals(
+                expected = 0f,
+                actual = scrollOffset,
+                absoluteTolerance = 0.01f,
+                message = "Edge back swipe should not scroll horizontal Compose content",
+            )
+
+            backSwipe.up()
+
+            waitUntil("Back swipe over horizontal scroll content should complete") {
+                backCompletedCount == 1
+            }
         }
-
-        val backSwipe = swipeFromLeftEdge().hold()
-        waitUntil("Back swipe over horizontal scroll content should start") {
-            transitionState is InProgress
-        }
-
-        assertEquals(
-            expected = NavigationEvent.EDGE_LEFT,
-            actual = (transitionState as InProgress).latestEvent.swipeEdge,
-            message = "Back swipe over horizontal scroll content should report the expected edge"
-        )
-        assertEquals(
-            expected = 0f,
-            actual = scrollOffset,
-            absoluteTolerance = 0.01f,
-            message = "Edge back swipe should not scroll horizontal Compose content"
-        )
-
-        backSwipe.up()
-
-        waitUntil("Back swipe over horizontal scroll content should complete") {
-            backCompletedCount == 1
-        }
-    }
 
     @Test
-    fun testEdgeBackSwipeOverHorizontalScrollDoesNotScrollComposeContentRtl() = runUIKitInstrumentedTest {
-        var scrollOffset = Float.NaN
-        var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
-        var backCompletedCount = -1
+    fun testEdgeBackSwipeOverHorizontalScrollDoesNotScrollComposeContentRtl() =
+        runUIKitInstrumentedTest {
+            var scrollOffset = Float.NaN
+            var transitionState: NavigationEventTransitionState =
+                NavigationEventTransitionState.Idle
+            var backCompletedCount = -1
 
-        setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
-            HorizontalScrollBackGestureContent(
-                onScrollOffsetChanged = { scrollOffset = it },
-                onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+            setContent(layoutDirection = UITraitEnvironmentLayoutDirectionRightToLeft) {
+                HorizontalScrollBackGestureContent(
+                    onScrollOffsetChanged = { scrollOffset = it },
+                    onTransitionStateChanged = { transitionState = it },
+                    onBackCompletedCountChanged = { backCompletedCount = it },
+                )
+            }
+
+            val backSwipe = swipeFromRightEdge().hold()
+            waitUntil("Back swipe over horizontal scroll content should start") {
+                transitionState is InProgress
+            }
+
+            assertEquals(
+                expected = NavigationEvent.EDGE_RIGHT,
+                actual = (transitionState as InProgress).latestEvent.swipeEdge,
+                message =
+                    "Back swipe over horizontal scroll content should report the expected edge",
             )
+            assertEquals(
+                expected = 0f,
+                actual = scrollOffset,
+                absoluteTolerance = 0.01f,
+                message = "Edge back swipe should not scroll horizontal Compose content",
+            )
+
+            backSwipe.up()
+
+            waitUntil("Back swipe over horizontal scroll content should complete") {
+                backCompletedCount == 1
+            }
         }
-
-        val backSwipe = swipeFromRightEdge().hold()
-        waitUntil("Back swipe over horizontal scroll content should start") {
-            transitionState is InProgress
-        }
-
-        assertEquals(
-            expected = NavigationEvent.EDGE_RIGHT,
-            actual = (transitionState as InProgress).latestEvent.swipeEdge,
-            message = "Back swipe over horizontal scroll content should report the expected edge"
-        )
-        assertEquals(
-            expected = 0f,
-            actual = scrollOffset,
-            absoluteTolerance = 0.01f,
-            message = "Edge back swipe should not scroll horizontal Compose content"
-        )
-
-        backSwipe.up()
-
-        waitUntil("Back swipe over horizontal scroll content should complete") {
-            backCompletedCount == 1
-        }
-    }
 
     @Test
-    fun testInnerSwipeOverHorizontalScrollScrollsComposeContentWithoutStartingBack() = runUIKitInstrumentedTest {
-        var scrollOffset = Float.NaN
-        var transitionState: NavigationEventTransitionState = NavigationEventTransitionState.Idle
-        var backCompletedCount = -1
+    fun testInnerSwipeOverHorizontalScrollScrollsComposeContentWithoutStartingBack() =
+        runUIKitInstrumentedTest {
+            var scrollOffset = Float.NaN
+            var transitionState: NavigationEventTransitionState =
+                NavigationEventTransitionState.Idle
+            var backCompletedCount = -1
 
-        setContent {
-            HorizontalScrollBackGestureContent(
-                onScrollOffsetChanged = { scrollOffset = it },
-                onTransitionStateChanged = { transitionState = it },
-                onBackCompletedCountChanged = { backCompletedCount = it }
+            setContent {
+                HorizontalScrollBackGestureContent(
+                    onScrollOffsetChanged = { scrollOffset = it },
+                    onTransitionStateChanged = { transitionState = it },
+                    onBackCompletedCountChanged = { backCompletedCount = it },
+                )
+            }
+
+            findNodeWithTag(SCROLL_SURFACE).swipeLeft()
+
+            waitUntil("Inner swipe should scroll horizontal Compose content") { scrollOffset > 0f }
+
+            assertFalse(
+                transitionState is InProgress,
+                "Inner swipe over horizontal scroll content should not start back navigation",
+            )
+            assertEquals(
+                expected = 0,
+                actual = backCompletedCount,
+                message =
+                    "Inner swipe over horizontal scroll content should not complete back navigation",
             )
         }
-
-        findNodeWithTag(SCROLL_SURFACE).swipeLeft()
-
-        waitUntil("Inner swipe should scroll horizontal Compose content") {
-            scrollOffset > 0f
-        }
-
-        assertFalse(
-            transitionState is InProgress,
-            "Inner swipe over horizontal scroll content should not start back navigation"
-        )
-        assertEquals(
-            expected = 0,
-            actual = backCompletedCount,
-            message = "Inner swipe over horizontal scroll content should not complete back navigation"
-        )
-    }
-
 }
 
 @Composable
@@ -185,24 +194,24 @@ private fun HorizontalScrollBackGestureContent(
 
     BackGestureHost(
         onTransitionStateChanged = onTransitionStateChanged,
-        onBackCompletedCountChanged = onBackCompletedCountChanged
+        onBackCompletedCountChanged = onBackCompletedCountChanged,
     ) {
         val scrollState = rememberScrollState()
 
         scrollOffset = scrollState.value.toFloat()
 
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp)
-                .testTag(SCROLL_SURFACE)
-                .horizontalScroll(scrollState)
+            modifier =
+                Modifier.fillMaxWidth()
+                    .height(160.dp)
+                    .testTag(SCROLL_SURFACE)
+                    .horizontalScroll(scrollState)
         ) {
             repeat(10) {
                 Box(
-                    modifier = Modifier
-                        .size(width = 200.dp, height = 160.dp)
-                        .background(if (it % 2 == 0) Color.Red else Color.Blue)
+                    modifier =
+                        Modifier.size(width = 200.dp, height = 160.dp)
+                            .background(if (it % 2 == 0) Color.Red else Color.Blue)
                 )
             }
         }
@@ -216,24 +225,21 @@ private fun BackGestureHost(
     content: @Composable () -> Unit,
 ) {
     var backCompletedCount by remember { mutableIntStateOf(0) }
-    val navigationEventState = rememberNavigationEventState<NavigationEventInfo>(
-        currentInfo = NavigationEventInfo.None,
-        backInfo = listOf(NavigationEventInfo.None)
-    )
+    val navigationEventState =
+        rememberNavigationEventState<NavigationEventInfo>(
+            currentInfo = NavigationEventInfo.None,
+            backInfo = listOf(NavigationEventInfo.None),
+        )
 
     onTransitionStateChanged(navigationEventState.transitionState)
     onBackCompletedCountChanged(backCompletedCount)
 
     NavigationBackHandler(
         state = navigationEventState,
-        onBackCompleted = {
-            backCompletedCount += 1
-        }
+        onBackCompleted = { backCompletedCount += 1 },
     )
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        content()
-    }
+    Box(modifier = Modifier.fillMaxSize()) { content() }
 }
 
 private const val SCROLL_SURFACE = "scrollSurface"

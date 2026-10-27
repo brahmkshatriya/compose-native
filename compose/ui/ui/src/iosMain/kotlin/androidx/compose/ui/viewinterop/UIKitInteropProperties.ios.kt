@@ -19,24 +19,23 @@ package androidx.compose.ui.viewinterop
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.semantics
 
 /**
  * Properties that are used to configure the behavior of the interop view.
  *
  * @property interactionMode The strategy on how the touches are processed when the user interacts
- * with the interop view.
- *
- * @property isNativeAccessibilityEnabled Indicates whether a11y services should traverse the
- * native view itself, instead of parsing Compose semantics properties.
- *
+ *   with the interop view.
+ * @property isNativeAccessibilityEnabled Indicates whether a11y services should traverse the native
+ *   view itself, instead of parsing Compose semantics properties.
  * @property placedAsOverlay determines whether the interop view should be placed above or below the
- * Metal drawing canvas.
- * When true, the interop view may have a transparent background and may also overlap other
- * Composables, including those placed on top of the interop view.
- * When false, the interop view will be placed below the Metal drawing canvas, with a transparent
- * cut-out in place of the interop view.
- * The default value is false.
+ *   Metal drawing canvas. When true, the interop view may have a transparent background and may
+ *   also overlap other Composables, including those placed on top of the interop view. When false,
+ *   the interop view will be placed below the Metal drawing canvas, with a transparent cut-out in
+ *   place of the interop view. The default value is false.
+ * @property safeAreaInsetsPolicy Determines which safe-area insets the interop component receives.
+ *   UIKit computes insets for each [UIView] from its position relative to unsafe screen areas. Some
+ *   native components consume those insets during their own layout to keep their content in the
+ *   safe area, which can change their visual placement when Compose moves or clips an interop view.
  *
  * If this Composable is within a modifier chain that merges the semantics of its children (such as
  * `Modifier.clickable`), the merged subtree data will be ignored in favor of the native
@@ -54,32 +53,34 @@ import androidx.compose.ui.semantics.semantics
  * Consider using a single [UIKitView] or [UIKitViewController] with multiple views inside it if you
  * need multiple natively accessible views.
  *
- * In general, [isNativeAccessibilityEnabled] set to `true` is not recommended to use unless
- * you need rich accessibility capabilities of the interop view (such as web views).
- * Consider using [Modifier.semantics] instead.
+ * In general, [isNativeAccessibilityEnabled] set to `true` is not recommended to use unless you
+ * need rich accessibility capabilities of the interop view (such as web views). Consider using
+ * [Modifier.semantics] instead.
  *
  * @see Modifier.semantics
  */
 @Immutable
-class UIKitInteropProperties @ExperimentalComposeUiApi constructor(
+class UIKitInteropProperties
+@ExperimentalComposeUiApi
+constructor(
     val interactionMode: UIKitInteropInteractionMode? = UIKitInteropInteractionMode.Cooperative(),
     val isNativeAccessibilityEnabled: Boolean = false,
     @property:ExperimentalComposeUiApi val placedAsOverlay: Boolean = false,
+    @property:ExperimentalComposeUiApi
+    val safeAreaInsetsPolicy: UIKitInteropSafeAreaInsetsPolicy =
+        UIKitInteropSafeAreaInsetsPolicy.Automatic,
 ) {
-    /**
-     * Indicates whether the user can interact with the interop component.
-     */
+    /** Indicates whether the user can interact with the interop component. */
     val isInteractive: Boolean
         get() = interactionMode != null
 
     /**
      * Properties that are used to configure the behavior of the interop view.
      *
-     * @param interactionMode The strategy on how the touches are processed when the user
-     * interacts with the interop view.
-     *
+     * @param interactionMode The strategy on how the touches are processed when the user interacts
+     *   with the interop view.
      * @param isNativeAccessibilityEnabled Indicates whether a11y services should traverse the
-     * native view itself, instead of parsing Compose semantics properties.
+     *   native view itself, instead of parsing Compose semantics properties.
      */
     constructor(
         interactionMode: UIKitInteropInteractionMode? = UIKitInteropInteractionMode.Cooperative(),
@@ -88,23 +89,24 @@ class UIKitInteropProperties @ExperimentalComposeUiApi constructor(
         interactionMode = interactionMode,
         isNativeAccessibilityEnabled,
         placedAsOverlay = false,
+        safeAreaInsetsPolicy = UIKitInteropSafeAreaInsetsPolicy.Automatic,
     )
 
     /**
      * @param isInteractive Indicates whether the affected interop component should process touches
-     * or not. If true, the default strategy with delay will be used. Otherwise, user interaction is
-     * disabled for it. See [UIKitInteropInteractionMode.Cooperative].
-     *
+     *   or not. If true, the default strategy with delay will be used. Otherwise, user interaction
+     *   is disabled for it. See [UIKitInteropInteractionMode.Cooperative].
      * @param isNativeAccessibilityEnabled Indicates whether native acessibility resolution is
-     * enabled for the interop component. For more details see [UIKitInteropProperties].
+     *   enabled for the interop component. For more details see [UIKitInteropProperties].
      */
     constructor(
         isInteractive: Boolean,
-        isNativeAccessibilityEnabled: Boolean
+        isNativeAccessibilityEnabled: Boolean,
     ) : this(
         interactionMode = if (isInteractive) UIKitInteropInteractionMode.Cooperative() else null,
         isNativeAccessibilityEnabled,
         placedAsOverlay = false,
+        safeAreaInsetsPolicy = UIKitInteropSafeAreaInsetsPolicy.Automatic,
     )
 
     internal companion object {
@@ -123,6 +125,7 @@ class UIKitInteropProperties @ExperimentalComposeUiApi constructor(
         if (interactionMode != other.interactionMode) return false
         if (isNativeAccessibilityEnabled != other.isNativeAccessibilityEnabled) return false
         if (placedAsOverlay != other.placedAsOverlay) return false
+        if (safeAreaInsetsPolicy != other.safeAreaInsetsPolicy) return false
 
         return true
     }
@@ -131,6 +134,7 @@ class UIKitInteropProperties @ExperimentalComposeUiApi constructor(
         var result = interactionMode.hashCode()
         result = 31 * result + isNativeAccessibilityEnabled.hashCode()
         result = 31 * result + placedAsOverlay.hashCode()
+        result = 31 * result + safeAreaInsetsPolicy.hashCode()
         return result
     }
 }

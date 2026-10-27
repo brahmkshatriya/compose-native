@@ -111,19 +111,18 @@ class KeyboardEventsTest {
         assertTrue(trackingView.ended.isEmpty())
     }
 
-    private fun withPressTrackingView(
-        block: (PressTrackingView, UIWindow) -> Unit
-    ) {
+    private fun withPressTrackingView(block: (PressTrackingView, UIWindow) -> Unit) {
         val appDelegate = MockAppDelegate()
         val trackingView = PressTrackingView()
-        val viewController = UIViewController(nibName = null, bundle = null).apply {
-            view.addSubview(trackingView)
-        }
+        val viewController =
+            UIViewController(nibName = null, bundle = null).apply { view.addSubview(trackingView) }
         try {
             appDelegate.setUpWindow(viewController)
             UIKitInstrumentedTest.waitUntil(
                 conditionDescription = "Tracking view attached to window"
-            ) { trackingView.window != null }
+            ) {
+                trackingView.window != null
+            }
             val didBecomeFirstResponder = trackingView.becomeFirstResponder()
             assertTrue(didBecomeFirstResponder, "Tracking view failed to become first responder")
             assertTrue(trackingView.isFirstResponder(), "Tracking view should be first responder")
@@ -144,15 +143,11 @@ class KeyboardEventsTest {
         val keyEvents = mutableListOf<Pair<KeyEventType, Key>>()
 
         setContent {
-            LaunchedEffect(Unit) {
-                requester.requestFocus()
-            }
+            LaunchedEffect(Unit) { requester.requestFocus() }
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .focusRequester(requester)
-                    .focusable()
-                    .onKeyEvent { event ->
+                modifier =
+                    Modifier.fillMaxSize().focusRequester(requester).focusable().onKeyEvent { event
+                        ->
                         keyEvents += event.type to event.key
                         true
                     }
@@ -186,15 +181,12 @@ class KeyboardEventsTest {
         var value by mutableStateOf("")
 
         setContent {
-            LaunchedEffect(Unit) {
-                requester.requestFocus()
-            }
+            LaunchedEffect(Unit) { requester.requestFocus() }
+            @Suppress("DEPRECATION")
             BasicTextField(
                 value = value,
                 onValueChange = { value = it },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .focusRequester(requester),
+                modifier = Modifier.fillMaxSize().focusRequester(requester),
             )
         }
 
@@ -211,21 +203,20 @@ class KeyboardEventsTest {
         var isTextFieldPresent by mutableStateOf(true)
 
         setContent {
-            LaunchedEffect(Unit) {
-                textFieldRequester.requestFocus()
-            }
+            LaunchedEffect(Unit) { textFieldRequester.requestFocus() }
             Column(
-                modifier = Modifier
-                    .onPreviewKeyEvent { event ->
+                modifier =
+                    Modifier.onPreviewKeyEvent { event ->
                         keyEvents += event.type to event.key
                         true
                     }
             ) {
                 if (isTextFieldPresent) {
+                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = "",
                         onValueChange = {},
-                        modifier = Modifier.focusRequester(textFieldRequester)
+                        modifier = Modifier.focusRequester(textFieldRequester),
                     )
                 }
                 Box(modifier = Modifier.size(20.dp).focusRequester(boxRequester).focusable())
@@ -250,7 +241,10 @@ class KeyboardEventsTest {
         // Release the physical key — no additional event should arrive
         xPress.release()
         waitForIdle()
-        assertTrue(keyEvents.isEmpty(), "Expected no additional key events after physical release, got: $keyEvents")
+        assertTrue(
+            keyEvents.isEmpty(),
+            "Expected no additional key events after physical release, got: $keyEvents",
+        )
     }
 
     @Test
@@ -259,15 +253,11 @@ class KeyboardEventsTest {
         val keyEvents = mutableListOf<Pair<KeyEventType, Key>>()
 
         setContent {
-            LaunchedEffect(Unit) {
-                requester.requestFocus()
-            }
+            LaunchedEffect(Unit) { requester.requestFocus() }
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .focusRequester(requester)
-                    .focusable()
-                    .onKeyEvent { event ->
+                modifier =
+                    Modifier.fillMaxSize().focusRequester(requester).focusable().onKeyEvent { event
+                        ->
                         keyEvents += event.type to event.key
                         true
                     }
@@ -285,10 +275,8 @@ class KeyboardEventsTest {
         assertReceived(KeyEventType.KeyDown to Key.ShiftLeft)
 
         // Press Cmd
-        val cmdEvent = beginModifierKeyPress(
-            UIKeyModifierCommand,
-            currentModifiers = UIKeyModifierShift,
-        )
+        val cmdEvent =
+            beginModifierKeyPress(UIKeyModifierCommand, currentModifiers = UIKeyModifierShift)
         waitForIdle()
         assertReceived(KeyEventType.KeyDown to Key.MetaLeft)
 
@@ -317,12 +305,7 @@ class KeyboardEventsTest {
     fun copyEventPropagatedToNativeView() = runUIKitInstrumentedTest {
         val view = FocusableView()
 
-        setContent {
-            UIKitView(
-                factory = { view },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+        setContent { UIKitView(factory = { view }, modifier = Modifier.fillMaxSize()) }
 
         view.becomeFirstResponder()
 
@@ -334,7 +317,7 @@ class KeyboardEventsTest {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-private class FocusableView: UIView(frame = CGRectZero.readValue()) {
+private class FocusableView : UIView(frame = CGRectZero.readValue()) {
     var isCopyCalled = false
 
     override fun canBecomeFirstResponder(): Boolean = true

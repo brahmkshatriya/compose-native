@@ -16,36 +16,27 @@
 
 package androidx.compose.ui.test
 
+import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.TextField
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.input.TextFieldValue
 import kotlin.test.Test
 
-/**
- * Tests the text-actions functionality of the test framework.
- */
+/** Tests the text-actions functionality of the test framework. */
 @OptIn(ExperimentalTestApi::class)
 class TextActionsTest {
 
     @Composable
     fun TestTextField(text: String) {
-        var value by remember { mutableStateOf(TextFieldValue(text)) }
-        TextField(
-            value = value,
-            onValueChange = { value = it },
-            modifier = Modifier.testTag("tag")
-        )
+        TextField(state = rememberTextFieldState(text), modifier = Modifier.testTag("tag"))
     }
 
     @Suppress("DEPRECATION")
     @Test
     fun testPerformTextClearance() = runComposeUiTest {
-        setContent {
-            TestTextField("hello")
-        }
+        setContent { TestTextField("hello") }
 
         onNodeWithTag("tag").apply {
             assertTextEquals("hello")
@@ -57,9 +48,7 @@ class TextActionsTest {
     @Suppress("DEPRECATION")
     @Test
     fun testPerformTextReplacement() = runComposeUiTest {
-        setContent {
-            TestTextField("hello")
-        }
+        setContent { TestTextField("hello") }
 
         onNodeWithTag("tag").apply {
             assertTextEquals("hello")
@@ -71,23 +60,19 @@ class TextActionsTest {
     @Suppress("DEPRECATION")
     @Test
     fun testPerformTextInput() = runComposeUiTest {
-        setContent {
-            TestTextField("compose")
-        }
+        setContent { TestTextField("hello") }
 
         onNodeWithTag("tag").apply {
-            assertTextEquals("compose")
-            performTextInput("hello ")
-            assertTextEquals("hello compose")  // The caret is at 0 initially
+            assertTextEquals("hello")
+            performTextInput(" compose")
+            assertTextEquals("hello compose")
         }
     }
 
     @Suppress("DEPRECATION")
     @Test
-    fun testPerformTextInputSelection() = runComposeUiTest  {
-        setContent {
-            TestTextField("hello")
-        }
+    fun testPerformTextInputSelection() = runComposeUiTest {
+        setContent { TestTextField("hello") }
 
         onNodeWithTag("tag").apply {
             assertTextEquals("hello")

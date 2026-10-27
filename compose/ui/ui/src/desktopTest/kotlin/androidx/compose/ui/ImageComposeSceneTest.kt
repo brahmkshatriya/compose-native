@@ -46,13 +46,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
 
-@OptIn(
-    ExperimentalTime::class,
-    InternalTestApi::class
-)
+@OptIn(ExperimentalTime::class, InternalTestApi::class)
 class ImageComposeSceneTest {
-    @get:Rule
-    val screenshotRule = DesktopScreenshotTestRule("compose/ui/ui-desktop")
+    @get:Rule val screenshotRule = DesktopScreenshotTestRule("compose/ui/ui-desktop")
 
     @get:Rule // A timeout inside @Test annotation does not always work
     val timeout: Timeout = Timeout.seconds(60)
@@ -61,30 +57,25 @@ class ImageComposeSceneTest {
     @Test
     fun `render static ui`() {
         val density = 2f
-        val image = renderComposeScene(
-            width = 100,
-            height = 200,
-            density = Density(density)
-        ) {
-            Box(Modifier.fillMaxSize().padding(1.dp).background(Color.Red))
-        }
+        val image =
+            renderComposeScene(width = 100, height = 200, density = Density(density)) {
+                Box(Modifier.fillMaxSize().padding(1.dp).background(Color.Red))
+            }
         screenshotRule.assertImageAgainstGolden(image)
     }
 
     @Ignore("enable when we make a fork of golden repo")
     @Test
     fun `render animated ui`() {
-        ImageComposeScene(
-            width = 100,
-            height = 200
-        ).use { scene ->
+        ImageComposeScene(width = 100, height = 200).use { scene ->
             var targetSize by mutableStateOf(0f)
 
             scene.setContent {
-                val size by animateFloatAsState(
-                    targetSize,
-                    tween(durationMillis = 100_000, easing = LinearEasing)
-                )
+                val size by
+                    animateFloatAsState(
+                        targetSize,
+                        tween(durationMillis = 100_000, easing = LinearEasing),
+                    )
                 Box(Modifier.size(size.dp, size.dp * 2).background(Color.Red))
             }
 
@@ -100,20 +91,16 @@ class ImageComposeSceneTest {
 
     @Test
     fun `run dialog in center`() {
-        val image = renderComposeSceneOnIdle(
-            width = 80,
-            height = 40,
-        ) {
-            Dialog(onDismissRequest = {}) {
-                Box(Modifier.size(20.dp).background(Color.Red))
+        val image =
+            renderComposeSceneOnIdle(width = 80, height = 40) {
+                Dialog(onDismissRequest = {}) { Box(Modifier.size(20.dp).background(Color.Red)) }
             }
-        }
         screenshotRule.assertImageAgainstGolden(image)
     }
 
     @Test
     fun `run multiple ImageComposeScene`() {
-        for (i in 1..300) {
+        repeat(300) {
             ImageComposeScene(800, 800).use {
                 it.setContent {
                     Box(Modifier.fillMaxWidth()) {
@@ -121,7 +108,7 @@ class ImageComposeSceneTest {
                             icon = { Box(Modifier.size(100.dp).background(Color.Red)) },
                             text = {},
                             onClick = {},
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
@@ -143,13 +130,9 @@ private fun renderComposeSceneOnIdle(
     width: Int,
     height: Int,
     density: Density = Density(1f),
-    content: @Composable () -> Unit
-): Image = ImageComposeScene(
-    width = width,
-    height = height,
-    density = density,
-    content = content
-).use {
-    val time = it.runUntilIdle()
-    it.render(time)
-}
+    content: @Composable () -> Unit,
+): Image =
+    ImageComposeScene(width = width, height = height, density = density, content = content).use {
+        val time = it.runUntilIdle()
+        it.render(time)
+    }

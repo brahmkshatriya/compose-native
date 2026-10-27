@@ -17,7 +17,6 @@
 package androidx.compose.ui.platform
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -28,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asComposeCanvas
-import androidx.compose.ui.platform.registerSkikoComposeImplementation
 import androidx.compose.ui.scene.CanvasLayersComposeScene
 import androidx.compose.ui.scene.ComposeScene
 import androidx.compose.ui.unit.dp
@@ -41,13 +39,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
 
-/**
- * Collection of tests for encountered bugs
- */
+/** Collection of tests for encountered bugs */
 @RunWith(JUnit4::class)
 class GraphicLayerBugDesktopTest {
     // https://youtrack.jetbrains.com/issue/CMP-6729/iOS-Runtime-crash.-Unsupported-concurrent-change-during-composition
-    // sendApplyNotifications can be called anywhere. When it was called inside composition, it triggers wrongly written observers
+    // sendApplyNotifications can be called anywhere. When it was called inside composition, it
+    // triggers wrongly written observers
     @Test
     fun `no crash when sendApplyNotifications performed in composition`() {
         runLayerSceneTest { scene, frameDispatcher ->
@@ -84,18 +81,17 @@ class GraphicLayerBugDesktopTest {
     private fun runLayerSceneTest(body: CoroutineScope.(ComposeScene, FrameRecomposer) -> Unit) {
         var coroutineException: Throwable? = null
 
-        // catching recomposition exceptions this way because of https://youtrack.jetbrains.com/issue/CMP-6734/ComposeScene-doesnt-catch-exceptions-during-recomposition
-        // we catch exceptions this way with real ComposeWindow and the other testing method (runComposeUiTest)
+        // catching recomposition exceptions this way because of
+        // https://youtrack.jetbrains.com/issue/CMP-6734/ComposeScene-doesnt-catch-exceptions-during-recomposition
+        // we catch exceptions this way with real ComposeWindow and the other testing method
+        // (runComposeUiTest)
         runBlocking(
-            MainUIDispatcher + CoroutineExceptionHandler { _, throwable ->
-                coroutineException = throwable
-            }
+            MainUIDispatcher +
+                CoroutineExceptionHandler { _, throwable -> coroutineException = throwable }
         ) {
             registerSkikoComposeImplementation()
             val frameRecomposer = FrameRecomposer(coroutineContext)
-            val scene = CanvasLayersComposeScene(
-                frameRecomposer = frameRecomposer,
-            )
+            val scene = CanvasLayersComposeScene(frameRecomposer = frameRecomposer)
             try {
                 body(scene, frameRecomposer)
             } finally {

@@ -16,7 +16,6 @@
 
 package androidx.compose.ui.scene
 
-import androidx.compose.ui.awt.JLayeredPaneWithTransparencyHack
 import androidx.compose.ui.awt.RenderSettings
 import androidx.compose.ui.awt.hasMacOsShadow
 import androidx.compose.ui.awt.toAwtRectangle
@@ -40,6 +39,7 @@ import java.awt.Point
 import java.awt.Window
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
+import javax.swing.JLayeredPane
 import javax.swing.JWindow
 import org.jetbrains.skia.Canvas
 import org.jetbrains.skiko.DelicateSkikoApi
@@ -58,48 +58,54 @@ internal class WindowComposeSceneLayer(
     // WindowComposeSceneLayer is tied to the window it was created with
     private val parentWindow = requireNotNull(composeContainer.window)
 
-    private val windowContext = PlatformWindowContext().also {
-        it.isWindowTransparent = true
-        it.setWindowContainer(windowContainer)
-        it.setContainerSizeFromComponent(windowContainer)
-    }
-
-    private val layerWindow = JWindow(parentWindow).also {
-        it.focusableWindowState = focusable
-        it.type = Window.Type.POPUP
-
-        @OptIn(DelicateSkikoApi::class)
-        it.background =
-            if (transparent) transparentWindowBackgroundHack(composeContainer.renderApi) else null
-        if (transparent) {
-            it.hasMacOsShadow = false
+    private val windowContext =
+        PlatformWindowContext().also {
+            it.isWindowTransparent = true
+            it.setWindowContainer(windowContainer)
+            it.setContainerSizeFromComponent(windowContainer)
         }
-    }
-    private val container = object : JLayeredPaneWithTransparencyHack() {
-        override fun addNotify() {
-            super.addNotify()
-            mediator?.onComponentAttached()
-            if (focusable) {
-                mediator?.contentComponent?.requestFocusInWindow()
+
+    private val layerWindow =
+        JWindow(parentWindow).also {
+            it.focusableWindowState = focusable
+            it.type = Window.Type.POPUP
+
+            @OptIn(DelicateSkikoApi::class)
+            it.background =
+                if (transparent) transparentWindowBackgroundHack(composeContainer.renderApi)
+                else null
+            if (transparent) {
+                it.hasMacOsShadow = false
             }
         }
+    private val container =
+        object : JLayeredPane() {
+                override fun addNotify() {
+                    super.addNotify()
+                    mediator?.onComponentAttached()
+                    if (focusable) {
+                        mediator?.contentComponent?.requestFocusInWindow()
+                    }
+                }
 
-        override fun removeNotify() {
-            mediator?.onComponentDetached()
-            super.removeNotify()
+                override fun removeNotify() {
+                    mediator?.onComponentDetached()
+                    super.removeNotify()
+                }
+            }
+            .also {
+                it.layout = null
+                it.isOpaque = !transparent
+
+                layerWindow.contentPane = it
+            }
+
+    private val windowPositionListener =
+        object : ComponentAdapter() {
+            override fun componentMoved(e: ComponentEvent?) {
+                onWindowContainerPositionChanged()
+            }
         }
-    }.also {
-        it.layout = null
-        it.isOpaque = !transparent
-
-        layerWindow.contentPane = it
-    }
-
-    private val windowPositionListener = object : ComponentAdapter() {
-        override fun componentMoved(e: ComponentEvent?) {
-            onWindowContainerPositionChanged()
-        }
-    }
 
     override var mediator: ComposeSceneMediator? = null
 
@@ -120,25 +126,27 @@ internal class WindowComposeSceneLayer(
     init {
         val boundsInPx = windowContainer.sizeInPx.toRect()
         drawBounds = boundsInPx.roundToIntRect()
-        mediator = ComposeSceneMediator(
-            container = container,
-            isWindowLevel = true,
-            windowContext = windowContext,
-            exceptionHandler = {
-                composeContainer.exceptionHandler?.onException(it) ?: throw it
-            },
-            eventListener = eventListener,
-            measureDrawLayerBounds = true,
-            architectureComponentsOwner = composeContainer.architectureComponentsOwner,
-            coroutineContext = composeContainer.coroutineContext,
-            skiaLayerComponentFactory = ::createSkiaLayerComponent,
-            composeSceneFactory = ::createComposeScene,
-        ).also {
-            it.onWindowTransparencyChanged(true)
-            it.sceneBoundsInPx = boundsInPx
-            it.contentComponent.size = windowContainer.size
-            it.contentComponent.isFocusable = focusable
-        }
+        mediator =
+            ComposeSceneMediator(
+                    container = container,
+                    isWindowLevel = true,
+                    windowContext = windowContext,
+                    exceptionHandler = {
+                        composeContainer.exceptionHandler?.onException(it) ?: throw it
+                    },
+                    eventListener = eventListener,
+                    measureDrawLayerBounds = true,
+                    architectureComponentsOwner = composeContainer.architectureComponentsOwner,
+                    coroutineContext = composeContainer.coroutineContext,
+                    skiaLayerComponentFactory = ::createSkiaLayerComponent,
+                    composeSceneFactory = ::createComposeScene,
+                )
+                .also {
+                    it.onWindowTransparencyChanged(true)
+                    it.sceneBoundsInPx = boundsInPx
+                    it.contentComponent.size = windowContainer.size
+                    it.contentComponent.isFocusable = focusable
+                }
         onDrawBoundsChanged()
 
         layerWindow.isVisible = true
@@ -170,10 +178,8 @@ internal class WindowComposeSceneLayer(
         windowContext.setContainerSizeFromComponent(windowContainer)
 
         // Update compose constrains based on main window size
-        mediator?.sceneBoundsInPx = Rect(
-            offset = -drawBounds.topLeft.toOffset(),
-            size = windowContainer.sizeInPx
-        )
+        mediator?.sceneBoundsInPx =
+            Rect(offset = -drawBounds.topLeft.toOffset(), size = windowContainer.sizeInPx)
     }
 
     override fun onLayersChange() {
@@ -187,36 +193,36 @@ internal class WindowComposeSceneLayer(
         setWindowContainerLocation(scaledRectangle.x, scaledRectangle.y)
         layerWindow.setSize(scaledRectangle.width, scaledRectangle.height)
         mediator?.contentComponent?.setSize(scaledRectangle.width, scaledRectangle.height)
-        mediator?.sceneBoundsInPx = Rect(
-            offset = -drawBounds.topLeft.toOffset(),
-            size = windowContainer.sizeInPx
-        )
+        mediator?.sceneBoundsInPx =
+            Rect(offset = -drawBounds.topLeft.toOffset(), size = windowContainer.sizeInPx)
     }
 
     override fun onRenderOverlay(canvas: Canvas, width: Int, height: Int, transparent: Boolean) {
         val scrimColor = scrimColor ?: return
-        val paint = Paint().apply {
-            color = scrimColor
-            blendMode = getDialogScrimBlendMode(transparent)
-        }.skiaPaint
+        val paint =
+            Paint()
+                .apply {
+                    color = scrimColor
+                    blendMode = getDialogScrimBlendMode(transparent)
+                }
+                .skiaPaint
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
     }
 
     private fun createSkiaLayerComponent(mediator: ComposeSceneMediator): SkiaLayerComponent {
-        val renderDelegate = OverlayRenderDecorator(
-            recordDrawBounds(mediator)
-        ) { canvas, width, height ->
-            composeContainer.layersAbove(this).forEach {
-                it.onRenderOverlay(canvas, width, height, transparent)
+        val renderDelegate =
+            OverlayRenderDecorator(recordDrawBounds(mediator)) { canvas, width, height ->
+                composeContainer.layersAbove(this).forEach {
+                    it.onRenderOverlay(canvas, width, height, transparent)
+                }
             }
-        }
         return SkiaLayerComponent(
             mediator = mediator,
             windowContext = windowContext,
             renderDelegate = renderDelegate,
             skiaLayerAnalytics = skiaLayerAnalytics,
             renderSettings = renderSettings,
-            fillsWindow = false
+            fillsWindow = false,
         )
     }
 
@@ -234,9 +240,10 @@ internal class WindowComposeSceneLayer(
             invalidateLayout = mediator::onComposeInvalidation,
             invalidateDraw = mediator::onComposeInvalidation,
             layoutDirection = layoutDirection,
-            composeSceneContext = composeContainer.createComposeSceneContext(
-                platformContext = mediator.platformContext
-            ),
+            composeSceneContext =
+                composeContainer.createComposeSceneContext(
+                    platformContext = mediator.platformContext
+                ),
         )
     }
 
@@ -245,9 +252,6 @@ internal class WindowComposeSceneLayer(
             return
         }
         val locationOnScreen = windowContainer.locationOnScreen
-        layerWindow.location = Point(
-            locationOnScreen.x + x,
-            locationOnScreen.y + y
-        )
+        layerWindow.location = Point(locationOnScreen.x + x, locationOnScreen.y + y)
     }
 }

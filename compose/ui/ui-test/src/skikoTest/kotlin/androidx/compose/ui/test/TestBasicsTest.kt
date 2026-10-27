@@ -49,57 +49,48 @@ import kotlinx.coroutines.test.runTest
 
 @Suppress("DEPRECATION")
 @OptIn(ExperimentalTestApi::class)
-class TestBasicsTest : AbstractTestBasicsTest(
-    runUiTest = { runComposeUiTest(block = it) }
-)
+class TestBasicsTest : AbstractTestBasicsTest(runUiTest = { runComposeUiTest(block = it) })
 
-@OptIn(ExperimentalTestApi::class)
-class TestBasicsTestV2 : AbstractTestBasicsTest(
-    runUiTest = { androidx.compose.ui.test.v2.runComposeUiTest(block = it) }
-)
+class TestBasicsTestV2 :
+    AbstractTestBasicsTest(runUiTest = { androidx.compose.ui.test.v2.runComposeUiTest(block = it) })
 
-/**
- * Basic tests of the testing framework itself.
- */
-@OptIn(ExperimentalTestApi::class)
+/** Basic tests of the testing framework itself. */
 abstract class AbstractTestBasicsTest(
     private val runUiTest: (ComposeUiTest.() -> Unit) -> TestResult
 ) {
 
     // See https://github.com/JetBains/compose-multiplatform/issues/3117
     @Test
-    fun recompositionCompletesBeforeSetContentReturns() = repeat(100) {
-        runUiTest {
-            val globalValue = object {
-                var value by atomic(0)
-            }
+    fun recompositionCompletesBeforeSetContentReturns() =
+        repeat(100) {
+            runUiTest {
+                val globalValue =
+                    object {
+                        var value by atomic(0)
+                    }
 
-            setContent {
-                var localValue by remember { mutableStateOf(0) }
+                setContent {
+                    var localValue by remember { mutableStateOf(0) }
 
-                remember(localValue) {
-                    globalValue.value = localValue
+                    remember(localValue) { globalValue.value = localValue }
+
+                    Layout(
+                        {},
+                        Modifier,
+                        measurePolicy = { _, constraints ->
+                            localValue = 100
+                            layout(constraints.maxWidth, constraints.maxHeight) {}
+                        },
+                    )
                 }
 
-                Layout(
-                    {},
-                    Modifier,
-                    measurePolicy = { _, constraints ->
-                        localValue = 100
-                        layout(constraints.maxWidth, constraints.maxHeight) {}
-                    }
-                )
+                assertEquals(100, globalValue.value)
             }
-
-            assertEquals(100, globalValue.value)
         }
-    }
 
     @Test
     fun inputEventAdvancesClock() = runUiTest {
-        setContent {
-            Box(Modifier.testTag("box").size(100.dp))
-        }
+        setContent { Box(Modifier.testTag("box").size(100.dp)) }
 
         val clockBefore = mainClock.currentTime
         onNodeWithTag("box").performClick()
@@ -111,9 +102,7 @@ abstract class AbstractTestBasicsTest(
     fun obtainingSemanticsNodeInteractionWaitsUntilIdle() = runUiTest {
         var text by mutableStateOf("1")
 
-        setContent {
-            Text(text, modifier = Modifier.testTag("text"))
-        }
+        setContent { Text(text, modifier = Modifier.testTag("text")) }
 
         onNodeWithTag("text").assertTextEquals("1")
         text = "2"
@@ -123,9 +112,7 @@ abstract class AbstractTestBasicsTest(
     @Test
     fun testCaptureToImage() = runUiTest {
         val color = Color.Green
-        setContent {
-            Box(Modifier.testTag("box").size(20.dp).background(color))
-        }
+        setContent { Box(Modifier.testTag("box").size(20.dp).background(color)) }
 
         val screenshot = onNodeWithTag("box").captureToImage()
 
@@ -151,7 +138,7 @@ abstract class AbstractTestBasicsTest(
                     LaunchedEffect(Unit) {
                         effectLaunched = true
                         while (true) {
-                            delay(1000)
+                            delay(1.seconds)
                         }
                     }
                 }
@@ -174,8 +161,8 @@ abstract class AbstractTestBasicsTest(
         setContent {
             LaunchedEffect(Unit) {
                 repeat(5) {
-                    delay(1000)
-                    value = it+1
+                    delay(1.seconds)
+                    value = it + 1
                 }
             }
         }
@@ -197,7 +184,7 @@ abstract class AbstractTestBasicsTest(
             compositionValues.add(value)
             val capturedValue = value
             LaunchedEffect(capturedValue) {
-                delay(1000)
+                delay(1.seconds)
                 value = capturedValue + 1
             }
         }
@@ -212,9 +199,7 @@ abstract class AbstractTestBasicsTest(
         mainClock.autoAdvance = false
         var value by mutableIntStateOf(1)
         var compositionValue = 0
-        setContent {
-            compositionValue = value
-        }
+        setContent { compositionValue = value }
         assertEquals(1, compositionValue)
         value = 2
         mainClock.advanceTimeBy(1, ignoreFrameDuration = true)
@@ -227,9 +212,7 @@ abstract class AbstractTestBasicsTest(
     fun launchedEffectsRunAfterComposition() = runUiTest {
         val actions = mutableListOf<String>()
         setContent {
-            LaunchedEffect(Unit) {
-                actions.add("LaunchedEffect")
-            }
+            LaunchedEffect(Unit) { actions.add("LaunchedEffect") }
             actions.add("Composition")
         }
 
@@ -238,7 +221,7 @@ abstract class AbstractTestBasicsTest(
 
     @Test
     fun waitForIdleDoesNotAdvanceClockIfAlreadyIdle() = runUiTest {
-        setContent { }
+        setContent {}
 
         val initialTime = mainClock.currentTime
         waitForIdle()
@@ -248,50 +231,31 @@ abstract class AbstractTestBasicsTest(
     @Test
     @IgnoreWebTest
     fun runOnIdleExecutesOnUiThread() = runUiTest {
-        setContent { }
-        runOnIdle {
-            assertTrue(isOnUiThread())
-        }
+        setContent {}
+        runOnIdle { assertTrue(isOnUiThread()) }
     }
 
     @Test
     fun runOnIdleExecutesWhenIdle() = runUiTest {
         var sourceValue by mutableIntStateOf(0)
         var targetValue = 0
-        setContent {
-            LaunchedEffect(sourceValue) {
-                targetValue = sourceValue
-            }
-        }
+        setContent { LaunchedEffect(sourceValue) { targetValue = sourceValue } }
         sourceValue = 1
-        runOnIdle {
-            assertEquals(targetValue, 1)
-        }
+        runOnIdle { assertEquals(1, targetValue) }
     }
 
     @Test
     fun runOnIdleDoesNotWaitForIdleAfterward() = runUiTest {
         var sourceValue by mutableIntStateOf(0)
         var targetValue = 0
-        setContent {
-            LaunchedEffect(sourceValue) {
-                targetValue = sourceValue
-            }
-        }
-        runOnIdle {
-            sourceValue = 1
-        }
-        assertEquals(targetValue, 0)
+        setContent { LaunchedEffect(sourceValue) { targetValue = sourceValue } }
+        runOnIdle { sourceValue = 1 }
+        assertEquals(0, targetValue)
     }
 
     @Test
-    fun emptyTestPerformance() = runTest(timeout = 6.seconds) {
-        repeat(100) {
-            runUiTest {
-                setContent { }
-            }
-        }
-    }
+    fun emptyTestPerformance() =
+        runTest(timeout = 6.seconds) { repeat(100) { runUiTest { setContent {} } } }
 
     // The two tests below work together to make sure that the initial input is reset between tests
     @Test

@@ -37,6 +37,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
+import androidx.compose.ui.ComposeUiFlags
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.Modifier
@@ -77,397 +78,346 @@ import org.junit.Test
 @OptIn(ExperimentalComposeUiApi::class, ExperimentalTestApi::class)
 class MouseMoveTest {
     @Test
-    fun `inside window`() = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(2f)
-    ).use { scene ->
-        val collector = EventCollector()
+    fun `inside window`() =
+        ImageComposeScene(width = 100, height = 100, density = Density(2f)).use { scene ->
+            val collector = EventCollector()
 
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .collectPointerEvents(collector)
-                    .size(10.dp, 20.dp)
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 15f))
-        collector.assertCounts(enter = 1, exit = 0, move = 2)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(30f, 30f))
-        collector.assertCounts(enter = 1, exit = 1, move = 2)
-    }
-
-    @Test
-    fun `window enter`() = ImageComposeScene(
-        width = 100,
-        height = 100,
-        density = Density(2f)
-    ).use { scene ->
-        val collector = EventCollector()
-
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .collectPointerEvents(collector)
-                    .size(10.dp, 20.dp)
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Exit, Offset(-1f, -1f))
-        collector.assertCounts(enter = 1, exit = 1, move = 0)
-    }
-
-    @Test
-    fun `move between two components`() = ImageComposeScene(
-        width = 100,
-        height = 100
-    ).use { scene ->
-        val collector1 = EventCollector()
-        val collector2 = EventCollector()
-
-        scene.setContent {
-            Column {
-                Box(
-                    modifier = Modifier
-                        .collectPointerEvents(collector1)
-                        .size(10.dp, 20.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .collectPointerEvents(collector2)
-                        .size(10.dp, 20.dp)
-                )
+            scene.setContent {
+                Box(modifier = Modifier.collectPointerEvents(collector).size(10.dp, 20.dp))
             }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
+            scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 15f))
+            collector.assertCounts(enter = 1, exit = 0, move = 2)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(30f, 30f))
+            collector.assertCounts(enter = 1, exit = 1, move = 2)
         }
 
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
-        collector1.assertCounts(enter = 1, exit = 0, move = 0)
-        collector2.assertCounts(enter = 0, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 19f))
-        collector1.assertCounts(enter = 1, exit = 0, move = 1)
-        collector2.assertCounts(enter = 0, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 20f))
-        collector1.assertCounts(enter = 1, exit = 1, move = 1)
-        collector2.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 19f))
-        collector1.assertCounts(enter = 2, exit = 1, move = 1)
-        collector2.assertCounts(enter = 1, exit = 1, move = 0)
-    }
-
     @Test
-    fun `move between two overlapped components`() = ImageComposeScene(
-        width = 200,
-        height = 200
-    ).use { scene ->
-        val collector1 = EventCollector()
-        val collector2 = EventCollector()
+    fun `window enter`() =
+        ImageComposeScene(width = 100, height = 100, density = Density(2f)).use { scene ->
+            val collector = EventCollector()
 
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .collectPointerEvents(collector1)
-                    .size(100.dp, 200.dp)
-            )
-            Box(
-                modifier = Modifier
-                    .collectPointerEvents(collector2)
-                    .size(10.dp, 20.dp)
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
-        collector1.assertCounts(enter = 0, exit = 0, move = 0)
-        collector2.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
-        collector1.assertCounts(enter = 0, exit = 0, move = 0)
-        collector2.assertCounts(enter = 1, exit = 0, move = 1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 0f))
-        collector1.assertCounts(enter = 1, exit = 0, move = 0)
-        collector2.assertCounts(enter = 1, exit = 1, move = 1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
-        collector1.assertCounts(enter = 1, exit = 1, move = 0)
-        collector2.assertCounts(enter = 2, exit = 1, move = 1)
-    }
-
-    @Test
-    fun `move between two nested components`() = ImageComposeScene(
-        width = 200,
-        height = 200
-    ).use { scene ->
-        val collector1 = EventCollector()
-        val collector2 = EventCollector()
-
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .collectPointerEvents(collector1)
-                    .size(100.dp, 200.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .collectPointerEvents(collector2)
-                        .size(10.dp, 20.dp)
-                )
+            scene.setContent {
+                Box(modifier = Modifier.collectPointerEvents(collector).size(10.dp, 20.dp))
             }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Exit, Offset(-1f, -1f))
+            collector.assertCounts(enter = 1, exit = 1, move = 0)
         }
 
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
-        collector1.assertCounts(enter = 1, exit = 0, move = 0)
-        collector2.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
-        collector1.assertCounts(enter = 1, exit = 0, move = 1)
-        collector2.assertCounts(enter = 1, exit = 0, move = 1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 0f))
-        collector1.assertCounts(enter = 1, exit = 0, move = 2)
-        collector2.assertCounts(enter = 1, exit = 1, move = 1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
-        collector1.assertCounts(enter = 1, exit = 0, move = 3)
-        collector2.assertCounts(enter = 2, exit = 1, move = 1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(-1f, -1f))
-        collector1.assertCounts(enter = 1, exit = 1, move = 3)
-        collector2.assertCounts(enter = 2, exit = 2, move = 1)
-    }
-
     @Test
-    @OptIn(ExperimentalComposeUiApi::class)
-    fun `shouldn't send a move events with same position`() = ImageComposeScene(
-        width = 100,
-        height = 100
-    ).use { scene ->
-        val collector = EventCollector()
-        var pressCount = 0
+    fun `move between two components`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val collector1 = EventCollector()
+            val collector2 = EventCollector()
 
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .collectPointerEvents(collector)
-                    .onPointerEvent(PointerEventType.Press) { pressCount++ }
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-    }
-
-    @Test
-    fun `should send a press with same position`() = ImageComposeScene(
-        width = 100,
-        height = 100
-    ).use { scene ->
-        val collector = EventCollector()
-
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .collectPointerEvents(collector)
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0, press = 0)
-
-        scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
-    }
-
-    @Test
-    @OptIn(ExperimentalComposeUiApi::class)
-    fun `should send a synthetic move when component moves`() = ImageComposeScene(
-        width = 100,
-        height = 100
-    ).use { scene ->
-        val collector = EventCollector()
-        
-        var x by mutableStateOf(0)
-        
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .offset(x.dp, 0.dp)
-                    .size(10.dp)
-                    .collectPointerEvents(collector)
-                    .onPointerEvent(PointerEventType.Move) { println("Move ${it.changes.first().position}") }
-                    .onPointerEvent(PointerEventType.Enter) { println("Enter ${it.changes.first().position}") }
-                    .onPointerEvent(PointerEventType.Exit) { println("Exit ${it.changes.first().position}") }
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-        collector.assertPositions(move = null)
-
-        x = -2
-        scene.render()
-        collector.assertCounts(enter = 1, exit = 0, move = 1)
-        collector.assertPositions(move = Offset(2f, 0f))
-    }
-
-    @Suppress("DEPRECATION")
-    @Test
-    fun `hover on scroll`() = runSkikoComposeUiTest(
-        size = Size(100f, 100f),
-    ) {
-        val collector1 = EventCollector()
-        val collector2 = EventCollector()
-
-        setContent {
-            val state = rememberScrollState()
-            Column(Modifier.size(10.dp).verticalScroll(state)) {
-                Box(
-                    modifier = Modifier
-                        .collectPointerEvents(collector1)
-                        .size(10.dp, 10.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .collectPointerEvents(collector2)
-                        .size(10.dp, 10.dp)
-                )
-            }
-        }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
-        collector1.assertCounts(enter = 1, exit = 0)
-        collector2.assertCounts(enter = 0, exit = 0)
-
-        scene.sendPointerEvent(PointerEventType.Scroll, Offset(0f, 0f), scrollDelta = Offset(0f, 10000f))
-        waitForIdle()
-        collector1.assertCounts(enter = 1, exit = 1)
-        collector2.assertCounts(enter = 1, exit = 0)
-
-        scene.sendPointerEvent(PointerEventType.Scroll, Offset(0f, 0f), scrollDelta = Offset(0f, -10000f))
-        waitForIdle()
-        collector1.assertCounts(enter = 2, exit = 1)
-        collector2.assertCounts(enter = 1, exit = 1)
-    }
-
-    @Suppress("DEPRECATION")
-    @Test
-    fun `hover on scroll in lazy list`() = runSkikoComposeUiTest(
-        size = Size(100f, 100f),
-    ) {
-        val collector1 = EventCollector()
-        val collector2 = EventCollector()
-
-        setContent {
-            LazyColumn(Modifier.size(12.dp)) {
-                items(2) {
-                    Box(
-                        modifier = Modifier
-                            .collectPointerEvents(if (it == 0) collector1 else collector2)
-                            .size(10.dp, 10.dp)
-                    )
+            scene.setContent {
+                Column {
+                    Box(modifier = Modifier.collectPointerEvents(collector1).size(10.dp, 20.dp))
+                    Box(modifier = Modifier.collectPointerEvents(collector2).size(10.dp, 20.dp))
                 }
             }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
+            collector1.assertCounts(enter = 1, exit = 0, move = 0)
+            collector2.assertCounts(enter = 0, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 19f))
+            collector1.assertCounts(enter = 1, exit = 0, move = 1)
+            collector2.assertCounts(enter = 0, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 20f))
+            collector1.assertCounts(enter = 1, exit = 1, move = 1)
+            collector2.assertCounts(enter = 1, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 19f))
+            collector1.assertCounts(enter = 2, exit = 1, move = 1)
+            collector2.assertCounts(enter = 1, exit = 1, move = 0)
         }
 
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(5f, 5f))
-        collector1.assertCounts(enter = 1, exit = 0)
-        collector2.assertCounts(enter = 0, exit = 0)
+    @Test
+    fun `move between two overlapped components`() =
+        ImageComposeScene(width = 200, height = 200).use { scene ->
+            val collector1 = EventCollector()
+            val collector2 = EventCollector()
 
-        scene.sendPointerEvent(PointerEventType.Scroll, Offset(5f, 5f), scrollDelta = Offset(0f, 10000f))
-        waitForIdle()
-        collector1.assertCounts(enter = 1, exit = 1)
-        collector2.assertCounts(enter = 1, exit = 0)
+            scene.setContent {
+                Box(modifier = Modifier.collectPointerEvents(collector1).size(100.dp, 200.dp))
+                Box(modifier = Modifier.collectPointerEvents(collector2).size(10.dp, 20.dp))
+            }
 
-        scene.sendPointerEvent(PointerEventType.Scroll, Offset(5f, 5f), scrollDelta = Offset(0f, -10000f))
-        waitForIdle()
-        collector1.assertCounts(enter = 2, exit = 1)
-        collector2.assertCounts(enter = 1, exit = 1)
-    }
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
+            collector1.assertCounts(enter = 0, exit = 0, move = 0)
+            collector2.assertCounts(enter = 1, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
+            collector1.assertCounts(enter = 0, exit = 0, move = 0)
+            collector2.assertCounts(enter = 1, exit = 0, move = 1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 0f))
+            collector1.assertCounts(enter = 1, exit = 0, move = 0)
+            collector2.assertCounts(enter = 1, exit = 1, move = 1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
+            collector1.assertCounts(enter = 1, exit = 1, move = 0)
+            collector2.assertCounts(enter = 2, exit = 1, move = 1)
+        }
+
+    @Test
+    fun `move between two nested components`() =
+        ImageComposeScene(width = 200, height = 200).use { scene ->
+            val collector1 = EventCollector()
+            val collector2 = EventCollector()
+
+            scene.setContent {
+                Box(modifier = Modifier.collectPointerEvents(collector1).size(100.dp, 200.dp)) {
+                    Box(modifier = Modifier.collectPointerEvents(collector2).size(10.dp, 20.dp))
+                }
+            }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
+            collector1.assertCounts(enter = 1, exit = 0, move = 0)
+            collector2.assertCounts(enter = 1, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
+            collector1.assertCounts(enter = 1, exit = 0, move = 1)
+            collector2.assertCounts(enter = 1, exit = 0, move = 1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 0f))
+            collector1.assertCounts(enter = 1, exit = 0, move = 2)
+            collector2.assertCounts(enter = 1, exit = 1, move = 1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
+            collector1.assertCounts(enter = 1, exit = 0, move = 3)
+            collector2.assertCounts(enter = 2, exit = 1, move = 1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(-1f, -1f))
+            collector1.assertCounts(enter = 1, exit = 1, move = 3)
+            collector2.assertCounts(enter = 2, exit = 2, move = 1)
+        }
+
+    @Test
+    @OptIn(ExperimentalComposeUiApi::class)
+    fun `shouldn't send a move events with same position`() =
+        withTriggerMoveEventsWhenLocationHasNotChanged(enabled = false) {
+            ImageComposeScene(width = 100, height = 100).use { scene ->
+                val collector = EventCollector()
+                var pressCount = 0
+
+                scene.setContent {
+                    Box(
+                        modifier =
+                            Modifier.size(10.dp).collectPointerEvents(collector).onPointerEvent(
+                                PointerEventType.Press
+                            ) {
+                                pressCount++
+                            }
+                    )
+                }
+
+                scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+                collector.assertCounts(enter = 1, exit = 0, move = 0)
+
+                scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+                collector.assertCounts(enter = 1, exit = 0, move = 0)
+
+                scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+                collector.assertCounts(enter = 1, exit = 0, move = 0)
+            }
+        }
+
+    @Test
+    fun `should send a press with same position`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val collector = EventCollector()
+
+            scene.setContent {
+                Box(modifier = Modifier.size(10.dp).collectPointerEvents(collector))
+            }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0, press = 0)
+
+            scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            collector.assertCounts(enter = 1, exit = 0, move = movesWithSamePosition(1), press = 1)
+        }
+
+    @Test
+    @OptIn(ExperimentalComposeUiApi::class)
+    fun `should send a synthetic move when component moves`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val collector = EventCollector()
+
+            var x by mutableStateOf(0)
+
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.offset(x.dp, 0.dp)
+                            .size(10.dp)
+                            .collectPointerEvents(collector)
+                            .onPointerEvent(PointerEventType.Move) {
+                                println("Move ${it.changes.first().position}")
+                            }
+                            .onPointerEvent(PointerEventType.Enter) {
+                                println("Enter ${it.changes.first().position}")
+                            }
+                            .onPointerEvent(PointerEventType.Exit) {
+                                println("Exit ${it.changes.first().position}")
+                            }
+                )
+            }
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0)
+            collector.assertPositions(move = null)
+
+            x = -2
+            scene.render()
+            collector.assertCounts(enter = 1, exit = 0, move = 1)
+            collector.assertPositions(move = Offset(2f, 0f))
+        }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `hover on scroll`() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val collector1 = EventCollector()
+            val collector2 = EventCollector()
+
+            setContent {
+                val state = rememberScrollState()
+                Column(Modifier.size(10.dp).verticalScroll(state)) {
+                    Box(modifier = Modifier.collectPointerEvents(collector1).size(10.dp, 10.dp))
+                    Box(modifier = Modifier.collectPointerEvents(collector2).size(10.dp, 10.dp))
+                }
+            }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
+            collector1.assertCounts(enter = 1, exit = 0)
+            collector2.assertCounts(enter = 0, exit = 0)
+
+            scene.sendPointerEvent(
+                PointerEventType.Scroll,
+                Offset(0f, 0f),
+                scrollDelta = Offset(0f, 10000f),
+            )
+            waitForIdle()
+            collector1.assertCounts(enter = 1, exit = 1)
+            collector2.assertCounts(enter = 1, exit = 0)
+
+            scene.sendPointerEvent(
+                PointerEventType.Scroll,
+                Offset(0f, 0f),
+                scrollDelta = Offset(0f, -10000f),
+            )
+            waitForIdle()
+            collector1.assertCounts(enter = 2, exit = 1)
+            collector2.assertCounts(enter = 1, exit = 1)
+        }
+
+    @Suppress("DEPRECATION")
+    @Test
+    fun `hover on scroll in lazy list`() =
+        runSkikoComposeUiTest(size = Size(100f, 100f)) {
+            val collector1 = EventCollector()
+            val collector2 = EventCollector()
+
+            setContent {
+                LazyColumn(Modifier.size(12.dp)) {
+                    items(2) {
+                        Box(
+                            modifier =
+                                Modifier.collectPointerEvents(
+                                        if (it == 0) collector1 else collector2
+                                    )
+                                    .size(10.dp, 10.dp)
+                        )
+                    }
+                }
+            }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(5f, 5f))
+            collector1.assertCounts(enter = 1, exit = 0)
+            collector2.assertCounts(enter = 0, exit = 0)
+
+            scene.sendPointerEvent(
+                PointerEventType.Scroll,
+                Offset(5f, 5f),
+                scrollDelta = Offset(0f, 10000f),
+            )
+            waitForIdle()
+            collector1.assertCounts(enter = 1, exit = 1)
+            collector2.assertCounts(enter = 1, exit = 0)
+
+            scene.sendPointerEvent(
+                PointerEventType.Scroll,
+                Offset(5f, 5f),
+                scrollDelta = Offset(0f, -10000f),
+            )
+            waitForIdle()
+            collector1.assertCounts(enter = 2, exit = 1)
+            collector2.assertCounts(enter = 1, exit = 1)
+        }
 
     // bug after reverting 1b9c0419
     // enter/exit haven't properly fired when we hover another component
     @Test
-    fun `consuming move events with same position shouldn't affect hover()`() = ImageComposeScene(
-        width = 100,
-        height = 100
-    ).use { scene ->
-        val collector1 = EventCollector()
-        val collector2 = EventCollector()
+    fun `consuming move events with same position shouldn't affect hover()`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val collector1 = EventCollector()
+            val collector2 = EventCollector()
 
-        scene.setContent {
-            Row {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .collectPointerEvents(collector1)
-                )
+            scene.setContent {
+                Row {
+                    Box(modifier = Modifier.size(10.dp).collectPointerEvents(collector1))
 
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .collectPointerEvents(collector2)
-                )
+                    Box(modifier = Modifier.size(10.dp).collectPointerEvents(collector2))
+                }
             }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
+            scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
+            collector1.assertCounts(enter = 1, exit = 0, move = movesWithSamePosition(1))
+            collector2.assertCounts(enter = 0, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 0f))
+            collector1.assertCounts(enter = 1, exit = 1, move = movesWithSamePosition(1))
+            collector2.assertCounts(enter = 1, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 0f))
+            collector1.assertCounts(enter = 1, exit = 1, move = movesWithSamePosition(1))
+            collector2.assertCounts(enter = 1, exit = 0, move = movesWithSamePosition(1))
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
+            collector1.assertCounts(enter = 2, exit = 1, move = movesWithSamePosition(1))
+            collector2.assertCounts(enter = 1, exit = 1, move = movesWithSamePosition(1))
         }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(0f, 0f))
-        scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
-        collector1.assertCounts(enter = 1, exit = 0, move = 0)
-        collector2.assertCounts(enter = 0, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 0f))
-        collector1.assertCounts(enter = 1, exit = 1, move = 0)
-        collector2.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 0f))
-        collector1.assertCounts(enter = 1, exit = 1, move = 0)
-        collector2.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(9f, 0f))
-        collector1.assertCounts(enter = 2, exit = 1, move = 0)
-        collector2.assertCounts(enter = 1, exit = 1, move = 0)
-    }
 
     // bug https://youtrack.jetbrains.com/issue/CMP-2147
     @OptIn(ExperimentalComposeUiApi::class)
     @Test
     fun `move between two components with an intermediate render`() {
         @Composable
-        fun Modifier.hoverable(hoveredState: MutableState<Boolean>) = this
-            .onPointerEvent(PointerEventType.Enter) {
-                hoveredState.value = true
-            }
-            .onPointerEvent(PointerEventType.Exit) {
-                hoveredState.value = false
-            }
+        fun Modifier.hoverable(hoveredState: MutableState<Boolean>) =
+            this.onPointerEvent(PointerEventType.Enter) { hoveredState.value = true }
+                .onPointerEvent(PointerEventType.Exit) { hoveredState.value = false }
 
         @Composable
         fun Item(hoveredState: MutableState<Boolean>) {
             Box(
-                Modifier
-                    .hoverable(hoveredState)
+                Modifier.hoverable(hoveredState)
                     .background(if (hoveredState.value) Color.Cyan else Color.Transparent)
                     .size(10.dp, 20.dp)
             )
@@ -475,11 +425,7 @@ class MouseMoveTest {
 
         val context = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
         runBlocking(context) {
-            ImageComposeScene(
-                width = 100,
-                height = 100,
-                coroutineContext = context
-            ).use { scene ->
+            ImageComposeScene(width = 100, height = 100, coroutineContext = context).use { scene ->
                 val isHovered1 = mutableStateOf(false)
                 val isHovered2 = mutableStateOf(false)
 
@@ -503,7 +449,7 @@ class MouseMoveTest {
                 assertThat(isHovered1.value).isTrue()
                 assertThat(isHovered2.value).isFalse()
 
-                scene.render()   // this causes the test to fail before the fixing of 2147
+                scene.render() // this causes the test to fail before the fixing of 2147
                 scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 30f))
                 assertThat(isHovered1.value).isFalse()
                 assertThat(isHovered2.value).isTrue()
@@ -512,306 +458,321 @@ class MouseMoveTest {
     }
 
     @Test
-    fun `only one rect can be hovered in random moves in random rects`() = ImageComposeScene(
-        width = 8,
-        height = 8
-    ).use { scene ->
-        fun log(obj: Any) = Unit
-//        fun log(obj: Any) = println(obj)
+    fun `only one rect can be hovered in random moves in random rects`() =
+        ImageComposeScene(width = 8, height = 8).use { scene ->
+            @Suppress("unused") fun log(obj: Any) = Unit
+            //        fun log(obj: Any) = println(obj)
 
-        operator fun Constraints.contains(position: IntOffset) =
-            position.x in 0 until maxWidth && position.y in 0 until maxHeight
+            operator fun Constraints.contains(position: IntOffset) =
+                position.x in 0 until maxWidth && position.y in 0 until maxHeight
 
-        fun randomOffset() = IntOffset(
-            Random.nextInt(-1, scene.constraints.maxWidth + 1),
-            Random.nextInt(-1, scene.constraints.maxHeight + 1)
-        )
-        fun randomSize() = IntSize(
-            Random.nextInt(0, scene.constraints.maxWidth),
-            Random.nextInt(0, scene.constraints.maxHeight)
-        )
-        fun randomRect() = IntRect(randomOffset(), randomSize())
-        fun randomRects() = (1..Random.nextInt(0, 8)).map { randomRect() }
+            fun randomOffset() =
+                IntOffset(
+                    Random.nextInt(-1, scene.constraints.maxWidth + 1),
+                    Random.nextInt(-1, scene.constraints.maxHeight + 1),
+                )
+            fun randomSize() =
+                IntSize(
+                    Random.nextInt(0, scene.constraints.maxWidth),
+                    Random.nextInt(0, scene.constraints.maxHeight),
+                )
+            fun randomRect() = IntRect(randomOffset(), randomSize())
+            fun randomRects() = (1..Random.nextInt(0, 8)).map { randomRect() }
 
-        val rects = mutableStateListOf<IntRect>()
-        var enteredIndex = -1
+            val rects = mutableStateListOf<IntRect>()
+            var enteredIndex = -1
 
-        scene.setContent {
-            rects.forEachIndexed { index, rect ->
-                DisposableEffect(Unit) {
-                    onDispose {
-                        if (index == enteredIndex) {
-                            enteredIndex = -1
+            scene.setContent {
+                rects.forEachIndexed { index, rect ->
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            if (index == enteredIndex) {
+                                enteredIndex = -1
+                            }
                         }
                     }
+
+                    Box(
+                        Modifier.offset(rect.left.dp, rect.top.dp)
+                            .size(rect.width.dp, rect.height.dp)
+                            .onPointerEvent(PointerEventType.Enter) {
+                                log("Enter $rect")
+                                require(enteredIndex == -1) {
+                                    "There is already entered rect: $enteredIndex"
+                                }
+                                enteredIndex = index
+                            }
+                            .onPointerEvent(PointerEventType.Exit) {
+                                log("Exit $rect")
+                                // Because
+                                require(enteredIndex == index) {
+                                    "Exit fired on different rect $index. Entered rect: $enteredIndex"
+                                }
+                                enteredIndex = -1
+                            }
+                    )
+                }
+            }
+
+            var pointer = IntOffset(100000, 100000)
+
+            repeat(1000) {
+                rects.clear()
+                rects.addAll(randomRects())
+                log("------")
+                log(pointer)
+                log(rects.joinToString("\n"))
+                scene.render()
+
+                repeat(Random.nextInt(4)) {
+                    pointer = randomOffset()
+                    log("Send $pointer")
+                    scene.sendPointerEvent(PointerEventType.Move, pointer.toOffset())
                 }
 
-                Box(
-                    Modifier
-                        .offset(rect.left.dp, rect.top.dp)
-                        .size(rect.width.dp, rect.height.dp)
-                        .onPointerEvent(PointerEventType.Enter) {
-                            log("Enter $rect")
-                            check(enteredIndex == -1) {
-                                "There is already entered rect: $enteredIndex"
-                            }
-                            enteredIndex = index
-                        }
-                        .onPointerEvent(PointerEventType.Exit) {
-                            log("Exit $rect")
-                            // Because
-                            check(enteredIndex == index) {
-                                "Exit fired on different rect $index. Entered rect: $enteredIndex"
-                            }
-                            enteredIndex = -1
-                        }
+                val expectedEnteredIndex =
+                    if (pointer in scene.constraints) {
+                        rects.indexOfLast { it.contains(pointer) }
+                    } else {
+                        -1
+                    }
+
+                assertEquals(
+                    expectedEnteredIndex,
+                    enteredIndex,
+                    "Entered rect is different.\n" +
+                        "Expected: $expectedEnteredIndex\n" +
+                        "Actual: $enteredIndex",
                 )
             }
         }
 
-        var pointer = IntOffset(100000, 100000)
-
-        repeat(1000) {
-            rects.clear()
-            rects.addAll(randomRects())
-            log("------")
-            log(pointer)
-            log(rects.joinToString("\n"))
-            scene.render()
-
-            repeat(Random.nextInt(4)) {
-                pointer = randomOffset()
-                log("Send $pointer")
-                scene.sendPointerEvent(PointerEventType.Move, pointer.toOffset())
+    @Test
+    fun `window exit followed by layout does not trigger mouse enter`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val collector = EventCollector()
+            var yOffset by mutableStateOf(0.dp)
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.size(50.dp).offset(y = yOffset).collectPointerEvents(collector)
+                )
             }
 
-            val expectedEnteredIndex =
-                if (pointer in scene.constraints) {
-                    rects.indexOfLast { it.contains(pointer) }
-                } else {
-                    -1
-                }
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0)
 
-            check(expectedEnteredIndex == enteredIndex) {
-                "Entered rect is different.\n" +
-                    "Expected: $expectedEnteredIndex\n" +
-                    "Actual: $enteredIndex"
+            // Deliberately send an exit event with coordinates still inside the box
+            scene.sendPointerEvent(PointerEventType.Exit, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 1, move = 0)
+
+            // Trigger a layout, which then triggers SyntheticEventSender.updatePointerPosition
+            yOffset = 10.dp
+            scene.renderUntilIdle()
+
+            collector.assertCounts(enter = 1, exit = 1, move = 0)
+        }
+
+    @Test
+    fun `window exit while pressed followed by layout triggers mouse move`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val collector = EventCollector()
+            var yOffset by mutableStateOf(0.dp)
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.size(50.dp).offset(y = yOffset).collectPointerEvents(collector)
+                )
             }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
+
+            scene.sendPointerEvent(PointerEventType.Exit, Offset(-10f, 20f))
+            collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1)
+
+            // Trigger a layout, which then triggers SyntheticEventSender.updatePointerPosition
+            yOffset = 10.dp
+            scene.renderUntilIdle()
+
+            collector.assertCounts(enter = 1, exit = 1, move = 1, press = 1)
         }
-    }
 
     @Test
-    fun `window exit followed by layout does not trigger mouse enter`() = ImageComposeScene(
-        width = 100,
-        height = 100,
-    ).use { scene ->
-        val collector = EventCollector()
-        var yOffset by mutableStateOf(0.dp)
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .offset(y = yOffset)
-                    .collectPointerEvents(collector)
-            )
+    fun `window exit while pressed followed by mouse up and layout does not trigger mouse move`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val collector = EventCollector()
+            var yOffset by mutableStateOf(0.dp)
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.size(50.dp).offset(y = yOffset).collectPointerEvents(collector)
+                )
+            }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
+
+            scene.sendPointerEvent(PointerEventType.Exit, Offset(-10f, 20f))
+            collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1)
+
+            scene.sendPointerEvent(PointerEventType.Release, Offset(-10f, 20f))
+            collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1, release = 1)
+
+            // Trigger a layout, which then triggers SyntheticEventSender.updatePointerPosition
+            yOffset = 10.dp
+            scene.renderUntilIdle()
+
+            collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1, release = 1)
         }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-
-        // Deliberately send an exit event with coordinates still inside the box
-        scene.sendPointerEvent(PointerEventType.Exit, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 1, move = 0)
-
-        // Trigger a layout, which then triggers SyntheticEventSender.updatePointerPosition
-        yOffset = 10.dp
-        scene.renderUntilIdle()
-
-        collector.assertCounts(enter = 1, exit = 1, move = 0)
-    }
 
     @Test
-    fun `window exit while pressed followed by layout triggers mouse move`() = ImageComposeScene(
-        width = 100,
-        height = 100,
-    ).use { scene ->
-        val collector = EventCollector()
-        var yOffset by mutableStateOf(0.dp)
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .offset(y = yOffset)
-                    .collectPointerEvents(collector)
-            )
+    fun `window exit while pressed continues to send mouse events to target element`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val collector = EventCollector()
+            scene.setContent {
+                Box(modifier = Modifier.size(50.dp).collectPointerEvents(collector))
+            }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0)
+
+            scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 20f))
+            collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
+
+            scene.sendPointerEvent(PointerEventType.Exit, Offset(-10f, 20f))
+            collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1)
+
+            scene.sendPointerEvent(PointerEventType.Move, Offset(-20f, 20f))
+            collector.assertCounts(enter = 1, exit = 1, move = 1, press = 1)
         }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
-
-        scene.sendPointerEvent(PointerEventType.Exit, Offset(-10f, 20f))
-        collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1)
-
-        // Trigger a layout, which then triggers SyntheticEventSender.updatePointerPosition
-        yOffset = 10.dp
-        scene.renderUntilIdle()
-
-        collector.assertCounts(enter = 1, exit = 1, move = 1, press = 1)
-    }
 
     @Test
-    fun `window exit while pressed followed by mouse up and layout does not trigger mouse move`() = ImageComposeScene(
-        width = 100,
-        height = 100,
-    ).use { scene ->
-        val collector = EventCollector()
-        var yOffset by mutableStateOf(0.dp)
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .offset(y = yOffset)
-                    .collectPointerEvents(collector)
-            )
+    fun `window exit clears lastKnownPointerPosition`() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            lateinit var composeScene: ComposeScene
+            scene.setContent {
+                composeScene = LocalComposeScene.current!!
+                Box(Modifier.size(100.dp))
+            }
+
+            scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
+            // Deliberately send an exit event with coordinates still inside the box
+            scene.sendPointerEvent(PointerEventType.Exit, Offset(0f, 50f))
+
+            assertNull(composeScene.lastKnownPointerPosition)
         }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
-
-        scene.sendPointerEvent(PointerEventType.Exit, Offset(-10f, 20f))
-        collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1)
-
-        scene.sendPointerEvent(PointerEventType.Release, Offset(-10f, 20f))
-        collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1, release = 1)
-
-        // Trigger a layout, which then triggers SyntheticEventSender.updatePointerPosition
-        yOffset = 10.dp
-        scene.renderUntilIdle()
-
-        collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1, release = 1)
-    }
-
-    @Test
-    fun `window exit while pressed continues to send mouse events to target element`() = ImageComposeScene(
-        width = 100,
-        height = 100,
-    ).use { scene ->
-        val collector = EventCollector()
-        scene.setContent {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .collectPointerEvents(collector)
-            )
-        }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0)
-
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 20f))
-        collector.assertCounts(enter = 1, exit = 0, move = 0, press = 1)
-
-        scene.sendPointerEvent(PointerEventType.Exit, Offset(-10f, 20f))
-        collector.assertCounts(enter = 1, exit = 1, move = 0, press = 1)
-
-        scene.sendPointerEvent(PointerEventType.Move, Offset(-20f, 20f))
-        collector.assertCounts(enter = 1, exit = 1, move = 1, press = 1)
-    }
-
-    @Test
-    fun `window exit clears lastKnownPointerPosition`() = ImageComposeScene(
-        width = 100,
-        height = 100,
-    ).use { scene ->
-        lateinit var composeScene: ComposeScene
-        scene.setContent {
-            composeScene = LocalComposeScene.current!!
-            Box(Modifier.size(100.dp))
-        }
-
-        scene.sendPointerEvent(PointerEventType.Enter, Offset(10f, 20f))
-        // Deliberately send an exit event with coordinates still inside the box
-        scene.sendPointerEvent(PointerEventType.Exit, Offset(0f, 50f))
-
-        assertNull(composeScene.lastKnownPointerPosition)
-    }
 
     // https://youtrack.jetbrains.com/issue/CMP-9964
     @Test
-    fun magicMouseScenario() = ImageComposeScene(
-        width = 100,
-        height = 100,
-    ).use { scene ->
-        var clicksCount = 0
-        scene.setContent {
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .clickable {
-                    clicksCount++
-                }
+    fun magicMouseScenario() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            var clicksCount = 0
+            scene.setContent { Box(modifier = Modifier.fillMaxSize().clickable { clicksCount++ }) }
+
+            // The bug in this scenario is that no mouse-release event was generated
+            // - SyntheticEventSender.sendMissingReleases didn't include the last released pointer
+            //   when receiving the 3rd event.
+            // - HitPathTracker ignores the 3rd event because it's a Move event at the same
+            //   coordinates as the previous (2nd) event.
+            // - CanvasLayersComposeScene.processPointerInputEvent clears `gestureOwner` after
+            //   receiving the 3rd event, so when it receives the 4th event, it doesn't send it.
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(10f, 10f),
+                buttons = PointerButtons(isPrimaryPressed = true),
             )
+            scene.sendPointerEvent(
+                PointerEventType.Move,
+                Offset(10f, 10f),
+                buttons = PointerButtons(isPrimaryPressed = true),
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Move,
+                Offset(10f, 10f),
+                buttons = PointerButtons(isPrimaryPressed = false),
+            )
+            scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
+
+            assertEquals(1, clicksCount)
         }
-
-        // The bug in this scenario is that no mouse-release event was generated
-        // - SyntheticEventSender.sendMissingReleases didn't include the last released pointer
-        //   when receiving the 3rd event.
-        // - HitPathTracker ignores the 3rd event because it's a Move event at the same
-        //   coordinates as the previous (2nd) event.
-        // - CanvasLayersComposeScene.processPointerInputEvent clears `gestureOwner` after
-        //   receiving the 3rd event, so when it receives the 4th event, it doesn't send it.
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f), buttons = PointerButtons(isPrimaryPressed = true))
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 10f), buttons = PointerButtons(isPrimaryPressed = true))
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 10f), buttons = PointerButtons(isPrimaryPressed = false))
-        scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f))
-
-        assertEquals(1, clicksCount)
-    }
 
     @Test
-    fun allNativeMouseEventsAreSent1() = ImageComposeScene(
-        width = 100,
-        height = 100,
-    ).use { scene ->
-        val nativeEventsReceived = mutableListOf<Any>()
-        scene.setContent {
-            Box(modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent(PointerEventPass.Main)
-                            event.nativeEvent?.let { nativeEventsReceived.add(it) }
+    fun allNativeMouseEventsAreSent1() =
+        ImageComposeScene(width = 100, height = 100).use { scene ->
+            val nativeEventsReceived = mutableListOf<Any>()
+            scene.setContent {
+                Box(
+                    modifier =
+                        Modifier.fillMaxSize().pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Main)
+                                    event.nativeEvent?.let { nativeEventsReceived.add(it) }
+                                }
+                            }
                         }
-                    }
-                }
+                )
+            }
+
+            scene.sendPointerEvent(
+                PointerEventType.Press,
+                Offset(10f, 10f),
+                buttons = PointerButtons(isPrimaryPressed = true),
+                nativeEvent = 1,
             )
+            scene.sendPointerEvent(
+                PointerEventType.Move,
+                Offset(10f, 10f),
+                buttons = PointerButtons(isPrimaryPressed = true),
+                nativeEvent = 2,
+            )
+            scene.sendPointerEvent(
+                PointerEventType.Move,
+                Offset(10f, 10f),
+                buttons = PointerButtons(isPrimaryPressed = false),
+                nativeEvent = 3,
+            )
+            scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f), nativeEvent = 4)
+
+            assertContentEquals(listOf(1, 2, 3, 4), nativeEventsReceived)
         }
+}
 
-        scene.sendPointerEvent(PointerEventType.Press, Offset(10f, 10f), buttons = PointerButtons(isPrimaryPressed = true), nativeEvent = 1)
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 10f), buttons = PointerButtons(isPrimaryPressed = true), nativeEvent = 2)
-        scene.sendPointerEvent(PointerEventType.Move, Offset(10f, 10f), buttons = PointerButtons(isPrimaryPressed = false), nativeEvent = 3)
-        scene.sendPointerEvent(PointerEventType.Release, Offset(10f, 10f), nativeEvent = 4)
+/**
+ * Expected number of Move events without position change. They are delivered only if
+ * [ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled]
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+private fun movesWithSamePosition(count: Int) =
+    if (ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled) count else 0
 
-        assertContentEquals(listOf(1, 2, 3, 4), nativeEventsReceived)
+@OptIn(ExperimentalComposeUiApi::class)
+private fun withTriggerMoveEventsWhenLocationHasNotChanged(enabled: Boolean, block: () -> Unit) {
+    val previousValue = ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled
+    try {
+        ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled = enabled
+        block()
+    } finally {
+        ComposeUiFlags.isTriggerMoveEventsWhenLocationHasNotChangedEnabled = previousValue
     }
 }
 
-private fun Modifier.collectPointerEvents(
-    collector: EventCollector,
-): Modifier = pointerInput(collector) {
-    awaitPointerEventScope {
-        while (true) {
-            val event = awaitPointerEvent()
-            collector.onPointerEvent(event)
+private fun Modifier.collectPointerEvents(collector: EventCollector): Modifier =
+    pointerInput(collector) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent()
+                collector.onPointerEvent(event)
+            }
         }
     }
-}
 
 private class EventCollector {
     private var enterCount = 0
@@ -900,13 +861,15 @@ private class EventCollector {
  * @param initialNanoTime The time to start rendering from.
  * @param stepNanoTime The time to step rendering by.
  */
-internal fun ImageComposeScene.renderUntilIdle(initialNanoTime: Long = 0, stepNanoTime: Long = 16L): Long {
+internal fun ImageComposeScene.renderUntilIdle(
+    initialNanoTime: Long = 0,
+    stepNanoTime: Long = 16L,
+): Long {
     var time = initialNanoTime
-    Snapshot.sendApplyNotifications()  // Needed for the scene to be notified of state changes
+    Snapshot.sendApplyNotifications() // Needed for the scene to be notified of state changes
     while (hasInvalidations()) {
         render(time)
         time += stepNanoTime
     }
     return time
 }
-

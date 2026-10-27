@@ -16,8 +16,8 @@
 
 package androidx.compose.ui.node
 
-import androidx.compose.ui.SkikoComposeTestBase
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.SkikoComposeTestBase
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.PlatformContext
@@ -55,43 +55,51 @@ class RootNodeOwnerTest : SkikoComposeTestBase() {
         var inputStopped = false
 
         @Suppress("DEPRECATION")
-        val textInputService = object : androidx.compose.ui.text.input.PlatformTextInputService {
-            override fun startInput(
-                value: TextFieldValue,
-                imeOptions: ImeOptions,
-                onEditCommand: (List<EditCommand>) -> Unit,
-                onImeActionPerformed: (ImeAction) -> Unit
-            ) {
-            }
+        val textInputService =
+            object : androidx.compose.ui.text.input.PlatformTextInputService {
+                override fun startInput(
+                    value: TextFieldValue,
+                    imeOptions: ImeOptions,
+                    onEditCommand: (List<EditCommand>) -> Unit,
+                    onImeActionPerformed: (ImeAction) -> Unit,
+                ) {}
 
-            override fun startInput() {
-                inputStarted = true
-            }
-
-            override fun stopInput() {
-                inputStopped = true
-            }
-
-            override fun showSoftwareKeyboard() {}
-            override fun hideSoftwareKeyboard() {}
-            override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {}
-        }
-        val owner = RootNodeOwner(
-            platformContext = object : PlatformContext.Empty() {
-                @Suppress("DEPRECATION")
-                override val textInputService: androidx.compose.ui.text.input.PlatformTextInputService = textInputService
-                override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
-                    sessionStarted = true
-                    awaitCancellation()
+                override fun startInput() {
+                    inputStarted = true
                 }
-            }
-        )
 
-        val job = CoroutineScope(coroutineContext).launch(start = CoroutineStart.UNDISPATCHED) {
-            owner.owner.textInputSession {
-                startInputMethod(request = TestInputRequest())
+                override fun stopInput() {
+                    inputStopped = true
+                }
+
+                override fun showSoftwareKeyboard() {}
+
+                override fun hideSoftwareKeyboard() {}
+
+                override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {}
             }
-        }
+        val owner =
+            RootNodeOwner(
+                platformContext =
+                    object : PlatformContext.Empty() {
+                        @Suppress("DEPRECATION")
+                        override val textInputService:
+                            androidx.compose.ui.text.input.PlatformTextInputService =
+                            textInputService
+
+                        override suspend fun startInputMethod(
+                            request: PlatformTextInputMethodRequest
+                        ): Nothing {
+                            sessionStarted = true
+                            awaitCancellation()
+                        }
+                    }
+            )
+
+        val job =
+            CoroutineScope(coroutineContext).launch(start = CoroutineStart.UNDISPATCHED) {
+                owner.owner.textInputSession { startInputMethod(request = TestInputRequest()) }
+            }
 
         assertTrue(sessionStarted)
         assertTrue(inputStarted)
@@ -110,44 +118,54 @@ class RootNodeOwnerTest : SkikoComposeTestBase() {
         var keyboardHideCalled = false
 
         @Suppress("DEPRECATION")
-        val textInputService = object : androidx.compose.ui.text.input.PlatformTextInputService {
-            override fun startInput(
-                value: TextFieldValue,
-                imeOptions: ImeOptions,
-                onEditCommand: (List<EditCommand>) -> Unit,
-                onImeActionPerformed: (ImeAction) -> Unit
-            ) = error("Should not be called")
+        val textInputService =
+            object : androidx.compose.ui.text.input.PlatformTextInputService {
+                override fun startInput(
+                    value: TextFieldValue,
+                    imeOptions: ImeOptions,
+                    onEditCommand: (List<EditCommand>) -> Unit,
+                    onImeActionPerformed: (ImeAction) -> Unit,
+                ) = error("Should not be called")
 
-            override fun startInput() {}
-            override fun stopInput() {}
-            override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {}
-            override fun showSoftwareKeyboard() {
-                keyboardShowCalled = true
-            }
+                override fun startInput() {}
 
-            override fun hideSoftwareKeyboard() {
-                keyboardHideCalled = true
-            }
-        }
-        val owner = RootNodeOwner(
-            platformContext = object : PlatformContext.Empty() {
-                @Suppress("DEPRECATION")
-                override val textInputService: androidx.compose.ui.text.input.PlatformTextInputService = textInputService
-                override suspend fun startInputMethod(request: PlatformTextInputMethodRequest): Nothing {
-                    awaitCancellation()
+                override fun stopInput() {}
+
+                override fun updateState(oldValue: TextFieldValue?, newValue: TextFieldValue) {}
+
+                override fun showSoftwareKeyboard() {
+                    keyboardShowCalled = true
+                }
+
+                override fun hideSoftwareKeyboard() {
+                    keyboardHideCalled = true
                 }
             }
-        )
+        val owner =
+            RootNodeOwner(
+                platformContext =
+                    object : PlatformContext.Empty() {
+                        @Suppress("DEPRECATION")
+                        override val textInputService:
+                            androidx.compose.ui.text.input.PlatformTextInputService =
+                            textInputService
+
+                        override suspend fun startInputMethod(
+                            request: PlatformTextInputMethodRequest
+                        ): Nothing {
+                            awaitCancellation()
+                        }
+                    }
+            )
         owner.owner.softwareKeyboardController.show()
 
         assertFalse(keyboardShowCalled)
         assertFalse(keyboardHideCalled)
 
-        val job = CoroutineScope(coroutineContext).launch(start = CoroutineStart.UNDISPATCHED) {
-            owner.owner.textInputSession {
-                startInputMethod(request = TestInputRequest())
+        val job =
+            CoroutineScope(coroutineContext).launch(start = CoroutineStart.UNDISPATCHED) {
+                owner.owner.textInputSession { startInputMethod(request = TestInputRequest()) }
             }
-        }
 
         owner.owner.softwareKeyboardController.show()
 
@@ -165,10 +183,8 @@ class RootNodeOwnerTest : SkikoComposeTestBase() {
     @Test
     fun setSizeOnlyTriggersConstraintChangeWhenValueChanges() = runTest {
         var invalidationCount = 0
-        
-        val owner = RootNodeOwner(
-            invalidate = { invalidationCount++ }
-        )
+
+        val owner = RootNodeOwner(invalidate = { invalidationCount++ })
 
         // Set the initial size
         owner.size = IntSize(100, 100)
@@ -176,20 +192,20 @@ class RootNodeOwnerTest : SkikoComposeTestBase() {
 
         // Setting the same size should not trigger invalidation
         owner.size = IntSize(100, 100)
-        
+
         // Count should remain the same
         assertEquals(invalidationCount, initialCount)
 
         // Setting a different size should trigger invalidation
         owner.size = IntSize(200, 200)
-        
+
         // Count should increase
         assertTrue(invalidationCount > initialCount)
         val afterChangeCount = invalidationCount
 
         // Setting the same size again should not trigger another invalidation
         owner.size = IntSize(200, 200)
-        
+
         // Count should remain the same
         assertEquals(invalidationCount, afterChangeCount)
     }
@@ -199,33 +215,56 @@ private fun RootNodeOwner(
     coroutineContext: CoroutineContext = EmptyCoroutineContext,
     platformContext: PlatformContext = PlatformContext.Empty(),
     invalidate: () -> Unit = {},
-) = RootNodeOwner(
-    density = Density(1f),
-    layoutDirection = LayoutDirection.Ltr,
-    size = null,
-    coroutineContext = coroutineContext,
-    platformContext = platformContext,
-    inputHandler = ComposeSceneInputHandler(
-        prepareForPointerInputEvent = {},
-        processPointerInputEvent = { PointerEventResult(false) },
-        cancelPointerInput = {},
-        processKeyEvent = { false },
-    ),
-    invalidate = invalidate,
-    onChangedExecutor = { it() },
-)
+) =
+    RootNodeOwner(
+        density = Density(1f),
+        layoutDirection = LayoutDirection.Ltr,
+        size = null,
+        coroutineContext = coroutineContext,
+        platformContext = platformContext,
+        inputHandler =
+            ComposeSceneInputHandler(
+                prepareForPointerInputEvent = {},
+                processPointerInputEvent = { PointerEventResult(false) },
+                cancelPointerInput = {},
+                processKeyEvent = { false },
+            ),
+        invalidate = invalidate,
+        onChangedExecutor = { it() },
+    )
 
 @ExperimentalComposeUiApi
-private class TestInputRequest: PlatformTextInputMethodRequest {
-    override val value: () -> TextFieldValue get() = error("Test method")
-    override val state: TextEditorState get() = error("Test method")
-    override val imeOptions: ImeOptions get() = error("Test method")
-    override val onEditCommand: (List<EditCommand>) -> Unit get() = error("Test method")
-    override val onImeAction: ((ImeAction) -> Unit)? get() = error("Test method")
-    override val textLayoutResult: () -> TextLayoutResult? get() = error("Test method")
-    override val focusedRectInRoot: () -> Rect? get() = error("Test method")
-    override val textFieldRectInRoot: () -> Rect? get() = error("Test method")
-    override val textClippingRectInRoot: () -> Rect? get() = error("Test method")
-    override val editText: (TextEditingScope.() -> Unit) -> Unit get() = error("Test method")
-    override val unclippedTextOffsetInRoot: () -> Offset? get() = error("Test method")
+private class TestInputRequest : PlatformTextInputMethodRequest {
+    override val value: () -> TextFieldValue
+        get() = error("Test method")
+
+    override val state: TextEditorState
+        get() = error("Test method")
+
+    override val imeOptions: ImeOptions
+        get() = error("Test method")
+
+    override val onEditCommand: (List<EditCommand>) -> Unit
+        get() = error("Test method")
+
+    override val onImeAction: ((ImeAction) -> Unit)
+        get() = error("Test method")
+
+    override val textLayoutResult: () -> TextLayoutResult?
+        get() = error("Test method")
+
+    override val focusedRectInRoot: () -> Rect?
+        get() = error("Test method")
+
+    override val textFieldRectInRoot: () -> Rect?
+        get() = error("Test method")
+
+    override val textClippingRectInRoot: () -> Rect?
+        get() = error("Test method")
+
+    override val editText: (TextEditingScope.() -> Unit) -> Unit
+        get() = error("Test method")
+
+    override val unclippedTextOffsetInRoot: () -> Offset?
+        get() = error("Test method")
 }

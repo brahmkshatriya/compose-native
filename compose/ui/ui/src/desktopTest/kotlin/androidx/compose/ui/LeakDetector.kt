@@ -28,9 +28,10 @@ class LeakDetector {
 
     /**
      * Return true if any of the objects has GC'ed. We don't check `haveAllGarbageCollected()`,
-     * because GC can collect only some of the objects, depending on the implementation.
-     * Checking for `hasAnyGarbageCollected` is more reliable (but less useful).
+     * because GC can collect only some of the objects, depending on the implementation. Checking
+     * for `hasAnyGarbageCollected` is more reliable (but less useful).
      */
+    @Suppress("DEPRECATION")
     fun hasAnyGarbageCollected(): Boolean {
         System.gc()
         System.runFinalization()

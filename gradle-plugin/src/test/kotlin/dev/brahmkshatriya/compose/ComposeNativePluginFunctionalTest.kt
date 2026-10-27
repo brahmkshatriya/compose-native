@@ -12,55 +12,64 @@ class ComposeNativePluginFunctionalTest {
     fun substitutesForkComposeModulesInAWebApplicationConsumingTheSharedProject() {
         val projectDir = createTempDirectory("compose-native-web-consumer-test").toFile()
         projectDir.deleteOnExit()
-        projectDir.resolve("settings.gradle.kts").writeText(
-            """
-            pluginManagement {
-                repositories { google(); mavenCentral(); gradlePluginPortal() }
-            }
-            dependencyResolutionManagement {
-                repositories { google(); mavenCentral() }
-            }
-            rootProject.name = "compose-native-web-consumer-test"
-            include(":shared", ":web")
-            """.trimIndent()
-        )
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories { google(); mavenCentral(); gradlePluginPortal() }
+                }
+                dependencyResolutionManagement {
+                    repositories { google(); mavenCentral() }
+                }
+                rootProject.name = "compose-native-web-consumer-test"
+                include(":shared", ":web")
+                """
+                    .trimIndent()
+            )
         projectDir.resolve("shared").mkdirs()
-        projectDir.resolve("shared/build.gradle.kts").writeText(
-            """
-            plugins {
-                kotlin("multiplatform") version "2.4.20"
-                id("dev.brahmkshatriya.compose")
-            }
-            kotlin {
-                @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
-                wasmJs()
-                sourceSets.commonMain.dependencies {
-                    implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
-                    implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+        projectDir
+            .resolve("shared/build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "2.4.20"
+                    id("dev.brahmkshatriya.compose")
                 }
-            }
-            """.trimIndent()
-        )
+                kotlin {
+                    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+                    wasmJs()
+                    sourceSets.commonMain.dependencies {
+                        implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
+                        implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+                    }
+                }
+                """
+                    .trimIndent()
+            )
         projectDir.resolve("web").mkdirs()
-        projectDir.resolve("web/build.gradle.kts").writeText(
-            """
-            plugins { kotlin("multiplatform") version "2.4.20" }
-            kotlin {
-                @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
-                wasmJs()
-                sourceSets.wasmJsMain.dependencies {
-                    implementation(project(":shared"))
-                    implementation("org.jetbrains.compose.material:material-ripple:1.13.0-alpha01")
-                    implementation("org.jetbrains.compose.material3:material3:1.13.0-alpha01")
-                    implementation("org.jetbrains.compose.runtime:runtime:1.13.0-alpha01")
-                    implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
-                    implementation("org.jetbrains.androidx.navigation3:navigation3-runtime:1.1.1")
-                    implementation("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.1.0")
-                    implementation("org.jetbrains.androidx.savedstate:savedstate-compose:1.4.0")
+        projectDir
+            .resolve("web/build.gradle.kts")
+            .writeText(
+                """
+                plugins { kotlin("multiplatform") version "2.4.20" }
+                kotlin {
+                    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+                    wasmJs()
+                    sourceSets.wasmJsMain.dependencies {
+                        implementation(project(":shared"))
+                        implementation("org.jetbrains.compose.material:material-ripple:1.13.0-alpha01")
+                        implementation("org.jetbrains.compose.material3:material3:1.13.0-alpha01")
+                        implementation("org.jetbrains.compose.runtime:runtime:1.13.0-alpha01")
+                        implementation("org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose:2.10.0")
+                        implementation("org.jetbrains.androidx.navigation3:navigation3-runtime:1.1.1")
+                        implementation("org.jetbrains.androidx.navigationevent:navigationevent-compose:1.1.0")
+                        implementation("org.jetbrains.androidx.savedstate:savedstate-compose:1.4.0")
+                    }
                 }
-            }
-            """.trimIndent()
-        )
+                """
+                    .trimIndent()
+            )
 
         val result =
             GradleRunner.create()
@@ -84,7 +93,7 @@ class ComposeNativePluginFunctionalTest {
         )
         assertContains(
             result.output,
-            "org.jetbrains.compose.runtime:runtime:1.13.0-alpha01 -> androidx.compose.runtime:runtime:1.13.0-alpha03",
+            "org.jetbrains.compose.runtime:runtime:1.13.0-alpha01 -> androidx.compose.runtime:runtime:1.13.0-beta01",
         )
         assertContains(
             result.output,
@@ -92,7 +101,7 @@ class ComposeNativePluginFunctionalTest {
         )
         assertContains(
             result.output,
-            "org.jetbrains.androidx.navigation3:navigation3-runtime:1.1.1 -> androidx.navigation3:navigation3-runtime:1.2.0-rc01",
+            "org.jetbrains.androidx.navigation3:navigation3-runtime:1.1.1 -> androidx.navigation3:navigation3-runtime:1.2.0",
         )
         assertContains(
             result.output,
@@ -110,75 +119,87 @@ class ComposeNativePluginFunctionalTest {
     fun substitutesFullForkRootsFromUpstreamIosDependencyInApplicationConsumer() {
         val projectDir = createTempDirectory("compose-native-ios-full-fork-consumer-test").toFile()
         projectDir.deleteOnExit()
-        projectDir.resolve("settings.gradle.kts").writeText(
-            """
-            pluginManagement {
-                repositories { google(); mavenCentral(); gradlePluginPortal() }
-            }
-            dependencyResolutionManagement {
-                repositories { google(); mavenCentral() }
-            }
-            rootProject.name = "compose-native-ios-full-fork-consumer-test"
-            include(":shared", ":upstreamLib", ":ios")
-            """.trimIndent()
-        )
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories { google(); mavenCentral(); gradlePluginPortal() }
+                }
+                dependencyResolutionManagement {
+                    repositories { google(); mavenCentral() }
+                }
+                rootProject.name = "compose-native-ios-full-fork-consumer-test"
+                include(":shared", ":upstreamLib", ":ios")
+                """
+                    .trimIndent()
+            )
         projectDir.resolve("shared").mkdirs()
-        projectDir.resolve("shared/build.gradle.kts").writeText(
-            """
-            plugins {
-                kotlin("multiplatform") version "2.4.20"
-                id("dev.brahmkshatriya.compose")
-            }
-            kotlin {
-                iosArm64()
-                sourceSets.commonMain.dependencies {
-                    implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
-                    implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+        projectDir
+            .resolve("shared/build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "2.4.20"
+                    id("dev.brahmkshatriya.compose")
                 }
-            }
-            """.trimIndent()
-        )
+                kotlin {
+                    iosArm64()
+                    sourceSets.commonMain.dependencies {
+                        implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
+                        implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+                    }
+                }
+                """
+                    .trimIndent()
+            )
         projectDir.resolve("upstreamLib").mkdirs()
-        projectDir.resolve("upstreamLib/build.gradle.kts").writeText(
-            """
-            plugins { kotlin("multiplatform") version "2.4.20" }
-            kotlin {
-                iosArm64()
-                sourceSets.commonMain.dependencies {
-                    api("org.jetbrains.compose.material3:material3:1.13.0-alpha01")
+        projectDir
+            .resolve("upstreamLib/build.gradle.kts")
+            .writeText(
+                """
+                plugins { kotlin("multiplatform") version "2.4.20" }
+                kotlin {
+                    iosArm64()
+                    sourceSets.commonMain.dependencies {
+                        api("org.jetbrains.compose.material3:material3:1.13.0-alpha01")
+                    }
                 }
-            }
-            """.trimIndent()
-        )
+                """
+                    .trimIndent()
+            )
         projectDir.resolve("ios").mkdirs()
-        projectDir.resolve("ios/build.gradle.kts").writeText(
-            """
-            plugins { kotlin("multiplatform") version "2.4.20" }
-            kotlin {
-                iosArm64()
-                sourceSets.iosArm64Main.dependencies {
-                    implementation(project(":shared"))
-                    implementation(project(":upstreamLib"))
+        projectDir
+            .resolve("ios/build.gradle.kts")
+            .writeText(
+                """
+                plugins { kotlin("multiplatform") version "2.4.20" }
+                kotlin {
+                    iosArm64()
+                    sourceSets.iosArm64Main.dependencies {
+                        implementation(project(":shared"))
+                        implementation(project(":upstreamLib"))
+                    }
                 }
-            }
 
-            tasks.register("printIosSupportRequests") {
-                doLast {
-                    configurations.getByName("iosArm64CompileKlibraries")
-                        .incoming.resolutionResult.allDependencies
-                        .forEach { dependency ->
-                            val requested = dependency.requested.displayName
-                            if (
-                                requested.contains("ui-uikit") ||
-                                    requested.contains("runtime-annotation")
-                            ) {
-                                println("REQUEST=" + requested)
+                tasks.register("printIosSupportRequests") {
+                    doLast {
+                        configurations.getByName("iosArm64CompileKlibraries")
+                            .incoming.resolutionResult.allDependencies
+                            .forEach { dependency ->
+                                val requested = dependency.requested.displayName
+                                if (
+                                    requested.contains("ui-uikit") ||
+                                        requested.contains("runtime-annotation")
+                                ) {
+                                    println("REQUEST=" + requested)
+                                }
                             }
-                        }
+                    }
                 }
-            }
-            """.trimIndent()
-        )
+                """
+                    .trimIndent()
+            )
 
         val result =
             GradleRunner.create()
@@ -194,9 +215,19 @@ class ComposeNativePluginFunctionalTest {
                 )
                 .build()
 
-        assertContains(result.output, "dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
-        assertContains(result.output, "requested org.jetbrains.compose.material3:material3:1.13.0-alpha01")
-        assertFalse(result.output.contains("org.jetbrains.compose.material3:material3-iosarm64:1.13.0-alpha01"))
+        assertContains(
+            result.output,
+            "dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06",
+        )
+        assertContains(
+            result.output,
+            "requested org.jetbrains.compose.material3:material3:1.13.0-alpha01",
+        )
+        assertFalse(
+            result.output.contains(
+                "org.jetbrains.compose.material3:material3-iosarm64:1.13.0-alpha01"
+            )
+        )
 
         val supportResult =
             GradleRunner.create()
@@ -207,11 +238,11 @@ class ComposeNativePluginFunctionalTest {
 
         assertContains(
             supportResult.output,
-            "REQUEST=org.jetbrains.compose.ui:ui-uikit:1.13.0-alpha01",
+            "REQUEST=org.jetbrains.compose.ui:ui-uikit:1.13.0-beta01",
         )
         assertContains(
             supportResult.output,
-            "REQUEST=androidx.compose.runtime:runtime-annotation:1.13.0-alpha03",
+            "REQUEST=androidx.compose.runtime:runtime-annotation:1.13.0-beta01",
         )
         assertFalse(
             supportResult.output.contains(
@@ -229,52 +260,58 @@ class ComposeNativePluginFunctionalTest {
     fun repairsPublishedIosForkSupportMetadataBeforeResolution() {
         val projectDir = createTempDirectory("compose-native-ios-metadata-repair-test").toFile()
         projectDir.deleteOnExit()
-        projectDir.resolve("settings.gradle.kts").writeText(
-            """
-            pluginManagement {
-                repositories { google(); mavenCentral(); gradlePluginPortal() }
-            }
-            dependencyResolutionManagement {
-                repositories {
-                    google()
-                    mavenCentral()
-                    maven("https://packages.jetbrains.team/maven/p/cmp/dev")
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories { google(); mavenCentral(); gradlePluginPortal() }
                 }
-            }
-            rootProject.name = "compose-native-ios-metadata-repair-test"
-            """.trimIndent()
-        )
-        projectDir.resolve("build.gradle.kts").writeText(
-            """
-            plugins {
-                kotlin("multiplatform") version "2.4.20"
-                id("dev.brahmkshatriya.compose")
-            }
-            kotlin {
-                iosArm64()
-                sourceSets.commonMain.dependencies {
-                    implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
-                    implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+                dependencyResolutionManagement {
+                    repositories {
+                        google()
+                        mavenCentral()
+                        maven("https://packages.jetbrains.team/maven/p/cmp/dev")
+                    }
                 }
-            }
+                rootProject.name = "compose-native-ios-metadata-repair-test"
+                """
+                    .trimIndent()
+            )
+        projectDir
+            .resolve("build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "2.4.20"
+                    id("dev.brahmkshatriya.compose")
+                }
+                kotlin {
+                    iosArm64()
+                    sourceSets.commonMain.dependencies {
+                        implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
+                        implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+                    }
+                }
 
-            tasks.register("printIosRequests") {
-                doLast {
-                    configurations.getByName("iosArm64CompileKlibraries")
-                        .incoming.resolutionResult.allDependencies
-                        .forEach { dependency ->
-                            val requested = dependency.requested.displayName
-                            if (
-                                requested.contains("ui-uikit") ||
-                                    requested.contains("runtime-annotation")
-                            ) {
-                                println("REQUEST=" + requested)
+                tasks.register("printIosRequests") {
+                    doLast {
+                        configurations.getByName("iosArm64CompileKlibraries")
+                            .incoming.resolutionResult.allDependencies
+                            .forEach { dependency ->
+                                val requested = dependency.requested.displayName
+                                if (
+                                    requested.contains("ui-uikit") ||
+                                        requested.contains("runtime-annotation")
+                                ) {
+                                    println("REQUEST=" + requested)
+                                }
                             }
-                        }
+                    }
                 }
-            }
-            """.trimIndent()
-        )
+                """
+                    .trimIndent()
+            )
 
         val result =
             GradleRunner.create()
@@ -283,18 +320,13 @@ class ComposeNativePluginFunctionalTest {
                 .withArguments("printIosRequests", "--no-configuration-cache")
                 .build()
 
+        assertContains(result.output, "REQUEST=org.jetbrains.compose.ui:ui-uikit:1.13.0-beta01")
         assertContains(
             result.output,
-            "REQUEST=org.jetbrains.compose.ui:ui-uikit:1.13.0-alpha01",
-        )
-        assertContains(
-            result.output,
-            "REQUEST=androidx.compose.runtime:runtime-annotation:1.13.0-alpha03",
+            "REQUEST=androidx.compose.runtime:runtime-annotation:1.13.0-beta01",
         )
         assertFalse(
-            result.output.contains(
-                "REQUEST=dev.brahmkshatriya.compose.ui:ui-uikit:1.13.0-alpha06"
-            )
+            result.output.contains("REQUEST=dev.brahmkshatriya.compose.ui:ui-uikit:1.13.0-alpha06")
         )
         assertFalse(
             result.output.contains(
@@ -307,35 +339,41 @@ class ComposeNativePluginFunctionalTest {
     fun keepsFullForkRootsButRoutesJvmSupportModulesUpstream() {
         val projectDir = createTempDirectory("compose-native-jvm-full-fork-test").toFile()
         projectDir.deleteOnExit()
-        projectDir.resolve("settings.gradle.kts").writeText(
-            """
-            pluginManagement {
-                repositories { google(); mavenCentral(); gradlePluginPortal() }
-            }
-            dependencyResolutionManagement {
-                repositories { google(); mavenCentral() }
-            }
-            rootProject.name = "compose-native-jvm-full-fork-test"
-            """.trimIndent()
-        )
-        projectDir.resolve("build.gradle.kts").writeText(
-            """
-            plugins {
-                kotlin("multiplatform") version "2.4.20"
-                id("dev.brahmkshatriya.compose")
-            }
-            kotlin {
-                jvm()
-                sourceSets {
-                    commonMain.dependencies {
-                        implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
-                        implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
-                        implementation("dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06")
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories { google(); mavenCentral(); gradlePluginPortal() }
+                }
+                dependencyResolutionManagement {
+                    repositories { google(); mavenCentral() }
+                }
+                rootProject.name = "compose-native-jvm-full-fork-test"
+                """
+                    .trimIndent()
+            )
+        projectDir
+            .resolve("build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "2.4.20"
+                    id("dev.brahmkshatriya.compose")
+                }
+                kotlin {
+                    jvm()
+                    sourceSets {
+                        commonMain.dependencies {
+                            implementation("dev.brahmkshatriya.compose.foundation:foundation:1.13.0-alpha06")
+                            implementation("dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06")
+                            implementation("dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06")
+                        }
                     }
                 }
-            }
-            """.trimIndent()
-        )
+                """
+                    .trimIndent()
+            )
 
         val result =
             GradleRunner.create()
@@ -359,7 +397,7 @@ class ComposeNativePluginFunctionalTest {
         )
         assertContains(
             result.output,
-            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06 -> org.jetbrains.compose.ui:ui:1.13.0-alpha01",
+            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06 -> org.jetbrains.compose.ui:ui:1.13.0-beta01",
         )
         assertFalse(
             result.output.contains(
@@ -616,12 +654,12 @@ class ComposeNativePluginFunctionalTest {
             projectDir.resolve("build/ide/dependencies/json/commonMain.json").readText()
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.ui:ui:1.13.0-alpha01",
+            "org.jetbrains.compose.ui:ui:1.13.0-beta01",
             message = "The IDE model must contain official Compose UI metadata",
         )
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.ui:ui-unit:1.13.0-alpha01",
+            "org.jetbrains.compose.ui:ui-unit:1.13.0-beta01",
             message = "The IDE model must contain the metadata that defines Dp and dp",
         )
         assertContains(
@@ -824,10 +862,7 @@ class ComposeNativePluginFunctionalTest {
             result.output,
             "dev.brahmkshatriya.compose.material3:material3:1.13.0-alpha06",
         )
-        assertContains(
-            result.output,
-            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06",
-        )
+        assertContains(result.output, "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06")
         assertContains(
             result.output,
             "dev.brahmkshatriya.androidx.collection:collection:1.13.0-alpha06",
@@ -924,10 +959,7 @@ class ComposeNativePluginFunctionalTest {
     @Test
     fun includesAndroidxRuntimeInTheCommonMetadataRepair() {
         assertTrue(
-            isOfficialCommonIdeDependency(
-                group = "androidx.compose.runtime",
-                module = "runtime",
-            )
+            isOfficialCommonIdeDependency(group = "androidx.compose.runtime", module = "runtime")
         )
         assertTrue(
             isOfficialCommonIdeDependency(

@@ -19,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -27,8 +28,7 @@ import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.pointerevents.PointerEvent
 import org.w3c.dom.pointerevents.PointerEventInit
 
-
-class MouseTextInputTests: OnCanvasTests {
+class MouseTextInputTests : OnCanvasTests {
     @Test
     fun canSelectUsingMouse() = runApplicationTest {
         val textRange = mutableStateOf(TextRange(0, 0))
@@ -42,9 +42,13 @@ class MouseTextInputTests: OnCanvasTests {
 
             CompositionLocalProvider(LocalDensity provides Density(2f)) {
                 Column {
-                    TextField(state = textState, modifier = Modifier.focusRequester(focusRequester).onGloballyPositioned {
-                        textFieldWidth = it.size.width
-                    })
+                    TextField(
+                        state = textState,
+                        modifier =
+                            Modifier.focusRequester(focusRequester).onGloballyPositioned {
+                                textFieldWidth = it.size.width
+                            },
+                    )
 
                     LaunchedEffect(textState.selection) {
                         focusRequester.requestFocus()
@@ -63,9 +67,31 @@ class MouseTextInputTests: OnCanvasTests {
         val canvas = getCanvas()
         canvas.dispatchEvent(PointerEvent("pointerenter", PointerEventInit(pointerType = "mouse")))
         yield()
-        canvas.dispatchEvent(PointerEvent("pointerdown", PointerEventInit(clientX = 8, clientY = 20, buttons = 1, button = 1, pointerType = "mouse")))
+        canvas.dispatchEvent(
+            PointerEvent(
+                "pointerdown",
+                PointerEventInit(
+                    clientX = 8,
+                    clientY = 20,
+                    buttons = 1,
+                    button = 1,
+                    pointerType = "mouse",
+                ),
+            )
+        )
         yield()
-        canvas.dispatchEvent(PointerEvent("pointerup", PointerEventInit(clientX = 8, clientY = 20, buttons = 0, button = 1, pointerType = "mouse")))
+        canvas.dispatchEvent(
+            PointerEvent(
+                "pointerup",
+                PointerEventInit(
+                    clientX = 8,
+                    clientY = 20,
+                    buttons = 0,
+                    button = 1,
+                    pointerType = "mouse",
+                ),
+            )
+        )
 
         awaitIdle()
         assertEquals(TextRange(0, 0), textRange.value)
@@ -75,30 +101,74 @@ class MouseTextInputTests: OnCanvasTests {
 
         val textAreaRect = backingInput.getBoundingClientRect()
         // Do a manual hit-test
-        val elementsAtPos = getShadowRoot().elementFromPoint(
-            textAreaRect.left + textAreaRect.width / 2 ,
-            textAreaRect.top + textAreaRect.height / 2
-        )
+        val elementsAtPos =
+            getShadowRoot()
+                .elementFromPoint(
+                    textAreaRect.left + textAreaRect.width / 2,
+                    textAreaRect.top + textAreaRect.height / 2,
+                )
 
         // We expect the canvas to be on the top despite the coordinates match the textarea.
         // So it will be the first to process all the point inputs
         assertEquals(canvas, elementsAtPos, "First element under mouse supposed to be canvas")
         withContext(Dispatchers.Default) {
-            delay(250) // to separate the mouse events
+            delay(250.milliseconds) // to separate the mouse events
         }
-
 
         // Try to select the text using mouse:
         val startX = textAreaRect.left.toInt() + 1
         val startY = textAreaRect.top.toInt() + 8
         val endX = startX + textFieldWidth
-        canvas.dispatchEvent(PointerEvent("pointermove", PointerEventInit(clientX = startX, clientY = startY, buttons = 1, button = 1, pointerType = "mouse")))
-        canvas.dispatchEvent(PointerEvent("pointerdown", PointerEventInit(clientX = startX, clientY = startY, buttons = 1, button = 1, pointerType = "mouse")))
-        canvas.dispatchEvent(PointerEvent("pointermove", PointerEventInit(clientX = endX, clientY = startY, buttons = 1, button = 1, pointerType = "mouse")))
-        canvas.dispatchEvent(PointerEvent("pointerup", PointerEventInit(clientX = endX, clientY = startY, buttons = 0, button = 1, pointerType = "mouse")))
+        canvas.dispatchEvent(
+            PointerEvent(
+                "pointermove",
+                PointerEventInit(
+                    clientX = startX,
+                    clientY = startY,
+                    buttons = 1,
+                    button = 1,
+                    pointerType = "mouse",
+                ),
+            )
+        )
+        canvas.dispatchEvent(
+            PointerEvent(
+                "pointerdown",
+                PointerEventInit(
+                    clientX = startX,
+                    clientY = startY,
+                    buttons = 1,
+                    button = 1,
+                    pointerType = "mouse",
+                ),
+            )
+        )
+        canvas.dispatchEvent(
+            PointerEvent(
+                "pointermove",
+                PointerEventInit(
+                    clientX = endX,
+                    clientY = startY,
+                    buttons = 1,
+                    button = 1,
+                    pointerType = "mouse",
+                ),
+            )
+        )
+        canvas.dispatchEvent(
+            PointerEvent(
+                "pointerup",
+                PointerEventInit(
+                    clientX = endX,
+                    clientY = startY,
+                    buttons = 0,
+                    button = 1,
+                    pointerType = "mouse",
+                ),
+            )
+        )
 
         awaitIdle()
         assertEquals(TextRange(0, 14), textRange.value)
     }
-
 }

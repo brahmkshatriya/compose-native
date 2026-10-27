@@ -23,10 +23,10 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.EmptyInputTraits
+import androidx.compose.ui.platform.NativeTextInputContextMenuCustomAction
 import androidx.compose.ui.platform.PlatformTextInputMethodRequest
 import androidx.compose.ui.platform.SkikoUITextInputTraits
 import androidx.compose.ui.platform.TextEditingDelegate
-import androidx.compose.ui.platform.NativeTextInputContextMenuCustomAction
 import androidx.compose.ui.platform.getUITextInputTraits
 import androidx.compose.ui.platform.isValidIn
 import androidx.compose.ui.platform.movePositionByGraphemes
@@ -55,7 +55,7 @@ internal abstract class TextInputConnection(
     protected val coroutineScope: CoroutineScope,
     protected val focusedViewsList: FocusedViewsList?,
     private var focusManager: () -> ComposeSceneFocusManager?,
-): TextEditingDelegate {
+) : TextEditingDelegate {
 
     private var textInputServiceInvalidationsCount = 0
     val hasInvalidations: Boolean
@@ -68,16 +68,21 @@ internal abstract class TextInputConnection(
      */
     private var postponeSelectionUpdate: Boolean = false
 
-    private var floatingCursorTranslation : Offset? = null
+    private var floatingCursorTranslation: Offset? = null
     private var currentRequest: PlatformTextInputMethodRequest? = null
 
     protected abstract val textInputView: UIView
     protected var currentTextFieldValue: TextFieldValue? = null
         private set
 
-    protected val textLayoutResult get() = currentRequest?.textLayoutResult()
-    protected val unclippedTextOffsetInRoot get() = currentRequest?.unclippedTextOffsetInRoot()
-    protected val textFieldRectInRoot get() = currentRequest?.textFieldRectInRoot()
+    protected val textLayoutResult
+        get() = currentRequest?.textLayoutResult()
+
+    protected val unclippedTextOffsetInRoot
+        get() = currentRequest?.unclippedTextOffsetInRoot()
+
+    protected val textFieldRectInRoot
+        get() = currentRequest?.textFieldRectInRoot()
 
     abstract val rootView: UIView
 
@@ -117,8 +122,6 @@ internal abstract class TextInputConnection(
         focusedViewsList?.remove(textInputView, delay = CLEAR_FOCUS_DELAY)
     }
 
-    fun reloadInputViews() = textInputView.reloadInputViews()
-
     open fun onTextFieldValueUpdated(newValue: TextFieldValue) {
         if (postponeSelectionUpdate) {
             currentTextFieldValue = newValue
@@ -134,6 +137,7 @@ internal abstract class TextInputConnection(
     }
 
     protected abstract fun stateWillChange(textChanged: Boolean, selectionChanged: Boolean)
+
     protected abstract fun stateDidChange(textChanged: Boolean, selectionChanged: Boolean)
 
     /**
@@ -162,22 +166,23 @@ internal abstract class TextInputConnection(
         paste: (() -> Unit)?,
         cut: (() -> Unit)?,
         selectAll: (() -> Unit)?,
-        customActions: List<NativeTextInputContextMenuCustomAction>?
+        customActions: List<NativeTextInputContextMenuCustomAction>?,
     )
 
     /**
      * Workaround to prevent IME action from being called multiple times with hardware keyboards.
-     * When the hardware return key is held down, iOS sends multiple newline characters to the application,
-     * which makes TextInputService call the current IME action multiple times without an additional
-     * debouncing logic.
+     * When the hardware return key is held down, iOS sends multiple newline characters to the
+     * application, which makes TextInputService call the current IME action multiple times without
+     * an additional debouncing logic.
      *
      * @see _tempHardwareReturnKeyPressed is set to true when the return key is pressed with a
-     * hardware keyboard.
-     * @see _tempImeActionIsCalledWithHardwareReturnKey is set to true when the
-     * current IME action has been called within the current hardware return key press.
+     *   hardware keyboard.
+     * @see _tempImeActionIsCalledWithHardwareReturnKey is set to true when the current IME action
+     *   has been called within the current hardware return key press.
      */
     private var _tempHardwareReturnKeyPressed: Boolean = false
     private var _tempImeActionIsCalledWithHardwareReturnKey: Boolean = false
+
     private fun handleEnterKey(event: KeyEvent): Boolean {
         _tempImeActionIsCalledWithHardwareReturnKey = false
         return when (event.type) {
@@ -188,7 +193,8 @@ internal abstract class TextInputConnection(
 
             KeyEventType.KeyDown -> {
                 _tempHardwareReturnKeyPressed = true
-                // This prevents two new line characters from being added for one hardware return key press.
+                // This prevents two new line characters from being added for one hardware return
+                // key press.
                 true
             }
 
@@ -221,19 +227,17 @@ internal abstract class TextInputConnection(
      * fire from the snapshot subscription and reset multi-stage IME state.
      *
      * @param requireUpdateView when `true`, request an immediate redraw after the edit. Some UIKit
-     * call sites (selection-only changes, marked text updates) rely on the next animation frame
-     * driven by Compose's normal redraw cycle and pass `false` to avoid extra work.
+     *   call sites (selection-only changes, marked text updates) rely on the next animation frame
+     *   driven by Compose's normal redraw cycle and pass `false` to avoid extra work.
      */
     private fun edit(
         requireUpdateView: Boolean = true,
-        performCommand: TextEditingScope.() -> Unit
+        performCommand: TextEditingScope.() -> Unit,
     ) {
         currentRequest?.let {
             postponeSelectionUpdate = true
-            it.editText {
-                performCommand()
-            }
-            if (requireUpdateView) {
+            it.editText { performCommand() }
+            if (requireUpdateView && isFocused) {
                 updateView()
             }
             onTextFieldValueUpdated(it.stateSnapshot())
@@ -243,11 +247,10 @@ internal abstract class TextInputConnection(
 
     private fun imeActionRequired(): Boolean =
         currentRequest?.imeOptions?.run {
-            singleLine || (
-                imeAction != ImeAction.None
-                    && imeAction != ImeAction.Default
-                    && !(imeAction == ImeAction.Search && _tempHardwareReturnKeyPressed)
-                )
+            singleLine ||
+                (imeAction != ImeAction.None &&
+                    imeAction != ImeAction.Default &&
+                    !(imeAction == ImeAction.Search && _tempHardwareReturnKeyPressed))
         } ?: false
 
     private fun runImeActionIfRequired(): Boolean {
@@ -274,18 +277,19 @@ internal abstract class TextInputConnection(
      * input — i.e. a native UITextField or UITextView inserted via interop, or a Compose text input
      * view owned by another independent scene.
      *
-     * Used to distinguish the case where the user tapped a native interop text field (in which
-     * case Compose focus should be released) or another Compose scene's text field from the case
-     * where focus simply moved inside the same focused views hierarchy (in which case Compose
-     * handles focus internally and no action is needed).
+     * Used to distinguish the case where the user tapped a native interop text field (in which case
+     * Compose focus should be released) or another Compose scene's text field from the case where
+     * focus simply moved inside the same focused views hierarchy (in which case Compose handles
+     * focus internally and no action is needed).
      */
     private fun hasFocusedExternalInputViewInWindowHierarchy(): Boolean {
         fun hasFocusedExternalInputView(view: UIView): Boolean {
             if (view.isFirstResponder) {
-                return if (view is NativeTextInputView ||
-                    view is ComposeTextInputView ||
-                    view is OverlayInputView ||
-                    view is BackgroundInputView
+                return if (
+                    view is NativeTextInputView ||
+                        view is ComposeTextInputView ||
+                        view is OverlayInputView ||
+                        view is BackgroundInputView
                 ) {
                     focusedViewsList?.contains(view) == false
                 } else {
@@ -299,7 +303,15 @@ internal abstract class TextInputConnection(
 
     override var inputTraits: SkikoUITextInputTraits = EmptyInputTraits
 
+    var isFocused: Boolean = false
+        private set
+
+    override fun onFocus() {
+        isFocused = true
+    }
+
     override fun onResignFocus() {
+        isFocused = false
         textInputServiceInvalidationsCount++
         coroutineScope.launch {
             if (hasFocusedExternalInputViewInWindowHierarchy()) {
@@ -318,7 +330,8 @@ internal abstract class TextInputConnection(
         val cursorOffset = layout.getOffsetForPosition(virtualCursorPx)
 
         // Re-anchor translation to the text edge, not the touch position — otherwise a fast
-        // swipe past the text makes the user drag that whole distance back (and cursor looks frozen)
+        // swipe past the text makes the user drag that whole distance back (and cursor looks
+        // frozen)
         val line = layout.getLineForOffset(cursorOffset)
         val lineLeft = layout.getLineLeft(line)
         val lineRight = layout.getLineRight(line)
@@ -331,15 +344,14 @@ internal abstract class TextInputConnection(
         val outOfBoundsY = virtualCursorPx.y != boundedY
 
         if (outOfBoundsX || outOfBoundsY) {
-            floatingCursorTranslation = Offset(
-                x = if (outOfBoundsX) boundedX - fingerPx.x else translation.x,
-                y = if (outOfBoundsY) boundedY - fingerPx.y else translation.y,
-            )
+            floatingCursorTranslation =
+                Offset(
+                    x = if (outOfBoundsX) boundedX - fingerPx.x else translation.x,
+                    y = if (outOfBoundsY) boundedY - fingerPx.y else translation.y,
+                )
         }
 
-        edit(requireUpdateView = false) {
-            setSelection(cursorOffset, cursorOffset)
-        }
+        edit(requireUpdateView = false) { setSelection(cursorOffset, cursorOffset) }
     }
 
     override fun beginFloatingCursor(offset: DpOffset) {
@@ -360,20 +372,14 @@ internal abstract class TextInputConnection(
                 return
             }
         }
-        edit {
-            commitText(text, 1)
-        }
+        edit { commitText(text, 1) }
     }
 
     override fun deleteBackward() {
         if (currentTextFieldValue?.selection?.collapsed == true) {
-            edit {
-                deleteSurroundingTextInCodePoints(1, 0)
-            }
+            edit { deleteSurroundingTextInCodePoints(1, 0) }
         } else {
-            edit {
-                commitText("", 0)
-            }
+            edit { commitText("", 0) }
         }
     }
 
@@ -392,9 +398,7 @@ internal abstract class TextInputConnection(
     }
 
     override fun selectAll() {
-        edit {
-            setSelection(0, endOfDocument())
-        }
+        edit { setSelection(0, endOfDocument()) }
     }
 
     override fun textInRange(range: TextRange): String? {
@@ -415,9 +419,7 @@ internal abstract class TextInputConnection(
 
     override fun setMarkedText(markedText: String?, selectedRange: TextRange) {
         if (markedText != null) {
-            edit(requireUpdateView = false) {
-                setComposingText(markedText, 1)
-            }
+            edit(requireUpdateView = false) { setComposingText(markedText, 1) }
         }
     }
 
@@ -426,9 +428,7 @@ internal abstract class TextInputConnection(
     }
 
     override fun unmarkText() {
-        edit {
-            finishComposingText()
-        }
+        edit { finishComposingText() }
     }
 
     override fun positionFromPosition(position: Int, offset: Int): Int? =
@@ -448,9 +448,7 @@ internal abstract class TextInputConnection(
             else -> {
                 val targetLineEnd = layoutResult.getLineEnd(targetLine)
                 val lineStart = layoutResult.getLineStart(targetLine)
-                positionFromPosition(
-                    lineStart, min(offsetInLine, targetLineEnd - lineStart)
-                )
+                positionFromPosition(lineStart, min(offsetInLine, targetLineEnd - lineStart))
             }
         }
     }
