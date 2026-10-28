@@ -20,8 +20,8 @@ a version-bump commit. Upstream compatibility pins live in `gradle.properties`; 
 pinned separately because it has an independent release train. Keep the Gradle plugin's native
 Skiko fallback synchronized with `compose.native.skiko.version`.
 
-The updated native Skiko `0.156.1` is an unreleased local dependency until its own release is
-published. Official Skiko `0.156.1` currently resolves from JetBrains' development repository,
+Native Skiko `0.156.1` is published to Maven Central for all five desktop Native targets.
+Official Skiko `0.156.1` currently resolves from JetBrains' development repository,
 which this source build already includes. Consumers of locally published Compose artifacts
 should include the same repository for official Skiko:
 
@@ -52,12 +52,11 @@ official Skiko compile coordinate. The Compose target closure is defined once by
 
 Each root Gradle module metadata file advertises only the targets actually published under the
 fork namespace. `desktop-native` also receives a standard `desktopNativeMain` metadata fragment,
-assembled from the linkdata in its published Linux KLIB, marked as commonized for every supported
-desktop target, and bundled with the SDL and native-desktop cinterop metadata required by that
-KLIB. This is necessary because native Skiko does not publish a standalone
-intermediate-source-set artifact, so Kotlin cannot compile that fragment directly. Android Studio
-consumes the published fragment through KGP's normal metadata and cinterop resolvers; no
-consumer-side KLIB rewriting or synthetic dependency coordinate is involved.
+compiled separately from platform binaries and bundled with genuinely commonized SDL and
+native-desktop CInterop metadata. The shared Kotlin fragment has no concrete native target;
+CInterop manifests retain the header targets actually commonized. Android Studio imports these
+fragments as separate KLIB dependencies. Other platforms still require their own native binary
+publications before compilation and linking can succeed.
 
 ## Local publication
 
@@ -72,8 +71,9 @@ Run:
 
 The script resolves native Skiko `0.156.1`, publishes the complete Compose target closure through
 `:mpp:publishComposeNativeToMavenLocal`, publishes the directly compilable KMP
-roots, and then creates native-only aggregate metadata (including the `desktopNativeMain`
-fragment) in Maven Local. It also publishes the `dev.brahmkshatriya.compose` Gradle plugin and its
+roots, compiles shared desktop metadata using two header targets, and then merges all locally
+published platform variants into aggregate metadata in Maven Local. Existing Android and Web
+variants are retained. It also publishes the `dev.brahmkshatriya.compose` Gradle plugin and its
 plugin marker.
 
 To publish the forked Compose Android, JS, and Wasm variants, run:
@@ -144,7 +144,7 @@ Apply the plugin alongside the official Compose plugin:
 plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
-    id("org.jetbrains.compose") version "1.13.0-alpha01"
+    id("org.jetbrains.compose") version "1.13.0-beta01"
     id("dev.brahmkshatriya.compose") version "VERSION"
 }
 ```
@@ -172,14 +172,16 @@ kotlin {
 }
 ```
 
-The plugin has no project-level configuration extension and never adds Compose dependencies.
+The `composeNativeApplication` extension configures native application linking and packaging;
+the plugin does not add Compose dependencies.
 Explicit fork dependencies drive scoped substitution: declarations in `desktopNativeMain` enable
 the larger Linux/Windows native overlay, while fork declarations in `commonMain` replace only the
 selected modules on Android/JVM/web/iOS and expand to the full native closure on macOS. For native
 platform publications, generated Gradle metadata is also repaired so stale
 `org.jetbrains.skiko:skiko` entries point to the native Skiko fork. This producer-side metadata fix
 covers Linux x64, Linux ARM64, MinGW x64, macOS x64, and macOS arm64; it does not change iOS or JVM
-Skiko. AndroidX Compose substitutions remain restricted to modules published by the fork, while the
+Skiko. Desktop Native resolution also aligns stale transitive Skiko versions to `0.156.1`, unless
+`desktopNativeMain` explicitly declares another fork version. AndroidX Compose substitutions remain restricted to modules published by the fork, while the
 broader Compose/AndroidX substitution set is used only by native-overlay configurations.
 
 The native overlay selector recognizes `linux_x64`, `linux_arm64`, `mingw_x64`, `macos_x64`, and
@@ -227,6 +229,5 @@ git push origin "$VERSION"
 The deployment includes both the implementation artifact
 `dev.brahmkshatriya.compose:compose-gradle-plugin:VERSION` and the marker
 `dev.brahmkshatriya.compose:dev.brahmkshatriya.compose.gradle.plugin:VERSION`.
-Native Skiko `0.156.1` must be published to Maven Central before the Compose release workflow is
-started. Local macOS publication can instead resolve the same coordinate from
+Native Skiko `0.156.1` is available on Maven Central for this release. Local macOS publication can also resolve the same coordinate from
 `MAVEN_LOCAL_REPOSITORY`. Do not reuse a published tag version: Central releases are immutable.

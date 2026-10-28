@@ -8,13 +8,12 @@ import org.gradle.api.artifacts.Dependency
 import org.gradle.api.artifacts.component.ModuleComponentSelector
 import org.gradle.api.attributes.Attribute
 import org.jetbrains.kotlin.gradle.ExternalKotlinTargetApi
-import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinBinaryCoordinates
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinDependency
 import org.jetbrains.kotlin.gradle.idea.tcs.IdeaKotlinResolvedBinaryDependency
-import org.jetbrains.kotlin.gradle.idea.tcs.extras.sourcesClasspath
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
 import org.jetbrains.kotlin.gradle.plugin.ide.IdeAdditionalArtifactResolver
 import org.jetbrains.kotlin.gradle.plugin.ide.IdeDependencyResolver
+import org.jetbrains.kotlin.gradle.plugin.ide.IdeDependencyTransformer
 import org.jetbrains.kotlin.gradle.plugin.ide.IdeMultiplatformImport
 import org.jetbrains.kotlin.gradle.plugin.ide.dependencyResolvers.IdeBinaryDependencyResolver
 
@@ -27,9 +26,10 @@ import org.jetbrains.kotlin.gradle.plugin.ide.dependencyResolvers.IdeBinaryDepen
  * Android Studio receives the incomplete transformed-metadata model. Resolving the same
  * configuration as ordinary Kotlin compile binaries preserves those modules. The delegate
  * contributes official Compose UI metadata and the forked common families used by Foundation and
- * Material. For desktopNativeMain it also contributes the complete shared metadata graph of its
- * declared dependencies, including exported dependencies of project dependencies. KGP's normal
- * resolvers remain responsible for project source dependencies and platform KLIBs.
+ * Material, including the non-Android metadata used by skiaTargetMain. For desktopNativeMain it
+ * also contributes the complete shared metadata graph of its declared dependencies, including
+ * exported dependencies of project dependencies. KGP's normal resolvers remain responsible for
+ * project source dependencies and platform KLIBs.
  */
 internal fun Project.configureIdeDependencyResolution() {
     pluginManager.withPlugin(KOTLIN_MULTIPLATFORM_PLUGIN_ID) {
@@ -47,20 +47,35 @@ internal fun Project.configureIdeDependencyResolution() {
             )
         val ideImport = IdeMultiplatformImport.instance(this)
         ideImport.registerDependencyResolver(
-                ComposeNativeIdeDependencyResolver(
-                    project = this,
-                    officialDelegate =
-                        IdeBinaryDependencyResolver(KOTLIN_COMPILE_BINARY_TYPE, officialStrategy),
-                    forkDelegate =
-                        IdeBinaryDependencyResolver(KOTLIN_COMPILE_BINARY_TYPE, forkStrategy),
-                ),
-                IdeMultiplatformImport.SourceSetConstraint { sourceSet ->
-                    sourceSet.name == COMMON_MAIN_SOURCE_SET ||
-                        sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET
-                },
-                IdeMultiplatformImport.DependencyResolutionPhase.PostDependencyResolution,
-                IdeMultiplatformImport.Priority.high,
-            )
+            ComposeNativeIdeDependencyResolver(
+                project = this,
+                officialDelegate =
+                    IdeBinaryDependencyResolver(KOTLIN_COMPILE_BINARY_TYPE, officialStrategy),
+                forkDelegate = IdeBinaryDependencyResolver(KOTLIN_COMPILE_BINARY_TYPE, forkStrategy),
+            ),
+            IdeMultiplatformImport.SourceSetConstraint { sourceSet ->
+                sourceSet.name == COMMON_MAIN_SOURCE_SET ||
+                    sourceSet.name == SKIA_MAIN_SOURCE_SET ||
+                    sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET
+            },
+            IdeMultiplatformImport.DependencyResolutionPhase.PostDependencyResolution,
+            IdeMultiplatformImport.Priority.high,
+        )
+        ideImport.registerDependencyTransformer(
+            IdeDependencyTransformer { sourceSet, dependencies ->
+                prepareForkIdeDependencies(
+                    dependencies,
+                    layout.buildDirectory.dir("composeNativeIdeMetadata").get().asFile,
+                    sourceSet.name,
+                )
+            },
+            IdeMultiplatformImport.SourceSetConstraint { sourceSet ->
+                sourceSet.name == COMMON_MAIN_SOURCE_SET ||
+                    sourceSet.name == SKIA_MAIN_SOURCE_SET ||
+                    sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET
+            },
+            IdeMultiplatformImport.DependencyTransformationPhase.FreeDependencyTransformationPhase,
+        )
         ideImport.registerAdditionalArtifactResolver(
             IdeAdditionalArtifactResolver { sourceSet, dependencies ->
                 if (sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET) {
@@ -70,55 +85,11 @@ internal fun Project.configureIdeDependencyResolution() {
             IdeMultiplatformImport.SourceSetConstraint { sourceSet ->
                 sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET
             },
-            IdeMultiplatformImport.AdditionalArtifactResolutionPhase.PostAdditionalArtifactResolution,
+            IdeMultiplatformImport.AdditionalArtifactResolutionPhase
+                .PostAdditionalArtifactResolution,
             IdeMultiplatformImport.Priority.high,
         )
     }
-}
-
-internal fun propagateRootSourcesToTransformedDependencies(
-    dependencies: Set<IdeaKotlinDependency>
-) {
-    val resolvedDependencies = dependencies.filterIsInstance<IdeaKotlinResolvedBinaryDependency>()
-    val rootSourcesByModule =
-        resolvedDependencies
-            .filter { dependency ->
-                val coordinates = dependency.coordinates ?: return@filter false
-                coordinates.sourceSetName == null &&
-                    coordinates.group.startsWith(COMPOSE_FORK_GROUP_PREFIX) &&
-                    dependency.sourcesClasspath.isNotEmpty()
-            }
-            .groupBy(::moduleCoordinates)
-
-    resolvedDependencies.forEach { dependency ->
-        val coordinates = dependency.coordinates ?: return@forEach
-        if (
-            coordinates.sourceSetName == null ||
-                !coordinates.group.startsWith(COMPOSE_FORK_GROUP_PREFIX)
-        ) {
-            return@forEach
-        }
-        rootSourcesByModule[moduleCoordinates(dependency)]
-            .orEmpty()
-            .forEach { rootDependency ->
-                dependency.sourcesClasspath.addAll(rootDependency.sourcesClasspath)
-            }
-    }
-}
-
-private data class ModuleCoordinates(
-    val group: String,
-    val module: String,
-    val version: String?,
-)
-
-private fun moduleCoordinates(dependency: IdeaKotlinResolvedBinaryDependency): ModuleCoordinates {
-    val coordinates = requireNotNull(dependency.coordinates)
-    return ModuleCoordinates(
-        group = coordinates.group,
-        module = coordinates.module,
-        version = coordinates.version,
-    )
 }
 
 private class ComposeNativeIdeDependencyResolver(
@@ -128,8 +99,17 @@ private class ComposeNativeIdeDependencyResolver(
 ) : IdeDependencyResolver {
     override fun resolve(sourceSet: KotlinSourceSet): Set<IdeaKotlinDependency> {
         val result = linkedSetOf<IdeaKotlinDependency>()
-        if (sourceSet.name == COMMON_MAIN_SOURCE_SET && project.hasCommonForkDependency()) {
-            officialDelegate.resolve(sourceSet).filterTo(result, ::isOfficialCommonIdeDependency)
+        if (
+            sourceSet.name == SKIA_MAIN_SOURCE_SET ||
+                sourceSet.name == COMMON_MAIN_SOURCE_SET && project.hasCommonForkDependency()
+        ) {
+            officialDelegate.resolve(sourceSet).filterTo(result) { dependency ->
+                if (dependency !is IdeaKotlinResolvedBinaryDependency) return@filterTo false
+                val coordinates = dependency.coordinates ?: return@filterTo false
+                isCommonComposeIdeDependency(coordinates.group, coordinates.module) ||
+                    sourceSet.name == SKIA_MAIN_SOURCE_SET &&
+                        isSkiaBackendIdeDependency(coordinates.group, coordinates.module)
+            }
         }
         if (
             sourceSet.name == DESKTOP_NATIVE_MAIN_SOURCE_SET && project.composeForkVersion() != null
@@ -146,11 +126,11 @@ private fun Project.hasCommonForkDependency(): Boolean =
         .flatMap { it.dependencies }
         .any { it.group?.startsWith(COMPOSE_FORK_GROUP_PREFIX) == true }
 
-private fun isOfficialCommonIdeDependency(dependency: IdeaKotlinDependency): Boolean {
-    if (dependency !is IdeaKotlinResolvedBinaryDependency) return false
-    val coordinates: IdeaKotlinBinaryCoordinates = dependency.coordinates ?: return false
-    return isOfficialCommonIdeDependency(coordinates.group, coordinates.module)
-}
+internal fun isCommonComposeIdeDependency(group: String, module: String): Boolean =
+    isOfficialCommonIdeDependency(group, module) || isCrossPlatformForkModule(group, module)
+
+internal fun isSkiaBackendIdeDependency(group: String, module: String): Boolean =
+    group == "org.jetbrains.skiko" || group == OFFICIAL_COMPOSE_UI_GROUP && module == "ui-skiko"
 
 internal fun isOfficialCommonIdeDependency(group: String, module: String): Boolean =
     when {
@@ -161,15 +141,12 @@ internal fun isOfficialCommonIdeDependency(group: String, module: String): Boole
         else -> false
     }
 
-
 private fun isResolvedBinaryDependency(dependency: IdeaKotlinDependency): Boolean =
     dependency is IdeaKotlinResolvedBinaryDependency
 
-
 internal fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String): Configuration {
     val version = composeForkVersion() ?: return configurations.detachedConfiguration()
-    val modules =
-        FORK_DESKTOP_IDE_MODULES
+    val modules = FORK_DESKTOP_IDE_MODULES
     val desktopDependencyNotations =
         if (sourceSetName == DESKTOP_NATIVE_MAIN_SOURCE_SET) {
             officialComposeVersion()
@@ -208,10 +185,7 @@ internal fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String
                 ?.removePrefix(COMPOSE_FORK_GROUP_PREFIX)
                 ?.let { family -> family to requestedModule }
 
-        if (
-            requestedForkModule != null &&
-                requestedForkModule !in FORK_DESKTOP_IDE_MODULES
-        ) {
+        if (requestedForkModule != null && requestedForkModule !in FORK_DESKTOP_IDE_MODULES) {
             officialMetadataCoordinateOrNull(requestedGroup, requestedModule)?.let { coordinate ->
                 details.useTarget(coordinate)
                 details.because(
@@ -230,20 +204,19 @@ internal fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String
             requestedGroup == OFFICIAL_COMPOSE_RUNTIME_GROUP &&
                 requestedModule in REDIRECTED_IDE_RUNTIME_MODULES
         ) {
-            nativeRedirectImplementationCoordinateOrNull(requestedGroup, requestedModule)
-                ?.let { coordinate ->
-                    details.useTarget(coordinate)
-                    details.because(
-                        "Use upstream Runtime implementation coordinates in the IDE model"
-                    )
-                }
+            nativeRedirectImplementationCoordinateOrNull(requestedGroup, requestedModule)?.let {
+                coordinate ->
+                details.useTarget(coordinate)
+                details.because("Use upstream Runtime implementation coordinates in the IDE model")
+            }
         }
     }
     val nativeMetadataSubstitutions = nativeMetadataSubstitutionsFor(version)
     configuration.resolutionStrategy.dependencySubstitution { rules ->
         rules.all { details ->
             val selector = details.requested as? ModuleComponentSelector ?: return@all
-            nativeMetadataSubstitutions["${selector.group}:${selector.module}"]?.let { substitution ->
+            nativeMetadataSubstitutions["${selector.group}:${selector.module}"]?.let { substitution
+                ->
                 details.useTarget(substitution.forkCoordinate)
             }
         }
@@ -272,7 +245,7 @@ private fun Project.officialComposeVersion(): String? =
         .distinct()
         .singleOrNull()
 
-private fun Project.composeForkVersion(): String? {
+internal fun Project.composeForkVersion(): String? {
     val sourceSetPrefixes =
         listOf(COMMON_MAIN_DEPENDENCY_CONFIGURATION_PREFIX, DESKTOP_NATIVE_MAIN_SOURCE_SET)
     return configurations
@@ -299,16 +272,15 @@ private fun copyAttribute(attribute: Attribute<*>, from: Configuration, to: Conf
     }
 }
 
-private const val KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multiplatform"
 private const val KOTLIN_COMPILE_BINARY_TYPE = "KOTLIN_COMPILE"
-private const val COMMON_MAIN_SOURCE_SET = "commonMain"
-private const val DESKTOP_NATIVE_MAIN_SOURCE_SET = "desktopNativeMain"
+internal const val COMMON_MAIN_SOURCE_SET = "commonMain"
+private const val SKIA_MAIN_SOURCE_SET = "skiaTargetMain"
+internal const val DESKTOP_NATIVE_MAIN_SOURCE_SET = "desktopNativeMain"
 private const val COMMON_MAIN_DEPENDENCY_CONFIGURATION_PREFIX = "commonMain"
-private const val COMPOSE_FORK_GROUP_PREFIX = "dev.brahmkshatriya.compose."
+internal const val COMPOSE_FORK_GROUP_PREFIX = "dev.brahmkshatriya.compose."
 private const val OFFICIAL_COMPOSE_UI_GROUP = "org.jetbrains.compose.ui"
 private const val OFFICIAL_COMPOSE_RUNTIME_GROUP = "org.jetbrains.compose.runtime"
 private const val OFFICIAL_COMPOSE_COMPONENTS_GROUP = "org.jetbrains.compose.components"
-private const val ANDROIDX_GROUP_PREFIX = "androidx."
 private const val COMPONENTS_RESOURCES_MODULE = "components-resources"
 private val PLATFORM_ONLY_COMPOSE_UI_MODULES = setOf("ui-uikit", "ui-skiko")
 private val REDIRECTED_IDE_RUNTIME_MODULES =

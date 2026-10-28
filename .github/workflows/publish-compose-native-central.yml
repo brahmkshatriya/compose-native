@@ -142,6 +142,22 @@ jobs:
               :mpp:publishComposeForkRootsToMavenLocal \
               -x checkKotlinGradlePluginConfigurationErrors \
               --rerun-tasks
+            # Shared desktop API metadata is compiled independently of platform binaries.
+            # Only header commonization needs a second native target here.
+            shared_metadata="$RUNNER_TEMP/compose-native-shared-metadata"
+            "$gradle_command" \
+              --no-daemon --no-configuration-cache --no-configure-on-demand \
+              "-Dmaven.repo.local=$repository" \
+              -Pcompose.platforms=LinuxX64,LinuxArm64,Js \
+              -Pcompose.native.publish.sharedMetadata=true \
+              "-Pcompose.native.sharedMetadataDirectory=$shared_metadata" \
+              -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
+              "-PcomposeNativeVersion=$RELEASE_VERSION" \
+              :compose:desktop:desktop-native:prepareSharedDesktopMetadata
+            python3 scripts/write-linux-native-root-metadata.py \
+              --repository "$repository" --version "$RELEASE_VERSION" \
+              --group dev.brahmkshatriya.compose.desktop --module desktop-native \
+              --desktop-native-shared-metadata "$shared_metadata"
           fi
 
       - name: Export only fork publications
@@ -635,12 +651,32 @@ jobs:
           grep -q 'desktopNativeMain-cinterop/.*cinterop-sdl3/default/linkdata/module' "$RUNNER_TEMP/desktop-native-metadata-list.txt"
           grep -q 'desktopNativeMain-cinterop/.*cinterop-nativeDesktop/default/linkdata/module' "$RUNNER_TEMP/desktop-native-metadata-list.txt"
           unzip -p "$desktop_metadata" desktopNativeMain/default/manifest > "$RUNNER_TEMP/desktop-native-manifest.txt"
-          grep -q '^commonizer_native_targets=linux_x64 linux_arm64 mingw_x64 macos_x64 macos_arm64$' "$RUNNER_TEMP/desktop-native-manifest.txt"
-          grep -q '^commonizer_target=(linux_x64, linux_arm64, mingw_x64, macos_x64, macos_arm64)$' "$RUNNER_TEMP/desktop-native-manifest.txt"
-          grep -q '^native_targets=linux_x64 linux_arm64 mingw_x64 macos_x64 macos_arm64$' "$RUNNER_TEMP/desktop-native-manifest.txt"
-          unzip -p "$desktop_metadata" 'desktopNativeMain-cinterop/*/default/manifest' > "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt"
-          test "$(grep -c '^commonizer_native_targets=linux_x64 linux_arm64 mingw_x64 macos_x64 macos_arm64$' "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt")" -eq 2
-          test "$(grep -c '^commonizer_target=(linux_x64, linux_arm64, mingw_x64, macos_x64, macos_arm64)$' "$RUNNER_TEMP/desktop-native-cinterop-manifests.txt")" -eq 2
+          # Shared Kotlin metadata has no concrete native target. Its CInterop fragments retain
+          # the actual Linux header targets used by prepareSharedDesktopMetadata in the x64 shard.
+          python3 - "$desktop_metadata" <<'PY'
+          import sys
+          import zipfile
+
+          def properties(archive, name):
+              return dict(line.split("=", 1) for line in archive.read(name).decode().splitlines() if "=" in line)
+
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              shared = properties(archive, "desktopNativeMain/default/manifest")
+              assert shared.get("unique_name", "").endswith("desktop-native_desktopNativeMain"), shared
+              assert "native_targets" in shared and not shared["native_targets"].strip(), shared
+              manifests = [name for name in archive.namelist()
+                           if name.startswith("desktopNativeMain-cinterop/") and name.endswith("/default/manifest")]
+              assert len(manifests) == 2, manifests
+              names = set()
+              for name in manifests:
+                  interop = properties(archive, name)
+                  assert interop.get("interop") == "true", interop
+                  targets = set(interop.get("commonizer_native_targets", "").split())
+                  assert targets == {"linux_x64", "linux_arm64"}, interop
+                  assert set(interop.get("native_targets", "").split()) == targets, interop
+                  names.add(interop.get("unique_name", "").rsplit("-", 1)[-1])
+              assert names == {"sdl3", "nativeDesktop"}, names
+          PY
           expected_targets=$'linux_arm64\nlinux_x64\nmacos_arm64\nmacos_x64\nmingw_x64'
           actual_targets="$(jq -r '.variants[].attributes["org.jetbrains.kotlin.native.target"] // empty' "$ui_root" | sort -u)"
           test "$actual_targets" = "$expected_targets"

@@ -75,8 +75,24 @@ for compose_platform in MacosX64 MacosArm64; do
         :mpp:publishComposeMacosToMavenLocal
 done
 
+shared_metadata="$(mktemp -d "${TMPDIR:-/tmp}/compose-native-shared-metadata.XXXXXX")"
+trap 'rm -f "$resolution_init"; rm -rf "$shared_metadata"' EXIT
+"$compose_root/gradlew" \
+    -p "$compose_root" \
+    --no-configuration-cache \
+    -I "$resolution_init" \
+    "-Dmaven.repo.local=$maven_repository" \
+    -Pcompose.platforms=MacosX64,MacosArm64,Js \
+    -Pcompose.native.publish.sharedMetadata=true \
+    "-Pcompose.native.sharedMetadataDirectory=$shared_metadata" \
+    "-Pjetbrains.publication.groupPrefix=$group_prefix" \
+    "-PcomposeNativeVersion=$version" \
+    :compose:desktop:desktop-native:prepareSharedDesktopMetadata
+
 "$compose_root/scripts/write-linux-native-root-metadata.py" \
+    --all-platforms \
     --repository "$maven_repository" \
+    --desktop-native-shared-metadata "$shared_metadata" \
     --version "$version" \
     --group-prefix "$group_prefix" \
     --upstream-compose-version "$(read_compose_property 'compose.native.upstream.version.COMPOSE')" \

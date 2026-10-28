@@ -75,7 +75,7 @@ private fun Project.configureComposeNativeSkikoResolution() {
     val nativeSkikoGroup =
         providers.gradleProperty("compose.native.skiko.group").orElse("dev.brahmkshatriya.skiko")
     val nativeSkikoVersion =
-        providers.gradleProperty("compose.native.skiko.version").orElse("0.151.5")
+        providers.gradleProperty("compose.native.skiko.version").orElse("0.156.1")
 
     configurations.configureEach { configuration ->
         val lowerName = configuration.name.lowercase()
@@ -83,6 +83,8 @@ private fun Project.configureComposeNativeSkikoResolution() {
             "linuxx64" !in lowerName &&
                 "linuxarm64" !in lowerName &&
                 "mingwx64" !in lowerName &&
+                "macosx64" !in lowerName &&
+                "macosarm64" !in lowerName &&
                 "nativemain" !in lowerName
         ) {
             return@configureEach

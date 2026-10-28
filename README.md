@@ -176,9 +176,16 @@ not frame-identical because of the fork's rotation and scale timing.
 
 </details>
 
-`desktopNative` creates `linuxX64`, `linuxArm64`, and `mingwX64` plus a shared
+`desktopNative` creates `linuxX64`, `linuxArm64`, `mingwX64`, `macosX64`, and `macosArm64` plus a shared
 `desktopNativeMain` source set. `desktop-native` provides the native window/application APIs and
 brings in the native Skiko dependency.
+
+The plugin creates shared `appleMain`, `macosMain`, and `linuxMain` source sets for declared targets.
+Linux targets depend on `linuxMain`, which depends on `linuxWindowsMain`. macOS targets depend on
+`macosMain`, which depends on both `desktopNativeMain` and `appleMain`; other Apple targets inherit
+`appleMain` too. The matching `appleTest`, `macosTest`, and `linuxTest` source sets work the same way.
+Each shared folder belongs to one source set, so IDEs can resolve its `expect`/`actual` declarations
+without duplicate source roots or per-target `kotlin.srcDir` configuration.
 
 ## System requirements
 
@@ -294,3 +301,15 @@ See [PUBLISHING.md](PUBLISHING.md) for release and publication details.
 
 Compose sources retain their upstream AndroidX and JetBrains licenses. Packaged third-party runtime
 components retain their respective licenses.
+
+## Local publication
+
+Run `scripts/publish-linux-native-to-maven-local.sh VERSION` on Linux or
+`scripts/publish-macos-to-maven-local.sh VERSION` on macOS. These scripts publish shared desktop
+API metadata separately from native binaries. Publishing Linux x64 alone still supplies the window
+APIs and SDL bindings to the IDE; other platforms need their own binaries before compilation and
+linking can succeed.
+
+The shared metadata step uses two native header targets to commonize CInterop declarations. It
+compiles no second platform binary. Subsequent publication steps preserve that API metadata and
+add only the platform binaries actually present in the repository.

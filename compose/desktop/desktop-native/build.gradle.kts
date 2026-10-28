@@ -6,6 +6,8 @@ import org.jetbrains.androidx.build.ComposePlatforms
 import java.io.File
 import java.net.URI
 import java.security.MessageDigest
+import java.util.Properties
+import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 
 plugins {
     id("AndroidXPlugin")
@@ -828,4 +830,81 @@ androidx {
     inceptionYear = "2026"
     description = "Native desktop application host for Compose Multiplatform"
     legacyDisableKotlinStrictApiMode = true
+}
+
+// Shared API metadata is a separate output from native executables and platform KLIBs. Build it
+// with two native header targets so CInterop metadata is truly commonized, even when only the
+// host's binary publication is requested. Do not compile OS-specific metadata or copy a leaf KLIB.
+val sharedDesktopMetadataDirectory =
+    providers
+        .gradleProperty("compose.native.sharedMetadataDirectory")
+        .map(::File)
+        .orElse(layout.buildDirectory.dir("sharedDesktopMetadata").map { it.asFile })
+val sharedDesktopCompile =
+    tasks.withType<KotlinNativeCompile>().matching {
+        it.name == "compileDesktopNativeMainKotlinMetadata"
+    }
+val sharedDesktopCInterop = tasks.matching { it.name == "commonizeCInterop" }
+
+tasks.register("prepareSharedDesktopMetadata") {
+    group = "publishing"
+    description =
+        "Prepares shared desktop API and CInterop metadata without publishing another native binary"
+    dependsOn(sharedDesktopCompile, sharedDesktopCInterop)
+    inputs.files(sharedDesktopCompile, sharedDesktopCInterop)
+    outputs.dir(sharedDesktopMetadataDirectory)
+    doLast {
+        val destination = sharedDesktopMetadataDirectory.get()
+        val kotlinMetadata =
+            sharedDesktopCompile.singleOrNull()?.outputFile?.get()
+                ?: error("Shared desktop metadata requires at least two configured native targets")
+        sync {
+            from(if (kotlinMetadata.isDirectory) kotlinMetadata else zipTree(kotlinMetadata)) {
+                into("desktopNativeMain")
+            }
+            into(destination)
+        }
+        val interopLibraries =
+            sharedDesktopCInterop
+                .single()
+                .outputs
+                .files
+                .files
+                .flatMap { output ->
+                    output
+                        .walkTopDown()
+                        .filter { it.name == "manifest" && it.parentFile.name == "default" }
+                        .mapNotNull { manifest ->
+                            val properties =
+                                Properties().apply { manifest.inputStream().use(::load) }
+                            val uniqueName = properties.getProperty("unique_name").orEmpty()
+                            val targets =
+                                properties
+                                    .getProperty("commonizer_native_targets")
+                                    .orEmpty()
+                                    .split(' ')
+                                    .filter(String::isNotBlank)
+                            if (
+                                properties.getProperty("interop") != "true" ||
+                                    !uniqueName.startsWith(
+                                        "${project.group}:desktop-native-cinterop-"
+                                    ) ||
+                                    targets.size < 2
+                            )
+                                null
+                            else uniqueName to manifest.parentFile.parentFile
+                        }
+                        .toList()
+                }
+                .distinctBy { it.first }
+        check(interopLibraries.size == 2) {
+            "Shared desktop metadata requires commonized SDL and nativeDesktop bindings; configure at least two native targets"
+        }
+        interopLibraries.forEach { (_, library) ->
+            copy {
+                from(library)
+                into(destination.resolve("desktopNativeMain-cinterop/${library.name}"))
+            }
+        }
+    }
 }

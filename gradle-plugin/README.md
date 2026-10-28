@@ -2,15 +2,18 @@
 
 `dev.brahmkshatriya.compose` works alongside the official Compose Multiplatform Gradle plugin. It
 adds the `desktopNative` Kotlin target group and shared source-set hierarchy. It does not add
-dependencies or choose dependency versions.
+Compose dependencies. Explicit fork declarations choose Compose versions; desktop Native Skiko
+uses the compatible version for this plugin release (currently `0.156.1`).
 
 - Apply `org.jetbrains.compose` normally so it owns Compose resources and application integration.
 - Declare fork artifacts and their versions directly in the source sets that should use them.
-- Declare the native Skiko fork explicitly when required. When a library is published, the plugin
-  automatically rewrites leaked `org.jetbrains.skiko:skiko` dependencies in Linux and Windows
-  Gradle module metadata to that native fork version.
+- Desktop Native configurations align transitive Skiko dependencies to the compatible fork release,
+  including older fork versions. An explicit `dev.brahmkshatriya.skiko:skiko` declaration in
+  `desktopNativeMain` overrides that version. JVM, iOS, Android, and Wasm keep upstream Skiko selection.
+- When a library is published, the plugin rewrites official or stale fork `skiko` dependencies in
+  Linux, Windows, and macOS Gradle module metadata to the selected native fork version.
 - Explicit fork dependencies in `desktopNativeMain` replace their matching official Compose or
-  Skiko modules only in Linux and Windows configurations.
+  Skiko modules only in desktop Native configurations.
 - Explicit fork Compose dependencies in `commonMain` replace matching transitive JetBrains Compose
   modules in all configurations and matching AndroidX `-android` modules on Android. The plugin
   also carries those substitutions into separate application projects that directly depend on the
@@ -19,14 +22,24 @@ dependencies or choose dependency versions.
 - Automatic transitive fork selection outside desktop Native is limited to the published
   Foundation and Material3 root modules. Other Compose modules, including UI, use their official
   JetBrains artifacts on Android, iOS, JVM, JS, and Wasm.
-- The plugin creates `desktopNativeMain` and connects it to configured Linux and Windows native
-  targets so native desktop dependencies can be declared once. Its shared metadata resolver uses
+- The plugin creates `desktopNativeMain` and connects it to configured Linux, Windows, and macOS
+  native targets so native desktop dependencies can be declared once. Its shared metadata resolver uses
   `linux_x64` as the representative native variant when a native-only dependency exposes separate
   Linux x64, Linux ARM64, and MinGW variants, avoiding ambiguous variant selection.
-- Kotlin files in `src/skiaTargetMain/kotlin` are included automatically in `desktopNativeMain`,
-  configured iOS source sets (`iosArm64Main`, `iosSimulatorArm64Main`, and `iosX64Main`), and
-  `wasmJsMain`. Android source sets are excluded. This directory is shared as source input to each
-  target, so its code can use target-specific Skia APIs.
+- Platform folders have real shared source sets: `linuxMain` inherits `linuxWindowsMain`, and
+  `macosMain` inherits both `desktopNativeMain` and `appleMain`. Declared Apple targets also inherit
+  `appleMain`. The corresponding test source sets follow the same hierarchy. Each platform folder
+  has one source-set owner rather than being registered separately on every architecture, so IDE
+  navigation and `expect`/`actual` resolution see each declaration once.
+- `skiaTargetMain` is a real shared source set inherited by `desktopNativeMain`, configured iOS
+  targets (`iosArm64Main`, `iosSimulatorArm64Main`, and `iosX64Main`), and `wasmJsMain`. Android
+  source sets are excluded. Its `src/skiaTargetMain/kotlin` directory has one IDE owner. Use it for
+  shared Skia APIs; APIs defined only by platform actuals, such as `ClipEntry.withPlainText`,
+  belong in their platform source sets.
+- IDE imports unpack published shared Kotlin fragments and nested CInterop metadata into separate
+  KLIB dependencies. This exposes native window APIs and SDL bindings in `desktopNativeMain` while
+  retaining each library’s published target information. OS-specific fragments stay in their target
+  source sets, and missing platform publications remain visible as unresolved dependencies.
 - Add all five desktop-native targets (Linux x64, Linux ARM64, MinGW x64, macOS x64, and macOS
   ARM64) without repeating target blocks:
 
@@ -50,13 +63,11 @@ kotlin {
 
 Library modules use plain `desktopNative()`, which creates no executable binaries.
 
-Dependency substitution remains driven only by explicitly versioned fork dependencies; the
-declared dependency remains the source of both scope and version. Publication metadata repair is
-separate: native target publications replace stale official `org.jetbrains.skiko:skiko` entries with
-the Skiko fork version declared under `desktopNativeMain`, falling back to the version compatible
-with this plugin release. The plugin does not add an unconditional Skiko substitution to downstream
-applications. The `composeNativeApplication` extension configures application packaging only. See
-the root README for native-overlay and full-fork examples.
+Compose dependency substitution is driven by explicitly versioned fork dependencies. Skiko alignment
+is scoped to desktop Native root and platform modules; it excludes AWT, iOS, and Web artifacts.
+Native publication metadata uses the same selected version. The `composeNativeApplication` extension
+configures native application linking and packaging. See the root README for native-overlay and
+full-fork examples.
 
 ## Native application conventions
 
@@ -85,6 +96,26 @@ composeNativeApplication {
 }
 ```
 
+Executable linker defaults follow the **target**, independently of the build host: Linux receives
+EGL and architecture-specific library paths, macOS receives SDL and Homebrew search paths, and
+Windows uses the plugin's downloaded SDL import library. Applications do not need OS checks or
+`linkerOpts` for these dependencies. System development libraries must still be installed.
+
+For custom installations or cross-compilation, configure `linuxX64LibraryDirectories`,
+`linuxArm64LibraryDirectories`, `macosX64LibraryDirectories`, or `macosArm64LibraryDirectories`.
+Use `.from(...)` to add paths or `.setFrom(...)` to replace the defaults. CI can instead set
+`LINUX_X64_NATIVE_LIBRARY_DIRS`, `LINUX_ARM64_NATIVE_LIBRARY_DIRS`,
+`MACOS_X64_NATIVE_LIBRARY_DIRS`, or `MACOS_ARM64_NATIVE_LIBRARY_DIRS` (paths separated by the
+host's path separator). `SDL3_LIBRARY_DIR` and `LINUX_NATIVE_LIBRARY_DIRS` remain host-target
+fallbacks; they never affect a different architecture. Linux defaults include target multiarch
+paths; macOS defaults include the corresponding Intel or Apple Silicon Homebrew paths.
+
+Linux packaging finds SDL in those same directories and checks its ELF architecture before
+bundling it as `libSDL3.so.0`, including when cross-compiling ARM64 from x64. Explicit runtime
+files take precedence. Existing `LINUX_X64_RUNTIME_DIR` / `LINUX_ARM64_RUNTIME_DIR` overrides
+are consumed directly by the plugin. Cross-packaging uses the target's GNU `strip` or `llvm-strip`,
+never the host-only GNU tool.
+
 Linux AppDir tasks strip the packaged executable by default, bundle SDL 3, copy Compose resources,
 and generate `AppRun` plus the desktop entry. Windows packaging downloads the matching SDL 3
 runtime, includes the Kotlin/Native MinGW runtime DLLs and Skiko ICU data, and copies Compose
@@ -99,3 +130,9 @@ runtimes can be supplied with `linuxX64RuntimeFiles`, `linuxArm64RuntimeFiles`,
 `macosX64RuntimeFiles`, `macosArm64RuntimeFiles`, or `windowsX64RuntimeFiles`.
 `stripLinuxExecutable` and `bundleSdl` can be changed in `composeNativeApplication` when needed.
 Developer ID signing and notarization remain the application/release pipeline's responsibility.
+
+## Maintaining the plugin
+
+See [the maintenance guide](ARCHITECTURE.md) for the responsibility map, compatibility boundaries,
+and regression commands. The entry point assembles conventions; dependency policy, IDE metadata,
+and each platform's packaging are maintained independently.

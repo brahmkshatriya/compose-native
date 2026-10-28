@@ -57,26 +57,12 @@ def write_metadata_jar_entry(
     destination.writestr(entry, content)
 
 
-def commonize_klib_manifest(content: bytes, targets: tuple[str, ...]) -> bytes:
-    values = {}
-    for line in content.decode("utf-8").splitlines():
-        key, separator, value = line.partition("=")
-        if separator:
-            values[key] = value
-    target_list = " ".join(targets)
-    values["commonizer_native_targets"] = target_list
-    values["commonizer_target"] = f"({', '.join(targets)})"
-    values["native_targets"] = target_list
-    return ("\n".join(f"{key}={value}" for key, value in sorted(values.items())) + "\n").encode()
-
-
-def cinterop_library_directory(manifest: bytes) -> str:
-    unique_name = next(
-        line.removeprefix("unique_name=")
-        for line in manifest.decode("utf-8").splitlines()
-        if line.startswith("unique_name=")
+def is_shared_desktop_manifest(manifest: str) -> bool:
+    values = dict(line.split("=", 1) for line in manifest.splitlines() if "=" in line)
+    return (
+        values.get("unique_name", "").endswith("_desktopNativeMain")
+        and not values.get("native_targets", "").strip()
     )
-    return unique_name.replace("\\:", "_").replace(":", "_")
 
 
 def create_desktop_native_metadata(
@@ -84,20 +70,37 @@ def create_desktop_native_metadata(
     root_group: str,
     root_module: str,
     version: str,
+    shared_metadata: Path | None = None,
 ) -> tuple[dict[str, object], dict[str, object]] | None:
-    """Create the shared desktopNativeMain fragment from a published target KLIB.
-
-    Kotlin/Native cannot compile this intermediate source set directly because Skiko exposes
-    its desktop API through target KLIBs. The KLIB metadata is target-independent, however, so
-    publishing its linkdata as a normal KMP fragment lets KGP and IDEs consume it without a
-    custom file resolver.
-    """
+    """Package compiled shared API metadata independently of published native binaries."""
     if not (
         root_group.endswith(DESKTOP_NATIVE_GROUP_SUFFIX)
         and root_module == DESKTOP_NATIVE_MODULE
     ):
         return None
-
+    root_directory = repository.joinpath(*root_group.split("."), root_module, version)
+    metadata_jar = root_directory / f"{root_module}-{version}.jar"
+    root_module_file = root_directory / f"{root_module}-{version}.module"
+    if shared_metadata is None:
+        # Later platform shards must retain the genuine shared API artifact, even if their
+        # platform set differs from the one used to compile that metadata.
+        if metadata_jar.is_file() and root_module_file.is_file():
+            with zipfile.ZipFile(metadata_jar) as existing:
+                entry = existing.getinfo("desktopNativeMain/default/manifest")
+                manifest = existing.read(entry).decode("utf-8")
+            if is_shared_desktop_manifest(manifest):
+                variants = json.loads(root_module_file.read_text(encoding="utf-8"))["variants"]
+                return tuple(
+                    next(v for v in variants if v["name"] == name)
+                    for name in ("metadataApiElements", "metadataSourcesElements")
+                )
+        raise RuntimeError(
+            "Missing compiled shared desktop metadata. Run prepareSharedDesktopMetadata "
+            "with two native header targets and pass --desktop-native-shared-metadata; "
+            "publishing another platform's binaries is not required."
+        )
+    if not (shared_metadata / "desktopNativeMain/default/manifest").is_file():
+        raise FileNotFoundError(f"Missing shared desktop API metadata in {shared_metadata}")
     published_targets: list[tuple[str, str, Path, Path]] = []
     for platform_suffix, native_target in NATIVE_TARGETS.items():
         platform_module = f"{root_module}-{platform_suffix}"
@@ -112,8 +115,8 @@ def create_desktop_native_metadata(
     if not published_targets:
         return None
 
-    # Prefer Linux x64 as the long-standing metadata template when it is present; otherwise use
-    # the first locally published desktop-native target (notably macOS-only publication jobs).
+    # Dependencies and source attachments come from any published native platform. API metadata
+    # itself comes only from the shared compilation, never from that platform's binary KLIB.
     template = next(
         (target for target in published_targets if target[0] == "linuxx64"),
         published_targets[0],
@@ -132,21 +135,6 @@ def create_desktop_native_metadata(
     )
     if api_variant is None:
         return None
-    klib_file_entry = next(
-        (
-            entry
-            for entry in api_variant.get("files", [])
-            if str(entry.get("name", "")).endswith(".klib")
-            and "cinterop" not in str(entry.get("name", "")).lower()
-        ),
-        None,
-    )
-    if klib_file_entry is None:
-        return None
-    klib_file = platform_directory / str(klib_file_entry["url"])
-    if not klib_file.is_file():
-        return None
-
     sources_variant = next(
         (
             variant
@@ -187,7 +175,7 @@ def create_desktop_native_metadata(
                     "name": NATIVE_VARIANT_NAMES[platform_suffix],
                     "sourceSet": ["commonMain", "desktopNativeMain"],
                 }
-                for platform_suffix, _, _, _ in published_targets
+                for platform_suffix in NATIVE_VARIANT_NAMES
             ],
             "sourceSets": [
                 {
@@ -212,73 +200,53 @@ def create_desktop_native_metadata(
             ],
         }
     }
-    published_native_targets = tuple(target[1] for target in published_targets)
-    with zipfile.ZipFile(klib_file) as source, zipfile.ZipFile(
-        temporary_jar, "w", compression=zipfile.ZIP_DEFLATED
-    ) as destination:
-        write_metadata_jar_entry(
-            destination, "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n"
+    manifest = (shared_metadata / "desktopNativeMain/default/manifest").read_text(
+        encoding="utf-8"
+    )
+    if not is_shared_desktop_manifest(manifest):
+        raise RuntimeError(
+            "Desktop API metadata must come from the shared compilation, not a platform KLIB"
         )
+    for cinterop_manifest in (shared_metadata / "desktopNativeMain-cinterop").glob(
+        "*/default/manifest"
+    ):
+        values = dict(
+            line.split("=", 1)
+            for line in cinterop_manifest.read_text(encoding="utf-8").splitlines()
+            if "=" in line
+        )
+        if len(values.get("commonizer_native_targets", "").split()) < 2:
+            raise RuntimeError(
+                f"Desktop CInterop metadata must be genuinely commonized: {cinterop_manifest}"
+            )
+    bundled_cinterops = {
+        name
+        for manifest in (shared_metadata / "desktopNativeMain-cinterop").glob(
+            "*/default/manifest"
+        )
+        for name in DESKTOP_NATIVE_CINTEROPS
+        if name in str(manifest.parent.parent.name).lower()
+    }
+    missing_cinterops = set(DESKTOP_NATIVE_CINTEROPS) - bundled_cinterops
+    if missing_cinterops:
+        raise RuntimeError(
+            "Shared desktop metadata is missing commonized cinterops: "
+            + ", ".join(sorted(missing_cinterops))
+        )
+    with zipfile.ZipFile(temporary_jar, "w", compression=zipfile.ZIP_DEFLATED) as destination:
+        write_metadata_jar_entry(destination, "META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
         write_metadata_jar_entry(
             destination,
             "META-INF/kotlin-project-structure-metadata.json",
             json.dumps(project_structure, separators=(",", ":")),
         )
-        for entry in source.infolist():
-            if entry.is_dir() or not (
-                entry.filename == "default/manifest"
-                or entry.filename.startswith("default/linkdata/")
-            ):
-                continue
-            content = source.read(entry.filename)
-            if entry.filename == "default/manifest":
-                content = commonize_klib_manifest(content, published_native_targets)
-            write_metadata_jar_entry(
-                destination,
-                f"desktopNativeMain/{entry.filename}",
-                content,
-            )
-        bundled_cinterops = set()
-        for cinterop_entry in api_variant.get("files", []):
-            cinterop_name = str(cinterop_entry.get("name", ""))
-            if not (
-                cinterop_name.endswith(".klib")
-                and "cinterop" in cinterop_name.lower()
-            ):
-                continue
-            cinterop_file = platform_directory / str(cinterop_entry["url"])
-            if not cinterop_file.is_file():
-                raise FileNotFoundError(
-                    f"Missing desktop-native cinterop artifact: {cinterop_file}"
+        for entry in sorted(shared_metadata.rglob("*")):
+            if entry.is_file():
+                write_metadata_jar_entry(
+                    destination,
+                    entry.relative_to(shared_metadata).as_posix(),
+                    entry.read_bytes(),
                 )
-            with zipfile.ZipFile(cinterop_file) as cinterop:
-                manifest = cinterop.read("default/manifest")
-                library_directory = cinterop_library_directory(manifest)
-                bundled_cinterops.update(
-                    name
-                    for name in DESKTOP_NATIVE_CINTEROPS
-                    if name in library_directory.lower()
-                )
-                for entry in cinterop.infolist():
-                    if entry.is_dir() or not (
-                        entry.filename == "default/manifest"
-                        or entry.filename.startswith("default/linkdata/")
-                    ):
-                        continue
-                    content = cinterop.read(entry.filename)
-                    if entry.filename == "default/manifest":
-                        content = commonize_klib_manifest(content, published_native_targets)
-                    write_metadata_jar_entry(
-                        destination,
-                        f"desktopNativeMain-cinterop/{library_directory}/{entry.filename}",
-                        content,
-                    )
-        missing_cinterops = set(DESKTOP_NATIVE_CINTEROPS) - bundled_cinterops
-        if missing_cinterops:
-            raise RuntimeError(
-                "desktop-native metadata is missing required cinterops: "
-                + ", ".join(sorted(missing_cinterops))
-            )
     temporary_jar.replace(metadata_jar)
 
     with zipfile.ZipFile(source_jar) as source, zipfile.ZipFile(
@@ -661,6 +629,11 @@ def main() -> None:
         help="Limit generation to root groups equal to or nested under this prefix.",
     )
     parser.add_argument("--module", help="Limit generation to this root module.")
+    parser.add_argument(
+        "--desktop-native-shared-metadata",
+        type=Path,
+        help="Directory exported by prepareSharedDesktopMetadata; independent of platform binary publications.",
+    )
     parser.add_argument("--upstream-repository")
     parser.add_argument("--upstream-version")
     parser.add_argument("--upstream-compose-version")
@@ -819,7 +792,7 @@ def main() -> None:
                     raise
 
         desktop_native_metadata = create_desktop_native_metadata(
-            repository, root_group, root_module, version
+            repository, root_group, root_module, version, args.desktop_native_shared_metadata
         )
         if desktop_native_metadata is not None:
             for variant in desktop_native_metadata:

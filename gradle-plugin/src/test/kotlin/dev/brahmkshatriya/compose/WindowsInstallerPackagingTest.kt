@@ -99,21 +99,13 @@ class WindowsInstallerPackagingTest {
         konanRoot.deleteOnExit()
         val bin = konanRoot.resolve("dependencies/msys2-mingw-w64-x86_64-2/bin")
         bin.mkdirs()
-        listOf(
-            "libstdc++-6.dll",
-            "libgcc_s_seh-1.dll",
-            "libwinpthread-1.dll",
-        ).forEach { name ->
+        listOf("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll").forEach { name ->
             bin.resolve(name).writeBytes(byteArrayOf(1, 2, 3))
         }
         bin.resolve("unrelated.dll").writeBytes(byteArrayOf(4, 5, 6))
 
         assertEquals(
-            setOf(
-                "libstdc++-6.dll",
-                "libgcc_s_seh-1.dll",
-                "libwinpthread-1.dll",
-            ),
+            setOf("libstdc++-6.dll", "libgcc_s_seh-1.dll", "libwinpthread-1.dll"),
             windowsCxxRuntimeFiles(konanRoot).map(File::getName).toSet(),
         )
     }

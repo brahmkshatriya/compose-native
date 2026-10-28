@@ -7,9 +7,10 @@ internal object ComposeNativeUpstreamVersions {
     private val values: Map<String, String> by lazy {
         val properties = Properties()
         checkNotNull(
-                ComposeNativeUpstreamVersions::class.java.classLoader.getResourceAsStream(
-                    "compose-native-upstream.properties"
-                )
+                ComposeNativeUpstreamVersions::class
+                    .java
+                    .classLoader
+                    .getResourceAsStream("compose-native-upstream.properties")
             ) {
                 "Compose Native upstream version metadata is missing from the Gradle plugin"
             }

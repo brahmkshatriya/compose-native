@@ -1,5 +1,6 @@
 import java.util.Properties
 import org.gradle.plugin.devel.tasks.PluginUnderTestMetadata
+import org.gradle.api.tasks.testing.Test
 
 plugins {
     kotlin("jvm") version "2.3.20"
@@ -78,18 +79,26 @@ tasks.configureEach {
     }
 }
 
+// TestKit injects its plugin classpath ahead of the fixture's plugins block. Keep all KGP
+// artifacts aligned; otherwise a fixture requesting 2.4 silently executes the injected 2.3 plugin.
+val functionalTestKotlinVersion = providers.gradleProperty("functionalTestKotlinVersion").orElse("2.4.21")
 val kotlinGradlePluginApiForTests by configurations.creating
 
 dependencies {
     compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
     compileOnly("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.20")
-    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.20")
-    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.20")
-    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.3.20")
+    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin:${functionalTestKotlinVersion.get()}")
+    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:${functionalTestKotlinVersion.get()}")
+    kotlinGradlePluginApiForTests("org.jetbrains.kotlin:compose-compiler-gradle-plugin:${functionalTestKotlinVersion.get()}")
     kotlinGradlePluginApiForTests("org.jetbrains.compose:compose-gradle-plugin:1.13.0-alpha01")
 
     testImplementation(kotlin("test"))
     testImplementation(gradleTestKit())
+    testImplementation("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.20")
+}
+
+tasks.withType<Test>().configureEach {
+    systemProperty("composeNative.test.kotlinVersion", functionalTestKotlinVersion.get())
 }
 
 tasks.named<PluginUnderTestMetadata>("pluginUnderTestMetadata") {

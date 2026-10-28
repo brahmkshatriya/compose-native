@@ -101,8 +101,25 @@ echo "Resolving native Skiko from Maven Central"
     "-PcomposeNativeVersion=$version" \
     :mpp:publishComposeForkRootsToMavenLocal
 
+# Compile the shared API and commonized headers separately from native binary publication.
+# The second native target is used only for metadata; no second platform KLIB is published.
+shared_metadata="$(mktemp -d "${TMPDIR:-/tmp}/compose-native-shared-metadata.XXXXXX")"
+trap 'rm -rf "$shared_metadata"' EXIT
+"$compose_root/gradlew" \
+    -p "$compose_root" \
+    --no-configuration-cache \
+    "-Dmaven.repo.local=$maven_repository" \
+    -Pcompose.platforms=LinuxX64,LinuxArm64,Js \
+    -Pcompose.native.publish.sharedMetadata=true \
+    "-Pcompose.native.sharedMetadataDirectory=$shared_metadata" \
+    "-Pjetbrains.publication.groupPrefix=$group_prefix" \
+    "-PcomposeNativeVersion=$version" \
+    :compose:desktop:desktop-native:prepareSharedDesktopMetadata
+
 metadata_args=(
+    --all-platforms
     --repository "$maven_repository"
+    --desktop-native-shared-metadata "$shared_metadata"
     --version "$version"
     --group-prefix "$group_prefix"
     --upstream-compose-version "$(read_compose_property 'compose.native.upstream.version.COMPOSE')"

@@ -20,11 +20,9 @@ import org.gradle.api.tasks.TaskAction
 
 @CacheableTask
 abstract class RepairCommonMetadataLibraries : DefaultTask() {
-    @get:Classpath
-    abstract val metadataArtifacts: ConfigurableFileCollection
+    @get:Classpath abstract val metadataArtifacts: ConfigurableFileCollection
 
-    @get:OutputDirectory
-    abstract val outputDirectory: DirectoryProperty
+    @get:OutputDirectory abstract val outputDirectory: DirectoryProperty
 
     @TaskAction
     fun repair() {
@@ -38,14 +36,16 @@ abstract class RepairCommonMetadataLibraries : DefaultTask() {
                 .mapNotNull(::commonMetadataCandidate)
                 .groupBy(CommonMetadataCandidate::uniqueName)
                 .mapValues { (_, candidates) ->
-                    candidates.sortedWith(
-                        compareByDescending<CommonMetadataCandidate> { it.payloadSize }
-                            .thenBy { it.artifact.absolutePath }
-                    ).first()
+                    candidates
+                        .sortedWith(
+                            compareByDescending<CommonMetadataCandidate> { it.payloadSize }
+                                .thenBy { it.artifact.absolutePath }
+                        )
+                        .first()
                 }
 
         candidates.toSortedMap().forEach { (uniqueName, candidate) ->
-            writeCommonMetadataKlib(
+            writeMetadataKlib(
                 sourceArtifact = candidate.artifact,
                 output = outputRoot.resolve("${sanitizeFileName(uniqueName)}.klib"),
             )
@@ -65,12 +65,17 @@ private fun commonMetadataCandidate(artifact: File): CommonMetadataCandidate? {
             ZipFile(artifact).use { source ->
                 val prefix = "commonMain/"
                 val manifestEntry = source.getEntry("${prefix}default/manifest") ?: return@use null
-                val manifest = source.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
+                val manifest =
+                    source.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
                 val uniqueName = manifestValue(manifest, "unique_name") ?: return@use null
                 val payloadSize =
-                    source.entries().asSequence()
+                    source
+                        .entries()
+                        .asSequence()
                         .filter { entry ->
-                            !entry.isDirectory && entry.name.startsWith(prefix) && entry.name != prefix
+                            !entry.isDirectory &&
+                                entry.name.startsWith(prefix) &&
+                                entry.name != prefix
                         }
                         .sumOf { entry -> entry.size.coerceAtLeast(0L) }
                 CommonMetadataCandidate(artifact, uniqueName, payloadSize)
@@ -79,11 +84,17 @@ private fun commonMetadataCandidate(artifact: File): CommonMetadataCandidate? {
         .getOrNull()
 }
 
-private fun writeCommonMetadataKlib(sourceArtifact: File, output: File) {
+internal fun writeMetadataKlib(
+    sourceArtifact: File,
+    output: File,
+    fragment: String = "commonMain",
+) {
     ZipFile(sourceArtifact).use { source ->
-        val prefix = "commonMain/"
+        val prefix = "$fragment/"
         val entries =
-            source.entries().asSequence()
+            source
+                .entries()
+                .asSequence()
                 .filter { entry -> entry.name.startsWith(prefix) && entry.name != prefix }
                 .sortedBy { it.name }
                 .toList()
@@ -102,7 +113,10 @@ private fun writeCommonMetadataKlib(sourceArtifact: File, output: File) {
 internal fun Project.configureMetadataCompilation() {
     pluginManager.withPlugin(METADATA_KOTLIN_MULTIPLATFORM_PLUGIN_ID) {
         val repairCommonMetadata =
-            tasks.register("repairComposeNativeCommonMetadata", RepairCommonMetadataLibraries::class.java) {
+            tasks.register(
+                "repairComposeNativeCommonMetadata",
+                RepairCommonMetadataLibraries::class.java,
+            ) {
                 it.outputDirectory.set(
                     layout.buildDirectory.dir("kotlinComposeNativeMetadataLibraries/commonMain")
                 )
@@ -119,12 +133,17 @@ internal fun Project.configureMetadataCompilation() {
             when (configuration.name) {
                 COMMON_MAIN_RESOLVABLE_METADATA_CONFIGURATION -> {
                     val officialMetadata =
-                        configuration.incoming.artifactView { view ->
-                            view.componentFilter { component ->
-                                component is ModuleComponentIdentifier &&
-                                    isOfficialCommonIdeDependency(component.group, component.module)
+                        configuration.incoming
+                            .artifactView { view ->
+                                view.componentFilter { component ->
+                                    component is ModuleComponentIdentifier &&
+                                        isOfficialCommonIdeDependency(
+                                            component.group,
+                                            component.module,
+                                        )
+                                }
                             }
-                        }.files
+                            .files
                     repairCommonMetadata.configure { it.metadataArtifacts.from(officialMetadata) }
                 }
                 REPRESENTATIVE_NATIVE_COMPILE_LIBRARIES_CONFIGURATION ->
@@ -195,7 +214,8 @@ private fun Task.addNativeLibraryCompilerArguments(
             .firstOrNull { method ->
                 method.name == "getCompilerOptions" &&
                     method.parameterCount == 0 &&
-                    method.returnType.name == "org.jetbrains.kotlin.gradle.dsl.KotlinNativeCompilerOptions"
+                    method.returnType.name ==
+                        "org.jetbrains.kotlin.gradle.dsl.KotlinNativeCompilerOptions"
             }
             ?.invoke(this) ?: return
     val freeCompilerArgs =
@@ -215,36 +235,46 @@ private fun Task.addNativeLibraryCompilerArguments(
 private fun isCInteropKlib(file: File): Boolean {
     if (!file.isFile || file.extension != "klib") return false
     return runCatching {
-        ZipFile(file).use { zip ->
-            val manifestEntry = zip.getEntry("default/manifest") ?: return@use false
-            val manifest = zip.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
-            manifestValue(manifest, "interop") == "true"
+            ZipFile(file).use { zip ->
+                val manifestEntry = zip.getEntry("default/manifest") ?: return@use false
+                val manifest =
+                    zip.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
+                manifestValue(manifest, "interop") == "true"
+            }
         }
-    }.getOrDefault(false)
+        .getOrDefault(false)
 }
 
 private fun klibUniqueName(file: File): String? =
     runCatching {
-        ZipFile(file).use { zip ->
-            val manifestEntry = zip.getEntry("default/manifest") ?: return@use null
-            val manifest = zip.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
-            manifestValue(manifest, "unique_name")
+            ZipFile(file).use { zip ->
+                val manifestEntry = zip.getEntry("default/manifest") ?: return@use null
+                val manifest =
+                    zip.getInputStream(manifestEntry).bufferedReader().use { it.readText() }
+                manifestValue(manifest, "unique_name")
+            }
         }
-    }.getOrNull()
+        .getOrNull()
 
 private fun manifestValue(manifest: String, key: String): String? =
-    manifest.lineSequence()
+    manifest
+        .lineSequence()
         .firstOrNull { it.startsWith("$key=") }
         ?.substringAfter('=')
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
 
 private fun sanitizeFileName(value: String): String =
-    value.map { char -> if (char.isLetterOrDigit() || char == '.' || char == '-' || char == '_') char else '_' }
+    value
+        .map { char ->
+            if (char.isLetterOrDigit() || char == '.' || char == '-' || char == '_') char else '_'
+        }
         .joinToString("")
 
 private const val METADATA_KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multiplatform"
 private const val COMMON_MAIN_RESOLVABLE_METADATA_CONFIGURATION =
     "commonMainResolvableDependenciesMetadata"
-private const val REPRESENTATIVE_NATIVE_COMPILE_LIBRARIES_CONFIGURATION = "linuxX64CompileKlibraries"
-private const val COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK = "compileDesktopNativeMainKotlinMetadata"
+private const val REPRESENTATIVE_NATIVE_COMPILE_LIBRARIES_CONFIGURATION =
+    "linuxX64CompileKlibraries"
+private const val COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK =
+    "compileDesktopNativeMainKotlinMetadata"

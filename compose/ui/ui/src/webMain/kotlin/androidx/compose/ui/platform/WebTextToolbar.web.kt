@@ -45,7 +45,9 @@ class WebTextToolbar : TextToolbar {
     /** Installed by foundation and invoked from the window composition. */
     var renderer by mutableStateOf<(@Composable (TextToolbarMenu?) -> Unit)?>(null)
 
-    private var menu by mutableStateOf<TextToolbarMenu?>(null)
+    /** Current selection menu for hosts that render their own toolbar popup. */
+    var menu by mutableStateOf<TextToolbarMenu?>(null)
+        private set
 
     override var status: TextToolbarStatus = TextToolbarStatus.Hidden
         private set
