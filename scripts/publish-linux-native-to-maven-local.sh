@@ -108,6 +108,7 @@ trap 'rm -rf "$shared_metadata"' EXIT
 "$compose_root/gradlew" \
     -p "$compose_root" \
     --no-configuration-cache \
+    --configure-on-demand \
     "-Dmaven.repo.local=$maven_repository" \
     -Pcompose.platforms=LinuxX64,LinuxArm64,Js \
     -Pcompose.native.publish.sharedMetadata=true \

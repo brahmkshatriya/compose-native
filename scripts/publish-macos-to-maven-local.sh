@@ -80,6 +80,7 @@ trap 'rm -f "$resolution_init"; rm -rf "$shared_metadata"' EXIT
 "$compose_root/gradlew" \
     -p "$compose_root" \
     --no-configuration-cache \
+    --configure-on-demand \
     -I "$resolution_init" \
     "-Dmaven.repo.local=$maven_repository" \
     -Pcompose.platforms=MacosX64,MacosArm64,Js \

@@ -146,7 +146,7 @@ jobs:
             # Only header commonization needs a second native target here.
             shared_metadata="$RUNNER_TEMP/compose-native-shared-metadata"
             "$gradle_command" \
-              --no-daemon --no-configuration-cache --no-configure-on-demand \
+              --no-daemon --no-configuration-cache --configure-on-demand \
               "-Dmaven.repo.local=$repository" \
               -Pcompose.platforms=LinuxX64,LinuxArm64,Js \
               -Pcompose.native.publish.sharedMetadata=true \
