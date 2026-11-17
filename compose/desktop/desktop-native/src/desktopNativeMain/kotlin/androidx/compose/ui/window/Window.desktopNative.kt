@@ -182,12 +182,16 @@ import sdl3.SDL_EVENT_WINDOW_RESTORED
 import sdl3.SDL_EVENT_WINDOW_SHOWN
 import sdl3.SDL_Event
 import sdl3.SDL_GetCurrentDisplayMode
+import sdl3.SDL_GetDisplayForPoint
 import sdl3.SDL_GetDisplayForWindow
+import sdl3.SDL_GetDisplayUsableBounds
 import sdl3.SDL_GetError
+import sdl3.SDL_GetGlobalMouseState
 import sdl3.SDL_GetModState
 import sdl3.SDL_GetMouseState
 import sdl3.SDL_GetPerformanceCounter
 import sdl3.SDL_GetPerformanceFrequency
+import sdl3.SDL_GetPrimaryDisplay
 import sdl3.SDL_GetWindowDisplayScale
 import sdl3.SDL_GetWindowFlags
 import sdl3.SDL_GetWindowID
@@ -451,7 +455,7 @@ fun WindowState(
     placement: WindowPlacement = WindowPlacement.Floating,
     isMinimized: Boolean = false,
     position: WindowPosition = WindowPosition.PlatformDefault,
-    size: DpSize = DpSize(800.dp, 600.dp),
+    size: DpSize = DpSize.Unspecified,
 ): WindowState = WindowStateImpl(placement, isMinimized, position, size)
 
 /**
@@ -486,7 +490,7 @@ fun rememberWindowState(
     placement: WindowPlacement = WindowPlacement.Floating,
     isMinimized: Boolean = false,
     position: WindowPosition = WindowPosition.PlatformDefault,
-    size: DpSize = DpSize(800.dp, 600.dp),
+    size: DpSize = DpSize.Unspecified,
 ): WindowState = remember { WindowState(placement, isMinimized, position, size) }
 
 /**
@@ -505,8 +509,8 @@ fun rememberWindowState(
     placement: WindowPlacement = WindowPlacement.Floating,
     isMinimized: Boolean = false,
     position: WindowPosition = WindowPosition.PlatformDefault,
-    width: Dp = 800.dp,
-    height: Dp = 600.dp,
+    width: Dp,
+    height: Dp,
 ): WindowState = remember { WindowState(placement, isMinimized, position, width, height) }
 
 /** Receiver scope used by [Window] and [DialogWindow]. */
@@ -2223,13 +2227,17 @@ internal class NativeWindowHost(
     ) {
         this.closeRequest = closeRequest
         val initialSize = state.size
+        val defaultSize by lazy { defaultPlatformWindowSize() }
         windowWidth =
             if (initialSize.width.isSpecified) initialSize.width.value.roundToInt().coerceAtLeast(1)
-            else 800
+            else defaultSize.first
         windowHeight =
             if (initialSize.height.isSpecified)
                 initialSize.height.value.roundToInt().coerceAtLeast(1)
-            else 600
+            else defaultSize.second
+        if (!initialSize.width.isSpecified || !initialSize.height.isSpecified) {
+            state.size = DpSize(windowWidth.dp, windowHeight.dp)
+        }
         val nativeLayer = createNativeSkiaLayer()
         configureNativeGraphics(nativeLayer)
         val needsTransparentClientFrame =
@@ -2919,6 +2927,48 @@ internal class NativeWindowHost(
         if (display == 0u) return 60f
         val mode = SDL_GetCurrentDisplayMode(display) ?: return 60f
         return mode.pointed.refresh_rate.takeIf { it.isFinite() && it > 0f } ?: 60f
+    }
+
+    private fun calculateDefaultWindowSize(displayWidth: Int, displayHeight: Int): Pair<Int, Int> {
+        val targetW =
+            if (displayWidth <= 800) {
+                (displayWidth * 0.85f).roundToInt()
+            } else {
+                (displayWidth * 0.75f).roundToInt().coerceIn(800, 1280)
+            }
+        val targetH =
+            if (displayHeight <= 600) {
+                (displayHeight * 0.85f).roundToInt()
+            } else {
+                (displayHeight * 0.75f).roundToInt().coerceIn(600, 800)
+            }
+        return Pair(max(1, targetW), max(1, targetH))
+    }
+
+    private fun defaultPlatformWindowSize(): Pair<Int, Int> = memScoped {
+        val mouseX = alloc<FloatVar>()
+        val mouseY = alloc<FloatVar>()
+        SDL_GetGlobalMouseState(mouseX.ptr, mouseY.ptr)
+        val mousePoint = alloc<SDL_Point>()
+        mousePoint.x = mouseX.value.roundToInt()
+        mousePoint.y = mouseY.value.roundToInt()
+        val mouseDisplay = SDL_GetDisplayForPoint(mousePoint.ptr)
+        val display = if (mouseDisplay != 0u) mouseDisplay else SDL_GetPrimaryDisplay()
+        if (display != 0u) {
+            val usableBounds = alloc<SDL_Rect>()
+            if (SDL_GetDisplayUsableBounds(display, usableBounds.ptr)) {
+                val w = usableBounds.w
+                val h = usableBounds.h
+                if (w > 0 && h > 0) return@memScoped calculateDefaultWindowSize(w, h)
+            }
+            val mode = SDL_GetCurrentDisplayMode(display)
+            if (mode != null) {
+                val w = mode.pointed.w
+                val h = mode.pointed.h
+                if (w > 0 && h > 0) return@memScoped calculateDefaultWindowSize(w, h)
+            }
+        }
+        Pair(800, 600)
     }
 
     fun updateDraggableArea(key: Any, bounds: Rect) {
