@@ -47,7 +47,6 @@ class HostDefaultProviderTest {
     @Suppress("DEPRECATION")
     @Test
     fun testHostDefaultProviderNull() = runSkikoComposeUiTest {
-        @Suppress("LocalVariableName")
         val LocalTestRegistry = compositionLocalWithHostDefaultOf(TestRegistryKey)
 
         var registry: TestRegistry? = null

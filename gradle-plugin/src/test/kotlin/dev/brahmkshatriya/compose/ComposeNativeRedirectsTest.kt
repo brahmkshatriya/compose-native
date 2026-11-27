@@ -114,7 +114,7 @@ class ComposeNativeRedirectsTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime-linuxx64:1.13.0-beta01",
+            "androidx.compose.runtime:runtime-linuxx64:1.13.0-rc01",
             nativeRedirectImplementationCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime-linuxx64",
@@ -128,7 +128,7 @@ class ComposeNativeRedirectsTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime-retain-linuxx64:1.13.0-beta01",
+            "androidx.compose.runtime:runtime-retain-linuxx64:1.13.0-rc01",
             nativeRedirectImplementationCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime-retain-linuxx64",

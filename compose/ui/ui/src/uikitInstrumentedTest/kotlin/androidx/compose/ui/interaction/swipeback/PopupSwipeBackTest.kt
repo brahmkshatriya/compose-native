@@ -47,13 +47,11 @@ import kotlin.test.assertFalse
 import platform.UIKit.UITraitEnvironmentLayoutDirectionLeftToRight
 import platform.UIKit.UITraitEnvironmentLayoutDirectionRightToLeft
 
-@Suppress("unused")
 internal class PopupSwipeBackInHostingViewTest :
     PopupSwipeBackTest(
         runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
     )
 
-@Suppress("unused")
 internal class PopupSwipeBackInHostingViewControllerTest :
     PopupSwipeBackTest(
         runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }

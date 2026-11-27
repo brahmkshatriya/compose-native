@@ -52,7 +52,6 @@ class InteropTextFocusTest {
                         positions.add(it.boundsInWindow())
                     }
             ) {
-                @Suppress("DEPRECATION")
                 TextField(
                     value = "",
                     onValueChange = {},

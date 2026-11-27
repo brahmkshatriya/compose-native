@@ -50,6 +50,7 @@ fun Events.assertReceivedNoEvents() =
 fun Events.assertReceived(type: PointerEventType, offset: Offset) =
     received().assertHas(type, offset)
 
+@OptIn(ExperimentalComposeUiApi::class)
 fun Events.assertReceived(type: PointerEventType, vararg pointers: ComposeScenePointer) =
     received().assertHas(type, *pointers)
 
@@ -68,6 +69,7 @@ fun Events.assertReceivedMoveWithoutPositionChange(offset: Offset) {
     }
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 fun Events.assertReceivedLast(type: PointerEventType, vararg pointers: ComposeScenePointer) =
     receivedLast().assertHas(type, *pointers)
 
@@ -76,6 +78,7 @@ fun PointerEvent.assertHas(type: PointerEventType, offset: Offset) {
     assertThat(changes.first().position).isEqualTo(offset)
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 fun PointerEvent.assertHas(type: PointerEventType, vararg pointers: ComposeScenePointer) {
     assertThat(this.type).isEqualTo(type)
     val actualPointers =
@@ -83,6 +86,7 @@ fun PointerEvent.assertHas(type: PointerEventType, vararg pointers: ComposeScene
     assertThat(actualPointers).containsExactly(*pointers)
 }
 
+@OptIn(ExperimentalComposeUiApi::class)
 fun touch(x: Float, y: Float, pressed: Boolean, id: Int = 0) =
     ComposeScenePointer(
         id = PointerId(id.toLong()),
@@ -215,6 +219,7 @@ fun ImageComposeScene.sendPointerEvent(
     vararg pointers: ComposeScenePointer,
 ) = sendPointerEvent(type, pointers = pointers.toList())
 
+@OptIn(ExperimentalComposeUiApi::class)
 internal fun event(type: PointerEventType, vararg pointers: Pair<Int, ComposeScenePointer>) =
     PointerInputEvent(
         type,
@@ -238,6 +243,7 @@ internal fun event(type: PointerEventType, vararg pointers: Pair<Int, ComposeSce
         },
     )
 
+@OptIn(ExperimentalComposeUiApi::class)
 internal fun mouseEvent(
     type: PointerEventType,
     x: Float,

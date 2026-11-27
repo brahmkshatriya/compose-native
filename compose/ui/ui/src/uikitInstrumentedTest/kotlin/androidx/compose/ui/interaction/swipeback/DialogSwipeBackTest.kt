@@ -49,13 +49,11 @@ import kotlin.test.assertFalse
 import platform.UIKit.UITraitEnvironmentLayoutDirectionLeftToRight
 import platform.UIKit.UITraitEnvironmentLayoutDirectionRightToLeft
 
-@Suppress("unused")
 internal class DialogSwipeBackInHostingViewTest :
     DialogSwipeBackTest(
         runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
     )
 
-@Suppress("unused")
 internal class DialogSwipeBackInHostingViewControllerTest :
     DialogSwipeBackTest(
         runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }

@@ -36,7 +36,7 @@ class UiKitPlatformClipboardTest {
 
         setContent {
             clipboard = LocalClipboard.current
-            nativeClipboard = clipboard.nativeClipboard
+            nativeClipboard = clipboard?.nativeClipboard
         }
 
         waitForIdle()
@@ -53,7 +53,7 @@ class UiKitPlatformClipboardTest {
 
         setContent {
             clipboard = LocalClipboard.current
-            nativeClipboard = clipboard.nativeClipboard
+            nativeClipboard = clipboard?.nativeClipboard
         }
 
         waitForIdle()
@@ -61,9 +61,11 @@ class UiKitPlatformClipboardTest {
         assertNotNull(clipboard)
         assertNotNull(nativeClipboard)
 
-        // Can't do much more asserts in a unit test. For more checks use an instrumented test
-        clipboard.setClipEntry(null)
-        clipboard.setClipEntry(ClipEntry.withPlainText("test"))
-        clipboard.getClipEntry()
+        runBlocking {
+            // Can't do much more asserts in a unit test. For more checks use an instrumented test
+            clipboard!!.setClipEntry(null)
+            clipboard!!.setClipEntry(ClipEntry.withPlainText("test"))
+            clipboard!!.getClipEntry()
+        }
     }
 }

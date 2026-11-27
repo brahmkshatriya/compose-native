@@ -80,7 +80,7 @@ internal class TrackpadPanTest {
         trackpadPan(screenSize.center, 120.dp, dy = 75.dp)
 
         assertEquals(1, panStartCount)
-        assertTrue(panMoveCount >= 1, "Expected at least one PanMove, received $panMoveCount")
+        assertTrue(panMoveCount >= 1, "Expected at least one PanMove, received ${panMoveCount}")
         assertEquals(1, panEndCount)
 
         val totalPanDp = totalPan.toDpOffset(density)

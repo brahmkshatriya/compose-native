@@ -58,7 +58,6 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.fail
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTestApi::class)
@@ -238,7 +237,7 @@ class DialogTest {
                     var value by remember { mutableStateOf(0).also { it.value = 1 } }
                     lastValueInComposition = value
                     LaunchedEffect(Unit) {
-                        delay(1.seconds)
+                        delay(1000)
                         value = 2
                     }
                 }

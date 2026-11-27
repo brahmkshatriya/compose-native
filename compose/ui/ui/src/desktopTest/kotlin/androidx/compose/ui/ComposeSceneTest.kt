@@ -37,8 +37,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.input.TextFieldLineLimits
-import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.TextField
@@ -873,19 +871,21 @@ class ComposeSceneTest {
         var field2FocusState: FocusState? = null
         val (focusItem1, focusItem2) = FocusRequester.createRefs()
         composeRule.setContent {
-            val textFieldState = rememberTextFieldState()
+            var text by remember { mutableStateOf("") }
             Row {
                 TextField(
-                    state = textFieldState,
-                    lineLimits = TextFieldLineLimits.SingleLine,
+                    text,
+                    onValueChange = { text = it },
+                    maxLines = 1,
                     modifier =
                         Modifier.onFocusChanged { field1FocusState = it }
                             .focusRequester(focusItem1)
                             .focusProperties { next = focusItem2 },
                 )
                 TextField(
-                    state = textFieldState,
-                    lineLimits = TextFieldLineLimits.SingleLine,
+                    text,
+                    onValueChange = { text = it },
+                    maxLines = 1,
                     modifier =
                         Modifier.onFocusChanged { field2FocusState = it }
                             .focusRequester(focusItem2)

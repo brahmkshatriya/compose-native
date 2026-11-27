@@ -155,7 +155,7 @@ private fun <C : Component, S : Any> localeModifiesLayoutDirection(
 
             launchTestApplication {
                 component = create()
-                component.locale = Locale.forLanguageTag("he")
+                component.locale = Locale("he")
 
                 component.setContent { localLayoutDirection = LocalLayoutDirection.current }
                 component.display()
@@ -165,7 +165,7 @@ private fun <C : Component, S : Any> localeModifiesLayoutDirection(
             Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
 
             // Test that changing the locale changes the layout direction
-            component.locale = Locale.ENGLISH
+            component.locale = Locale("en")
             awaitIdle()
             Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Ltr)
 
@@ -183,7 +183,7 @@ private fun <C : Component, S : Any> componentOrientationOverridesLocaleForLayou
 
             launchTestApplication {
                 component = create()
-                component.locale = Locale.forLanguageTag("he")
+                component.locale = Locale("he")
 
                 component.setContent { localLayoutDirection = LocalLayoutDirection.current }
                 component.display()
@@ -221,7 +221,7 @@ private fun <C : Component, S : Any> localeDoesNotOverrideComponentOrientationFo
             Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
 
             // Test that changing the locale doesn't change the layout direction
-            component.locale = Locale.ENGLISH
+            component.locale = Locale("en")
             awaitIdle()
             Truth.assertThat(localLayoutDirection).isEqualTo(LayoutDirection.Rtl)
 

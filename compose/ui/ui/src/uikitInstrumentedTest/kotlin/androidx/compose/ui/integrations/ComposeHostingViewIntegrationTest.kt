@@ -25,7 +25,6 @@ import androidx.compose.ui.uikit.ComposeUIViewConfiguration
 import androidx.compose.ui.uikit.embedSubview
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.time.Duration.Companion.seconds
 import platform.UIKit.UIView
 import platform.UIKit.UIViewController
 
@@ -53,11 +52,11 @@ class ComposeHostingViewIntegrationTest {
         controller.view.embedSubview(composeView)
         UIKitInstrumentedTest.waitUntil { !composeView.hasInvalidations() }
 
-        assertEquals(1, launchesCount)
+        assertEquals(launchesCount, 1)
 
         composeView.removeFromSuperview()
 
-        assertEquals(1, launchesCount)
+        assertEquals(launchesCount, 1)
         UIKitInstrumentedTest.waitUntil("Wait until compose view is disposed") {
             disposalsCount == 1
         }
@@ -88,14 +87,14 @@ class ComposeHostingViewIntegrationTest {
 
         controller.view.embedSubview(composeView)
         UIKitInstrumentedTest.waitUntil { !composeView.hasInvalidations() }
-        assertEquals(1, compositionsCount)
+        assertEquals(compositionsCount, 1)
 
         composeView.removeFromSuperview()
         controller.view.embedSubview(anotherSubview)
         anotherSubview.embedSubview(composeView)
 
         // Long delay to be sure that the Compose scene is not disposed
-        UIKitInstrumentedTest.delay(1.seconds)
+        UIKitInstrumentedTest.delay(1000)
 
         assertEquals(0, disposalsCount, "Compose view should not be disposed")
         assertEquals(1, compositionsCount, "Compose view should not have extra recompositions")

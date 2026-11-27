@@ -25,23 +25,27 @@ import kotlinx.coroutines.CoroutineScope
 import platform.CoreGraphics.CGRectZero
 import platform.UIKit.UIView
 
-
 internal class SelectionContainerConnection(
     coroutineScope: CoroutineScope,
     viewConfiguration: ViewConfiguration,
-    focusManager: () -> ComposeSceneFocusManager?
-) : ComposeTextInputConnection(
-    inactiveTextEditingDelegate = DetachedTextEditingDelegate(),
-    updateView = {},
-    coroutineScope = coroutineScope,
-    viewConfiguration = viewConfiguration,
-    focusedViewsList = null,
-    focusManager = focusManager
-) {
-    private val keyboardlessInputTraits = object : SkikoUITextInputTraits {
-        val emptyInputView = UIView(frame = CGRectZero.readValue())
-        override fun inputView(): UIView = emptyInputView
-    }
+    focusManager: () -> ComposeSceneFocusManager?,
+) :
+    ComposeTextInputConnection(
+        inactiveTextEditingDelegate = DetachedTextEditingDelegate(),
+        updateView = {},
+        coroutineScope = coroutineScope,
+        viewConfiguration = viewConfiguration,
+        focusedViewsList = null,
+        focusManager = focusManager,
+    ) {
+    private val keyboardlessInputTraits =
+        object : SkikoUITextInputTraits {
+            val emptyInputView = UIView(frame = CGRectZero.readValue())
+
+            override fun inputView(): UIView = emptyInputView
+        }
+
+    override val isEditable: Boolean = false
 
     override var inputTraits: SkikoUITextInputTraits
         get() = keyboardlessInputTraits

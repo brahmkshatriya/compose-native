@@ -360,7 +360,6 @@ class AccessibilityTest {
         }
     }
 
-    @Suppress("DEPRECATION")
     @Test
     fun verifyTextField1A11y() = runDesktopA11yTest {
         test.setContent {
@@ -458,7 +457,6 @@ class AccessibilityTest {
             .isEqualTo(AccessibleRole.PUSH_BUTTON)
     }
 
-    @Suppress("DEPRECATION")
     @Test
     fun textFieldAccessibleNameUsesContentDescription() = runDesktopA11yTest {
         test.setContent {
@@ -477,7 +475,6 @@ class AccessibilityTest {
         assertThat(context?.accessibleDescription).isEqualTo("Email")
     }
 
-    @Suppress("DEPRECATION")
     @Test
     fun textFieldAccessibleNameIsNullWithoutContentDescription() = runDesktopA11yTest {
         test.setContent {

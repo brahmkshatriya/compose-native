@@ -81,7 +81,7 @@ class CupertinoTextFieldDelegateTest : SkikoComposeTestBase() {
         val givenOffset = 1
         val desiredOffset =
             0 // TODO: define what should happen exactly, this test only assures that no crash
-              // happens
+        // happens
 
         testDetermineCursorDesiredOffset(givenOffset, desiredOffset, text)
     }
@@ -222,7 +222,6 @@ class CupertinoTextFieldDelegateTest : SkikoComposeTestBase() {
             size = IntSize(1083, 150),
         )
 
-    @Suppress("DEPRECATION")
     private fun simpleTextLayoutInput(text: String) =
         TextLayoutInput(
             text = AnnotatedString(text),
@@ -237,7 +236,6 @@ class CupertinoTextFieldDelegateTest : SkikoComposeTestBase() {
             constraints = Constraints(maxWidth = 1000),
         )
 
-    @Suppress("DEPRECATION")
     private fun simpleMultiParagraph(text: String) =
         MultiParagraph(
             annotatedString = AnnotatedString(text),

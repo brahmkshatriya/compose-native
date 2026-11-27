@@ -32,7 +32,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
 
-@Suppress("JavaIoSerializableObjectMustHaveReadResolve") private object DummyComponent : Component()
+private object DummyComponent : Component()
 
 @RunWith(JUnit4::class)
 class DesktopInputComponentTest {

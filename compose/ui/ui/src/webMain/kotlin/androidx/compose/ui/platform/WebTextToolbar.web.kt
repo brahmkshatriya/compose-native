@@ -16,9 +16,6 @@
 
 package androidx.compose.ui.platform
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -27,7 +24,6 @@ import androidx.compose.ui.geometry.Rect
 
 @InternalComposeUiApi
 class WebTextToolbar : TextToolbar {
-    @Immutable
     data class TextToolbarMenu(
         val rect: Rect,
         val onCopyRequested: (() -> Unit)?,
@@ -35,15 +31,6 @@ class WebTextToolbar : TextToolbar {
         val onCutRequested: (() -> Unit)?,
         val onSelectAllRequested: (() -> Unit)?,
     )
-
-    @Composable
-    internal fun Render() {
-        DisposableEffect(this) { onDispose { hide() } }
-        renderer?.invoke(menu)
-    }
-
-    /** Installed by foundation and invoked from the window composition. */
-    var renderer by mutableStateOf<(@Composable (TextToolbarMenu?) -> Unit)?>(null)
 
     /** Current selection menu for hosts that render their own toolbar popup. */
     var menu by mutableStateOf<TextToolbarMenu?>(null)

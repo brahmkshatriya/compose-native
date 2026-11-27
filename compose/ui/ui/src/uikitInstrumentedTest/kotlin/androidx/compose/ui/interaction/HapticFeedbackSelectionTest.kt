@@ -103,7 +103,6 @@ class HapticFeedbackSelectionTest {
         setContent {
             WithTestHapticFeedback(hapticFeedback) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = textFieldValue,
                         onValueChange = { textFieldValue = it },
@@ -136,7 +135,6 @@ class HapticFeedbackSelectionTest {
         setContent {
             WithTestHapticFeedback(hapticFeedback) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = textFieldValue,
                         onValueChange = { textFieldValue = it },

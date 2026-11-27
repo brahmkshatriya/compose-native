@@ -41,7 +41,6 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.use
 import kotlin.test.Test
-import kotlin.test.assertNotNull
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 
@@ -74,7 +73,7 @@ class OnClickTest : SkikoComposeTestBase() {
 
     // https://github.com/JetBrains/compose-multiplatform/issues/3655
     // Isn't reproducible with ImageComposeScene because of Dispatchers.Unconfined
-    @OptIn(ExperimentalFoundationApi::class)
+    @OptIn(ExperimentalFoundationApi::class, ExperimentalCoroutinesApi::class)
     @Test
     fun simpleClickWithoutMove() = runTest {
         val frameRecomposer = FrameRecomposer(coroutineContext)
@@ -188,13 +187,11 @@ class OnClickTest : SkikoComposeTestBase() {
                 )
             }
 
-            assertNotNull(viewConfiguration)
-
             scene.sendPointerEvent(PointerEventType.Move, Offset(0f, 0f))
             scene.sendPointerEvent(PointerEventType.Press, Offset(0f, 0f), button = button)
             scene.sendPointerEvent(PointerEventType.Release, Offset(0f, 0f), button = button)
 
-            waitUntil(timeoutMillis = viewConfiguration.doubleTapTimeoutMillis * 2) {
+            waitUntil(timeoutMillis = viewConfiguration!!.doubleTapTimeoutMillis * 2) {
                 clicksCount == 1
             }
             assertThat(clicksCount).isEqualTo(1)
@@ -217,11 +214,11 @@ class OnClickTest : SkikoComposeTestBase() {
                 PointerEventType.Press,
                 Offset(5f, 5f),
                 button = button,
-                timeMillis = 100 + viewConfiguration.doubleTapMinTimeMillis,
+                timeMillis = 100 + viewConfiguration!!.doubleTapMinTimeMillis,
             )
             scene.sendPointerEvent(PointerEventType.Release, Offset(5f, 5f), button = button)
 
-            waitUntil(timeoutMillis = viewConfiguration.doubleTapTimeoutMillis / 2) {
+            waitUntil(timeoutMillis = viewConfiguration!!.doubleTapTimeoutMillis / 2) {
                 doubleClickCount == 1
             }
             assertThat(clicksCount).isEqualTo(1)
@@ -283,7 +280,7 @@ class OnClickTest : SkikoComposeTestBase() {
             scene.sendPointerEvent(PointerEventType.Move, Offset(5f, 5f))
             scene.sendPointerEvent(PointerEventType.Press, Offset(5f, 5f), button = button)
 
-            waitUntil(timeoutMillis = viewConfiguration.longPressTimeoutMillis * 2) {
+            waitUntil(timeoutMillis = viewConfiguration!!.longPressTimeoutMillis * 2) {
                 longClickCount == 1
             }
             assertThat(clicksCount).isEqualTo(1)

@@ -61,10 +61,8 @@ internal fun AssertThat<Int>.isWithin1PixelFrom(from: Int) {
     isEqualTo(from, 1)
 }
 
-@Suppress("ReplaceAssertBooleanWithAssertEquality")
 internal fun AssertThat<Boolean>.isTrue() = assertTrue(t == true, message)
 
-@Suppress("ReplaceAssertBooleanWithAssertEquality")
 internal fun AssertThat<Boolean>.isFalse() = assertTrue(t == false, message)
 
 internal fun <K, T : Iterable<K>> AssertThat<T>.containsExactlyInOrder(vararg any: K) {
@@ -97,7 +95,6 @@ internal fun <K : Comparable<K>, T : Iterable<K>> AssertThat<T>.containsExactly(
     assertContentEquals(t.sorted(), any.sorted(), message)
 }
 
-@Suppress("unused")
 internal fun <K, T : Iterable<K>> AssertThat<T>.containsAtLeast(vararg any: K) {
     require(t != null)
     any.toList().forEach { assertContains(t, it, message) }
@@ -119,7 +116,7 @@ internal fun AssertThat<Float>.isLessThan(n: Float) {
     assertTrue(t!! < n, message ?: "$t is not less than $n")
 }
 
-internal fun AssertThat<Int>.isLessThan(n: Int, @Suppress("unused") dummy: Int = 0) {
+internal fun AssertThat<Int>.isLessThan(n: Int, d: Int = 0) {
     assertTrue(t!! < n, message ?: "$t is not less than $n")
 }
 
@@ -127,7 +124,7 @@ internal fun AssertThat<Float>.isAtMost(n: Float) {
     assertTrue(t!! <= n, message ?: "$t is greater than $n")
 }
 
-internal fun AssertThat<Int>.isAtMost(n: Int, @Suppress("unused") dummy: Int = 0) {
+internal fun AssertThat<Int>.isAtMost(n: Int, d: Int = 0) {
     assertTrue(t!! <= n, message ?: "$t is greater than $n")
 }
 
@@ -169,7 +166,7 @@ internal fun <T> assertThat(t: T?, message: String? = null): AssertThat<T> {
 
 internal fun assertWithMessage(message: String) = AssertMessage(message)
 
-internal fun AssertThat<Int>.isGreaterThan(other: Int, @Suppress("unused") dummy: Int = 0) {
+internal fun AssertThat<Int>.isGreaterThan(other: Int, d: Int = 0) {
     assertTrue(message ?: "The was expected to be greater than $other. But value = $t") {
         t!! > other
     }

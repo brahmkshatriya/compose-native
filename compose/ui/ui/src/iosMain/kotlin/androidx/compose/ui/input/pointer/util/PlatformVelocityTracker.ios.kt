@@ -53,10 +53,8 @@ private class IosVelocityTracker : PlatformVelocityTracker {
         // Y
         // coordinates.
         if (!event.changedToUpIgnoreConsumed()) {
-            event.historical.fastForEach {
-                addPosition(it.uptimeMillis, it.originalEventPosition + offset)
-            }
-            addPosition(event.uptimeMillis, event.originalEventPosition + offset)
+            event.historical.fastForEach { addPosition(it.uptimeMillis, it.position + offset) }
+            addPosition(event.uptimeMillis, event.position + offset)
         }
 
         if (event.uptimeMillis - lastMoveEventTimeStamp > AssumePointerMoveStoppedMilliseconds) {

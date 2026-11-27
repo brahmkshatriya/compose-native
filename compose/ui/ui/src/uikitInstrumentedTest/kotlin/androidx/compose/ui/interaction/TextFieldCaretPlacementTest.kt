@@ -140,7 +140,6 @@ private fun UIKitInstrumentedTest.setUpField(
                 val value = mutableStateOf(TextFieldValue(text))
                 setContent {
                     CaptionedField(label) {
-                        @Suppress("DEPRECATION")
                         BasicTextField(
                             value = value.value,
                             onValueChange = { value.value = it },

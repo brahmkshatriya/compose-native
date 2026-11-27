@@ -139,7 +139,6 @@ class MemoryLeaksTest {
             val controller =
                 ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
                     val focusRequester = FocusRequester()
-                    @Suppress("DEPRECATION")
                     TextField(
                         value = "",
                         onValueChange = {},
@@ -172,7 +171,6 @@ class MemoryLeaksTest {
                 val controller =
                     ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
                         val focusRequester = FocusRequester()
-                        @Suppress("DEPRECATION")
                         TextField(
                             value = "",
                             onValueChange = {},
@@ -224,7 +222,6 @@ class MemoryLeaksTest {
                 val controller =
                     ComposeUIViewController({ enforceStrictPlistSanityCheck = false }) {
                         val focusRequester = FocusRequester()
-                        @Suppress("DEPRECATION")
                         TextField(
                             value = "",
                             onValueChange = {},
@@ -344,7 +341,6 @@ class MemoryLeaksTest {
             val view =
                 ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
                     val focusRequester = FocusRequester()
-                    @Suppress("DEPRECATION")
                     TextField(
                         value = "",
                         onValueChange = {},
@@ -378,7 +374,6 @@ class MemoryLeaksTest {
                 val view =
                     ComposeUIView({ enforceStrictPlistSanityCheck = false }) {
                         val focusRequester = FocusRequester()
-                        @Suppress("DEPRECATION")
                         TextField(
                             value = "",
                             onValueChange = {},

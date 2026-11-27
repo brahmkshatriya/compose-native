@@ -219,7 +219,7 @@ class SwingPanelTest {
         }
         awaitIdle()
 
-        assertEquals(0, scrollState.value)
+        assertEquals(scrollState.value, 0)
         window.sendMouseWheelEvent(x = 200, y = 200, wheelRotation = 50.0)
         awaitIdle()
         assertTrue(scrollState.value > 0, "Compose did not scroll; SwingPanel blocked the event")

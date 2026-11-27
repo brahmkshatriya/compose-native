@@ -34,7 +34,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -119,9 +118,7 @@ class SelectionContainerTests : OnCanvasTests {
 
         // delay to prevent interpreting next single click as a second click of the previous click,
         // so we make sure it won't appear as a double click
-        withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
-        }
+        withContext(Dispatchers.Default) { delay(viewConfiguration!!.doubleTapTimeoutMillis) }
 
         // now double click:
         canvas.doClick()
@@ -132,9 +129,7 @@ class SelectionContainerTests : OnCanvasTests {
         assertEquals(0, selection.start.offset)
         assertEquals(6, selection.end.offset)
 
-        withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
-        }
+        withContext(Dispatchers.Default) { delay(viewConfiguration!!.doubleTapTimeoutMillis) }
         // reset selection by clicking
         canvas.doClick()
         selection = syncChannel.receive()
@@ -184,9 +179,7 @@ class SelectionContainerTests : OnCanvasTests {
         assertEquals(0, selection.start.offset)
         assertEquals(27, selection.end.offset)
 
-        withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
-        }
+        withContext(Dispatchers.Default) { delay(viewConfiguration!!.doubleTapTimeoutMillis) }
         // reset selection by clicking
         canvas.doClick()
         selection = syncChannel.receive()
@@ -232,14 +225,10 @@ class SelectionContainerTests : OnCanvasTests {
         // first single click
         canvas.doClick()
         // pause to ensure no double-click
-        withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
-        }
+        withContext(Dispatchers.Default) { delay(viewConfiguration!!.doubleTapTimeoutMillis) }
         // second single click
         canvas.doClick()
-        withContext(Dispatchers.Default) {
-            delay(viewConfiguration!!.doubleTapTimeoutMillis.milliseconds)
-        }
+        withContext(Dispatchers.Default) { delay(viewConfiguration!!.doubleTapTimeoutMillis) }
 
         repeat(selectionCallbackCounter) {
             val selection = syncChannel.receive()

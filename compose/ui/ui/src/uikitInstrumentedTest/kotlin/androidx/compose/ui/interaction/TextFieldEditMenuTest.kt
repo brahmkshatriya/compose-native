@@ -70,6 +70,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.UIPasteboard
 
 class TextFieldEditMenuTest {
@@ -81,7 +82,6 @@ class TextFieldEditMenuTest {
             setContent {
                 val focusRequester = remember { FocusRequester() }
                 Column(modifier = Modifier.safeDrawingPadding()) {
-                    @Suppress("DEPRECATION")
                     BasicTextField(
                         textValue.value,
                         { textValue.value = it },
@@ -121,7 +121,6 @@ class TextFieldEditMenuTest {
             setContent {
                 val focusRequester = remember { FocusRequester() }
                 Column(modifier = Modifier.safeDrawingPadding()) {
-                    @Suppress("DEPRECATION")
                     TextField(
                         "Hello-LongLongLongLongLong-text",
                         {},
@@ -160,7 +159,6 @@ class TextFieldEditMenuTest {
         setContent {
             val focusRequester = remember { FocusRequester() }
             Column(modifier = Modifier.safeDrawingPadding()) {
-                @Suppress("DEPRECATION")
                 BasicTextField(
                     value = textFieldValue.value,
                     onValueChange = { textFieldValue.value = it },
@@ -214,7 +212,6 @@ class TextFieldEditMenuTest {
         setContent {
             val focusRequester = remember { FocusRequester() }
             Column(modifier = Modifier.safeDrawingPadding()) {
-                @Suppress("DEPRECATION")
                 BasicTextField(
                     value = textFieldValue.value,
                     onValueChange = { textFieldValue.value = it },
@@ -328,7 +325,6 @@ class TextFieldEditMenuTest {
                 setContent {
                     val focusRequester = remember { FocusRequester() }
                     Column(modifier = Modifier.safeDrawingPadding()) {
-                        @Suppress("DEPRECATION")
                         BasicTextField(
                             value = textFieldValue.value,
                             onValueChange = { textFieldValue.value = it },
@@ -557,7 +553,6 @@ class TextFieldEditMenuTest {
             setContent {
                 val focusRequester = remember { FocusRequester() }
                 Column(modifier = Modifier.safeDrawingPadding()) {
-                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = textFieldValue.value,
                         onValueChange = { textFieldValue.value = it },
@@ -711,7 +706,6 @@ class TextFieldEditMenuTest {
                 selectionState = rememberSelectionState()
                 SelectionContainer(state = selectionState) {
                     Column(modifier = Modifier.safeDrawingPadding()) {
-                        @Suppress("DEPRECATION")
                         TextField(value = PARTIAL_SELECTION_TEXT, onValueChange = {})
                         Text(SELECTION_CONTAINER_TEXT, modifier = Modifier.testTag("SelectionText"))
                     }
@@ -765,7 +759,6 @@ class TextFieldEditMenuTest {
                 when (textFieldKind) {
                     BasicTextFieldType.V1 -> {
                         val textFieldValue = remember { mutableStateOf(initialValue) }
-                        @Suppress("DEPRECATION")
                         BasicTextField(
                             value = textFieldValue.value,
                             onValueChange = { textFieldValue.value = it },
@@ -810,6 +803,7 @@ class TextFieldEditMenuTest {
         }
     }
 
+    @OptIn(ExperimentalForeignApi::class)
     private fun UIKitInstrumentedTest.verifyContextMenuItemsVisible(labels: List<String>) {
         labels.forEach { label ->
             findNodeWithLabel(label).let {
@@ -819,6 +813,7 @@ class TextFieldEditMenuTest {
         }
     }
 
+    @OptIn(ExperimentalForeignApi::class)
     private fun UIKitInstrumentedTest.verifyContextMenuItemsHidden(labels: List<String>) {
         labels.forEach { label ->
             assertNull(
@@ -828,6 +823,7 @@ class TextFieldEditMenuTest {
         }
     }
 
+    @OptIn(ExperimentalForeignApi::class)
     private fun UIKitInstrumentedTest.verifyFullToolbarPresent() {
         verifyContextMenuItemsVisible(listOf("Cut", "Copy", "Paste", "Select All"))
     }

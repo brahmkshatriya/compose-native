@@ -38,7 +38,7 @@ class ThrowUncaughtExceptionRule : TestRule {
                 val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
                 var exception: Throwable? = null
 
-                Thread.setDefaultUncaughtExceptionHandler { _, e ->
+                Thread.setDefaultUncaughtExceptionHandler { t, e ->
                     if (exception != null) {
                         exception!!.addSuppressed(e)
                     } else {

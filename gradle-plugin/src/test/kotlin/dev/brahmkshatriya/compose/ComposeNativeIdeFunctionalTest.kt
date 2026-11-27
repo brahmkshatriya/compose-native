@@ -96,12 +96,12 @@ class ComposeNativeIdeFunctionalTest {
             projectDir.resolve("build/ide/dependencies/json/commonMain.json").readText()
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.ui:ui:1.13.0-beta01",
+            "org.jetbrains.compose.ui:ui:1.13.0-rc01",
             message = "The IDE model must contain official Compose UI metadata",
         )
         assertContains(
             commonMainModel,
-            "org.jetbrains.compose.ui:ui-unit:1.13.0-beta01",
+            "org.jetbrains.compose.ui:ui-unit:1.13.0-rc01",
             message = "The IDE model must contain the metadata that defines Dp and dp",
         )
         assertContains(

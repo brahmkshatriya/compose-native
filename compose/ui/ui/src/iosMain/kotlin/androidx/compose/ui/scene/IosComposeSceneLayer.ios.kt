@@ -236,6 +236,7 @@ internal class IosComposeSceneLayer(
         mediator.setContent(parentCompositionContext) {
             ProvideComposeSceneLayerCompositionLocals(content)
         }
+        invalidateLayout()
     }
 
     override fun setKeyEventListener(

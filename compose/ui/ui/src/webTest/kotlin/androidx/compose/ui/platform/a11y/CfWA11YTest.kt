@@ -62,7 +62,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -458,7 +457,7 @@ class CfWA11YTest : OnCanvasTests {
      * for some time, and that's the purpose of this function.
      */
     suspend fun realDelay(timeMs: Long) {
-        withContext(Dispatchers.Default) { delay(timeMs.milliseconds) }
+        withContext(Dispatchers.Default) { delay(timeMs) }
     }
 
     @Test

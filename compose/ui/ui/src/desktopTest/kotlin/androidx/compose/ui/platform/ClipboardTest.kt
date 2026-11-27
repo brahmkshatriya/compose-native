@@ -19,6 +19,7 @@ package androidx.compose.ui.platform
 import androidx.compose.ui.HeadlessTest
 import androidx.compose.ui.awt.ComposeWindow
 import androidx.compose.ui.runHeadlessComposeUiTest
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.window.WindowTestScope
 import androidx.compose.ui.window.runApplicationTest
 import java.awt.Dimension
@@ -32,6 +33,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.experimental.categories.Category
 
+@OptIn(ExperimentalTestApi::class)
 class ClipboardTest {
 
     var clipboard: Clipboard? = null
@@ -46,8 +48,8 @@ class ClipboardTest {
     @Test
     fun hasClipboard() = clipboardTest {
         assertNotNull(clipboard)
-        assertNotNull(clipboard!!.awtClipboard)
-        assertTrue(clipboard!!.awtClipboard is java.awt.datatransfer.Clipboard)
+        assertNotNull(clipboard!!.nativeClipboard)
+        assertTrue(clipboard!!.nativeClipboard is java.awt.datatransfer.Clipboard)
         assertNotNull(awtClipboard)
     }
 
@@ -84,7 +86,7 @@ class ClipboardTest {
             window.size = Dimension(300, 400)
             window.setContent {
                 clipboard = LocalClipboard.current
-                awtClipboard = clipboard!!.awtClipboard as java.awt.datatransfer.Clipboard
+                awtClipboard = clipboard!!.nativeClipboard as java.awt.datatransfer.Clipboard
             }
             window.isUndecorated = true
             window.isVisible = true
@@ -96,14 +98,13 @@ class ClipboardTest {
         }
     }
 
-    @Suppress("DEPRECATION")
     @Test
     @Category(HeadlessTest::class)
     fun nativeClipboardDoesNotCrash() = runHeadlessComposeUiTest {
         lateinit var clipboard: Clipboard
         setContent { clipboard = LocalClipboard.current }
 
-        clipboard.awtClipboard // Just check it doesn't crash
+        clipboard.nativeClipboard // Just check it doesn't crash
         assertEquals(null, clipboard.awtClipboard)
     }
 }

@@ -16,6 +16,7 @@
 
 package androidx.compose.foundation.text.selection
 
+import androidx.compose.foundation.text.InternalFoundationTextApi
 import androidx.compose.foundation.text.LegacyTextFieldState
 import androidx.compose.foundation.text.TextLayoutResultProxy
 import androidx.compose.ui.focus.FocusRequester
@@ -53,7 +54,7 @@ import org.mockito.kotlin.whenever
 class DesktopTextFieldSelectionManagerTest {
     private val text = "Hello World"
     private val density = Density(density = 1f)
-    @Suppress("DEPRECATION") private val offsetMapping = OffsetMapping.Identity
+    private val offsetMapping = OffsetMapping.Identity
     private var value = TextFieldValue(text)
     private val lambda: (TextFieldValue) -> Unit = { value = it }
     private lateinit var state: LegacyTextFieldState
@@ -71,6 +72,7 @@ class DesktopTextFieldSelectionManagerTest {
     private val hapticFeedback = mock<HapticFeedback>()
     private val focusRequester = mock<FocusRequester>()
 
+    @OptIn(InternalFoundationTextApi::class)
     @Before
     fun setup() {
         manager = TextFieldSelectionManager()
@@ -84,7 +86,6 @@ class DesktopTextFieldSelectionManagerTest {
 
         whenever(layoutResult.layoutInput)
             .thenReturn(
-                @Suppress("DEPRECATION")
                 TextLayoutInput(
                     text = AnnotatedString(text),
                     style = TextStyle.Default,

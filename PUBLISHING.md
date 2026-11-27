@@ -8,8 +8,8 @@ Consumers explicitly choose the fork coordinates and versions in their dependenc
 | Role | Version |
 | --- | --- |
 | Fork artifacts | release tag (`VERSION`) |
-| JetBrains Compose upstream | `1.13.0-beta01` |
-| Maven Central Material 3 upstream | `1.13.0-beta01` |
+| JetBrains Compose upstream | `1.13.0-rc01` |
+| Maven Central Material 3 upstream | `1.13.0-rc01` |
 | Official Skiko (JVM/web/iOS) | `0.156.1` |
 | Native Skiko fork | `0.156.1` |
 | Kotlin | `2.4.20` |
@@ -144,7 +144,7 @@ Apply the plugin alongside the official Compose plugin:
 plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
-    id("org.jetbrains.compose") version "1.13.0-beta01"
+    id("org.jetbrains.compose") version "1.13.0-rc01"
     id("dev.brahmkshatriya.compose") version "VERSION"
 }
 ```

@@ -72,7 +72,7 @@ class WindowInsetsPaddingTest {
             val focusRequester = remember { FocusRequester() }
             Column(modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                 Spacer(modifier = Modifier.weight(1f))
-                @Suppress("DEPRECATION") TextField("", {}, Modifier.focusRequester(focusRequester))
+                TextField("", {}, Modifier.focusRequester(focusRequester))
                 compositionCount++
             }
             LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -95,7 +95,7 @@ class WindowInsetsPaddingTest {
                     Modifier.fillMaxSize()
                         .windowInsetsPadding(WindowInsets.displayCutout)
                         .background(Color.Red)
-                        .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                        .onGloballyPositioned({ boxRect = it.boundsInWindow().toDpRect(density) })
                 ) {
                     Text("TEXT")
                 }
@@ -128,7 +128,7 @@ class WindowInsetsPaddingTest {
                     Modifier.fillMaxSize()
                         .windowInsetsPadding(WindowInsets.displayCutout)
                         .background(Color.Red)
-                        .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                        .onGloballyPositioned({ boxRect = it.boundsInWindow().toDpRect(density) })
                 ) {
                     Text("TEXT")
                 }
@@ -166,7 +166,7 @@ class WindowInsetsPaddingTest {
                     Modifier.fillMaxSize()
                         .windowInsetsPadding(WindowInsets.displayCutout)
                         .background(Color.Red)
-                        .onGloballyPositioned { boxRect = it.boundsInWindow().toDpRect(density) }
+                        .onGloballyPositioned({ boxRect = it.boundsInWindow().toDpRect(density) })
                 ) {
                     Text("TEXT")
                 }

@@ -27,12 +27,12 @@ class StringHelpersSkikoMainTest {
     @Test
     fun StringHelpersTest_findFollowingBreak() {
         val result = complexString.findFollowingBreak(0)
-        assertEquals(7, result)
+        assertEquals(result, 7)
     }
 
     @Test
     fun StringHelpersTest_findPrecedingBreak() {
         val result = complexString.findPrecedingBreak(7)
-        assertEquals(0, result)
+        assertEquals(result, 0)
     }
 }

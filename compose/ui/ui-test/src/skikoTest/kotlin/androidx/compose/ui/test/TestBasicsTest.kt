@@ -51,10 +51,12 @@ import kotlinx.coroutines.test.runTest
 @OptIn(ExperimentalTestApi::class)
 class TestBasicsTest : AbstractTestBasicsTest(runUiTest = { runComposeUiTest(block = it) })
 
+@OptIn(ExperimentalTestApi::class)
 class TestBasicsTestV2 :
     AbstractTestBasicsTest(runUiTest = { androidx.compose.ui.test.v2.runComposeUiTest(block = it) })
 
 /** Basic tests of the testing framework itself. */
+@OptIn(ExperimentalTestApi::class)
 abstract class AbstractTestBasicsTest(
     private val runUiTest: (ComposeUiTest.() -> Unit) -> TestResult
 ) {
@@ -138,7 +140,7 @@ abstract class AbstractTestBasicsTest(
                     LaunchedEffect(Unit) {
                         effectLaunched = true
                         while (true) {
-                            delay(1.seconds)
+                            delay(1000)
                         }
                     }
                 }
@@ -161,7 +163,7 @@ abstract class AbstractTestBasicsTest(
         setContent {
             LaunchedEffect(Unit) {
                 repeat(5) {
-                    delay(1.seconds)
+                    delay(1000)
                     value = it + 1
                 }
             }
@@ -184,7 +186,7 @@ abstract class AbstractTestBasicsTest(
             compositionValues.add(value)
             val capturedValue = value
             LaunchedEffect(capturedValue) {
-                delay(1.seconds)
+                delay(1000)
                 value = capturedValue + 1
             }
         }
@@ -241,7 +243,7 @@ abstract class AbstractTestBasicsTest(
         var targetValue = 0
         setContent { LaunchedEffect(sourceValue) { targetValue = sourceValue } }
         sourceValue = 1
-        runOnIdle { assertEquals(1, targetValue) }
+        runOnIdle { assertEquals(targetValue, 1) }
     }
 
     @Test
@@ -250,7 +252,7 @@ abstract class AbstractTestBasicsTest(
         var targetValue = 0
         setContent { LaunchedEffect(sourceValue) { targetValue = sourceValue } }
         runOnIdle { sourceValue = 1 }
-        assertEquals(0, targetValue)
+        assertEquals(targetValue, 0)
     }
 
     @Test

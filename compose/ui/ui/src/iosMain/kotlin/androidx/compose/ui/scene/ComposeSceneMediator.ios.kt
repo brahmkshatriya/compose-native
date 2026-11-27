@@ -25,7 +25,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalMediaQueryApi
-import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.UiMediaScope
 import androidx.compose.ui.draganddrop.IosDragAndDropManager
 import androidx.compose.ui.geometry.Offset
@@ -119,6 +118,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import platform.CoreGraphics.CGPoint
+import platform.CoreGraphics.CGRectIsEmpty
 import platform.Foundation.NSTimeInterval
 import platform.QuartzCore.CACurrentMediaTime
 import platform.QuartzCore.CATransaction
@@ -422,7 +422,6 @@ internal class ComposeSceneMediator(
     private fun isPointInsideInteractionBounds(point: CValue<CGPoint>) =
         interactionBounds.contains(point.toDpOffset().toOffset(screenDensity).round())
 
-    @OptIn(InternalComposeUiApi::class)
     var rootForTestListener: PlatformContext.RootForTestListener? by DelegateRootForTestListener()
 
     private val semanticsOwnerListener by lazy {
@@ -503,7 +502,8 @@ internal class ComposeSceneMediator(
                 keyboardManager.hasPendingWork ||
                 isLayoutTransitionAnimating ||
                 semanticsOwnerListener.hasInvalidations ||
-                textInputService.hasInvalidations
+                textInputService.hasInvalidations ||
+                setContent != null
         }
 
     init {
@@ -728,12 +728,18 @@ internal class ComposeSceneMediator(
     var isInterceptingOutsideEvents: Boolean by _overlayView::isInterceptingOutsideEvents
     var interactionBounds = IntRect.Zero
 
+    private var setContent: (() -> Unit)? = null
+
     fun setContent(parentCompositionContext: CompositionContext, content: @Composable () -> Unit) {
-        _backgroundView.runOnceOnAppeared {
-            scene.setContent(parentCompositionContext) {
-                ProvideComposeSceneMediatorCompositionLocals {
-                    FocusAboveKeyboardIfNeeded {
-                        interopContainer.TrackInteropPlacementContainer(content = content)
+        setContent = {
+            if (_overlayView.window != null && !CGRectIsEmpty(_overlayView.frame)) {
+                setContent = null
+                updateLayout()
+                scene.setContent(parentCompositionContext) {
+                    ProvideComposeSceneMediatorCompositionLocals {
+                        FocusAboveKeyboardIfNeeded {
+                            interopContainer.TrackInteropPlacementContainer(content = content)
+                        }
                     }
                 }
             }
@@ -770,6 +776,7 @@ internal class ComposeSceneMediator(
 
     fun requestMeasureAndLayout(completion: () -> Unit = {}) {
         frameChoreographer.performOutsideRecomposerFrame {
+            setContent?.invoke()
             scene.measureAndLayout()
             completion()
         }
@@ -793,7 +800,6 @@ internal class ComposeSceneMediator(
     fun retrievePendingViewUpdatesInteropTransaction(): InteropSyncTransaction =
         interopContainer.retrievePendingViewUpdatesTransaction()
 
-    @OptIn(InternalComposeUiApi::class)
     @Composable
     private fun ProvideComposeSceneMediatorCompositionLocals(content: @Composable () -> Unit) =
         CompositionLocalProvider(
@@ -826,6 +832,7 @@ internal class ComposeSceneMediator(
     private fun dispose() {
         onPreviewKeyEvent = { false }
         onKeyEvent = { false }
+        setContent = null
 
         frameChoreographer.removeListener(frameChoreographerListener)
         prefetchScheduler.dispose()

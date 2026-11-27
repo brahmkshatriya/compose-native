@@ -90,7 +90,7 @@ dependencies {
     kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin:${functionalTestKotlinVersion.get()}")
     kotlinGradlePluginApiForTests("org.jetbrains.kotlin:kotlin-gradle-plugin-idea:${functionalTestKotlinVersion.get()}")
     kotlinGradlePluginApiForTests("org.jetbrains.kotlin:compose-compiler-gradle-plugin:${functionalTestKotlinVersion.get()}")
-    kotlinGradlePluginApiForTests("org.jetbrains.compose:compose-gradle-plugin:1.13.0-alpha01")
+    kotlinGradlePluginApiForTests("org.jetbrains.compose:compose-gradle-plugin:1.13.0-rc01")
 
     testImplementation(kotlin("test"))
     testImplementation(gradleTestKit())

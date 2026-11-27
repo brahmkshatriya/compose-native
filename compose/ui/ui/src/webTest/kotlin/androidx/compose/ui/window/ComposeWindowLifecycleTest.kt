@@ -35,14 +35,14 @@ import org.w3c.dom.HTMLElement
 class ComposeWindowLifecycleTest : OnCanvasTests {
     @Test
     @Ignore // ignored while investigating CI issues: this test opens a new browser window which can
-            // be the cause
+    // be the cause
     fun allEvents() = runTest {
         val canvas = getCanvas()
         canvas.focus()
 
         val composeWindow =
             ComposeWindow(
-                htmlCanvas = canvas,
+                canvas = canvas,
                 rootNode = getShadowRoot(),
                 viewportContainer = document.body!!,
                 layerRoot = document.createElement("div") as HTMLElement,

@@ -42,7 +42,6 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 @OptIn(ExperimentalTestApi::class)
 class CustomEffectContextTest {
 
-    @Suppress("DEPRECATION")
     @Test
     fun effectContextPropagatedToComposition_runComposeUiTest(): TestResult {
         val testElement = TestCoroutineContextElement()
@@ -69,7 +68,6 @@ class CustomEffectContextTest {
         runOnIdle { assertThat(lastRecordedMotionDurationScale).isNull() }
     }
 
-    @Suppress("DEPRECATION")
     @Test
     fun motionDurationScale_propagatedToCoroutines(): TestResult {
         val motionDurationScale =
@@ -88,7 +86,6 @@ class CustomEffectContextTest {
         }
     }
 
-    @Suppress("DEPRECATION")
     @Test
     fun customDispatcher_ignoredWhenNotSubclassOfTestDispatcher(): TestResult {
         val notATestDispatcher =
@@ -101,6 +98,7 @@ class CustomEffectContextTest {
                     throw AssertionError("This dispatcher should be unused")
                 }
 
+                @OptIn(ExperimentalCoroutinesApi::class)
                 @Deprecated("override")
                 override fun limitedParallelism(parallelism: Int): CoroutineDispatcher {
                     throw AssertionError("This dispatcher should be unused")
@@ -161,7 +159,6 @@ class CustomEffectContextTest {
         }
     }
 
-    @Suppress("DEPRECATION")
     @Test
     @OptIn(ExperimentalCoroutinesApi::class)
     fun scheduler_usedWhenPresent(): TestResult {

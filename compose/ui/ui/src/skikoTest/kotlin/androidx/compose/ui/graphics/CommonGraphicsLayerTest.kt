@@ -326,13 +326,14 @@ class CommonGraphicsLayerTest {
             }
         }
 
-        assertNotNull(coords1)
-        assertNotNull(coords2)
         onRoot().apply {
-            assertOffsetEqual(Offset(15f, 5f), coords2.localPositionOf(coords1, Offset.Zero))
-            assertOffsetEqual(Offset(-5f, 5f), coords2.localPositionOf(coords1, Offset(20f, 0f)))
-            assertRectEqual(Rect(-5f, -5f, 15f, 5f), coords2.localBoundingBoxOf(coords1, false))
-            assertRectEqual(Rect(0f, 0f, 10f, 5f), coords2.localBoundingBoxOf(coords1, true))
+            assertOffsetEqual(Offset(15f, 5f), coords2!!.localPositionOf(coords1!!, Offset.Zero))
+            assertOffsetEqual(
+                Offset(-5f, 5f),
+                coords2!!.localPositionOf(coords1!!, Offset(20f, 0f)),
+            )
+            assertRectEqual(Rect(-5f, -5f, 15f, 5f), coords2!!.localBoundingBoxOf(coords1!!, false))
+            assertRectEqual(Rect(0f, 0f, 10f, 5f), coords2!!.localBoundingBoxOf(coords1!!, true))
         }
     }
 
@@ -367,7 +368,7 @@ class CommonGraphicsLayerTest {
     @Suppress("DEPRECATION")
     @Test
     fun testEmptyClip() = runComposeUiTest {
-        val emptyRectangle =
+        val EmptyRectangle =
             object : Shape {
                 override fun createOutline(
                     size: Size,
@@ -381,7 +382,7 @@ class CommonGraphicsLayerTest {
                 Box(
                     modifier =
                         Modifier.matchParentSize()
-                            .graphicsLayer(clip = true, shape = emptyRectangle)
+                            .graphicsLayer(clip = true, shape = EmptyRectangle)
                             .background(Color.Red)
                 )
             }
@@ -862,7 +863,7 @@ class CommonGraphicsLayerTest {
 
         assertNotNull(density)
 
-        var sizePx = with(density) { ceil(composableSize.toPx()) }
+        var sizePx = with(density!!) { ceil(composableSize.toPx()) }
         assertEquals(sizePx, graphicsLayerWidth)
         assertEquals(sizePx, graphicsLayerHeight)
         assertEquals(sizePx, drawScopeWidth)
@@ -872,7 +873,7 @@ class CommonGraphicsLayerTest {
 
         waitForIdle()
 
-        sizePx = with(density) { ceil(composableSize.toPx()) }
+        sizePx = with(density!!) { ceil(composableSize.toPx()) }
         assertEquals(sizePx, graphicsLayerWidth)
         assertEquals(sizePx, graphicsLayerHeight)
         assertEquals(sizePx, drawScopeWidth)
@@ -935,7 +936,7 @@ class CommonGraphicsLayerTest {
                         else Modifier
                     )
             ) {
-                Box(Modifier.background(Color.Red).size(sizeDp))
+                Box(Modifier.Companion.background(Color.Red).size(sizeDp))
             }
         }
 

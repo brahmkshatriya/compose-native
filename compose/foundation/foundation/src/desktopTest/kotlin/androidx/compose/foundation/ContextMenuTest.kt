@@ -135,7 +135,7 @@ class ContextMenuTest {
                             this.setContents(text, null)
                         }
 
-                    override suspend fun getClipEntry(): ClipEntry {
+                    override suspend fun getClipEntry(): ClipEntry? {
                         return clipEntry
                     }
 
@@ -143,8 +143,6 @@ class ContextMenuTest {
                         TODO("Not yet implemented")
                     }
 
-                    @Suppress("DeprecatedCallableAddReplaceWith")
-                    @Deprecated("Use platform-specific extension to get platform reference")
                     override val nativeClipboard: NativeClipboard
                         get() = mockPlatformClipboard
                 }
@@ -165,7 +163,6 @@ class ContextMenuTest {
                             Modifier.testTag("textfield"),
                         )
                     } else {
-                        @Suppress("DEPRECATION")
                         BasicTextField("Text", {}, Modifier.testTag("textfield"))
                     }
                 }
@@ -227,7 +224,6 @@ class ContextMenuTest {
                         Modifier.testTag("textfield"),
                     )
                 } else {
-                    @Suppress("DEPRECATION")
                     BasicTextField(
                         value = TextFieldValue("Text", selection = TextRange(0, 4)),
                         onValueChange = {},

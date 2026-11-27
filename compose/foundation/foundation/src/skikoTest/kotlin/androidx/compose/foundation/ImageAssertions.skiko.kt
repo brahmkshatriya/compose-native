@@ -38,7 +38,7 @@ import kotlin.test.DefaultAsserter.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * A helper function to run asserts on [ImageBitmap].
+ * A helper function to run asserts on [Bitmap].
  *
  * @param expectedSize The expected size of the bitmap. Leave null to skip the check.
  * @param expectedColorProvider Returns the expected color for the provided pixel position. The
@@ -229,7 +229,6 @@ fun ImageBitmap.assertShape(
  * @param shapeOverlapPixelCount The size of the border area from the shape outline to leave it
  *   untested as it is likely anti-aliased. The default is 1 pixel
  */
-@Suppress("unused")
 fun ImageBitmap.assertShape(
     density: Density,
     horizontalPadding: Dp,
@@ -257,7 +256,7 @@ private infix fun Float.until(until: Float): IntRange {
     val from = this.roundToInt()
     val to = until.roundToInt()
     if (from <= Int.MIN_VALUE) return IntRange.EMPTY
-    return from..<to
+    return from..(to - 1)
 }
 
 private fun pixelCloserToCenter(
@@ -268,16 +267,17 @@ private fun pixelCloserToCenter(
 ): Offset {
     val centerX = shapeSizeX / 2f
     val centerY = shapeSizeY / 2f
+    val d = delta
     val x =
         when {
-            offset.x > centerX -> offset.x - delta
-            offset.x < centerX -> offset.x + delta
+            offset.x > centerX -> offset.x - d
+            offset.x < centerX -> offset.x + d
             else -> offset.x
         }
     val y =
         when {
-            offset.y > centerY -> offset.y - delta
-            offset.y < centerY -> offset.y + delta
+            offset.y > centerY -> offset.y - d
+            offset.y < centerY -> offset.y + d
             else -> offset.y
         }
     return Offset(x, y)
@@ -291,16 +291,17 @@ private fun pixelFartherFromCenter(
 ): Offset {
     val centerX = shapeSizeX / 2f
     val centerY = shapeSizeY / 2f
+    val d = delta
     val x =
         when {
-            offset.x > centerX -> offset.x + delta
-            offset.x < centerX -> offset.x - delta
+            offset.x > centerX -> offset.x + d
+            offset.x < centerX -> offset.x - d
             else -> offset.x
         }
     val y =
         when {
-            offset.y > centerY -> offset.y + delta
-            offset.y < centerY -> offset.y - delta
+            offset.y > centerY -> offset.y + d
+            offset.y < centerY -> offset.y - d
             else -> offset.y
         }
     return Offset(x, y)

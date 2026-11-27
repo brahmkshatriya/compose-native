@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-@file:Suppress("unused")
-
 package androidx.compose.ui
 
 import androidx.compose.runtime.Composable
@@ -235,8 +233,8 @@ fun SimpleRow(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
         var width = 0
         var height = 0
         val placeables =
-            measurables.map { measurable ->
-                measurable.measure(constraints.copy(maxWidth = constraints.maxWidth - width)).also {
+            measurables.map {
+                it.measure(constraints.copy(maxWidth = constraints.maxWidth - width)).also {
                     width += it.width
                     height = max(height, it.height)
                 }

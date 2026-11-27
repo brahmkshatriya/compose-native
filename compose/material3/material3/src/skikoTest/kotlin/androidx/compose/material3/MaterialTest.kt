@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.WindowInfo
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.ExperimentalTestApi
 
 /**
  * Wraps Compose content in a [MaterialTheme] and a [Surface].
@@ -30,6 +31,7 @@ import androidx.compose.ui.test.ComposeUiTest
  *   [darkColorScheme], or a dynamic one
  * @param modifier a [Modifier] to be applied at the [Surface] wrapper
  */
+@OptIn(ExperimentalTestApi::class)
 fun ComposeUiTest.setMaterialContent(
     colorScheme: ColorScheme,
     modifier: Modifier = Modifier,

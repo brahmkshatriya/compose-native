@@ -20,12 +20,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.ComposeUiFlags
 import kotlin.js.js
 import kotlinx.browser.document
-import org.w3c.dom.DocumentReadyState
 import org.w3c.dom.Element
 import org.w3c.dom.HTMLCanvasElement
 import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.HTMLElement
-import org.w3c.dom.LOADING
 import org.w3c.dom.OPEN
 import org.w3c.dom.ShadowRootInit
 import org.w3c.dom.ShadowRootMode
@@ -90,7 +88,7 @@ fun ComposeViewport(
     // to position at the same place - the interop container is position at 0,0 relative to the
     // shadow.
     // It simplifies the positioning of the interop views in the container.
-    val positioningContainer = ComposeWindowCustomElement.createComposeComponent()
+    val positioningContainer = ComposeWindow.createComposeComponent()
     positioningContainer.style.apply {
         position = "relative"
         display =
@@ -233,7 +231,7 @@ fun ComposeViewport(
 
     val composeWindow =
         ComposeWindow(
-            htmlCanvas = canvas,
+            canvas = canvas,
             rootNode = shadowRoot,
             viewportContainer = viewportContainer,
             layerRoot = appContainer,
@@ -244,22 +242,7 @@ fun ComposeViewport(
             state = DefaultWindowState(viewportContainer),
         )
 
-    ComposeWindowCustomElement.onDispose(positioningContainer) { composeWindow.dispose() }
-}
-
-// In K/JS target, an application can't start right away. We should wait until skiko.wasm is ready.
-// We'll do it implicitly, rather than asking the app developers to call it.
-private fun onSkikoReady(block: () -> Unit) {
-    @Suppress("INVISIBLE_REFERENCE") org.jetbrains.skiko.wasm.onWasmReady { block() }
-}
-
-private fun onDomReady(block: () -> Unit) {
-    // https://developer.mozilla.org/en-US/docs/Web/API/Document/DOMContentLoaded_event
-    if (document.readyState == DocumentReadyState.LOADING) {
-        document.addEventListener("DOMContentLoaded", { block() })
-    } else {
-        block()
-    }
+    ComposeWindow.registerDisposableFor(positioningContainer) { composeWindow.dispose() }
 }
 
 private fun clearNodeChildren(node: Element): Unit =

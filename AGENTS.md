@@ -20,13 +20,26 @@ will be rejected by GitHub.
 
 Do not perform this operation in the sibling `skiko-native` checkout.
 
+## Upstream release policy
+
+Sync to the newest published JetBrains Compose Multiplatform release. Stable, RC, beta, and
+alpha releases are eligible. Check the
+[Compose Multiplatform release list](https://github.com/JetBrains/compose-multiplatform/releases)
+and use the matching version tag from `compose-multiplatform-core` as the source.
+
+Compare the numeric version first. For the same version, precedence from highest to lowest is
+stable, RC, beta, then alpha. Within each prerelease stage, compare the sequence number numerically. Skip
+development tags such as `+dev` builds, snapshots, and branch tips beyond the release tag.
+The AndroidX version merged into `jb-main` does not establish a Compose Multiplatform release.
+
 ## Current synchronization point
 
 - Flattened local snapshot base: `c1f04f0b9b7acda3849d76fe0d271f7255ad827c`
-- Last integrated upstream tip: `a8c000fe138b9ba9de08f351aaab8fe7ac0e8798`
+- Upstream release tag: `v1.13.0-rc01`
+- Last integrated upstream tip: `f39822e6a77eea5d194e4f9bb56cb6961321b849`
 - Local single-parent integration commit: `fa267407f6ee01add3ea5896feb7922ad6051a80`
 
-Update the last two values in this section whenever a later upstream tip is integrated.
+Record the release tag, the commit it points to, and the local integration commit after each sync.
 
 ## Normal procedure for future upstream updates
 
@@ -39,14 +52,27 @@ git remote -v
 # Add this only if the remote is missing.
 git remote add upstream https://github.com/JetBrains/compose-multiplatform-core.git
 
-git fetch upstream --prune
+# Select the version from the published release list above.
+read -r -p 'Verified Compose Multiplatform release tag: ' agent_release_tag
+git fetch --no-tags upstream \
+  "refs/tags/$agent_release_tag:refs/remotes/upstream/releases/$agent_release_tag"
+agent_previous_upstream=f39822e6a77eea5d194e4f9bb56cb6961321b849
+agent_new_upstream=$(git rev-parse "refs/remotes/upstream/releases/$agent_release_tag^{commit}")
 
-agent_previous_upstream=a8c000fe138b9ba9de08f351aaab8fe7ac0e8798
-agent_new_upstream=$(git rev-parse upstream/jb-main)
-
-# The new tip should descend from the previously integrated tip.
+# Check whether the last sync point and release are on the same line of history.
 git merge-base --is-ancestor "$agent_previous_upstream" "$agent_new_upstream"
+```
 
+If the ancestry check reports divergence, inspect both sides before applying the patch. Release
+branches can contain fixes cherry-picked from the development branch. Check which changes from the
+previous upstream sync are absent from the release so the patch brings the upstream baseline to the
+chosen tag while preserving fork edits.
+
+```bash
+git log --left-right --cherry-pick --oneline "$agent_previous_upstream...$agent_new_upstream"
+```
+
+```bash
 agent_saved_worktree=false
 if test -n "$(git status --porcelain)"; then
   git stash push --include-untracked -m "agent: preserve worktree before upstream patch sync"
@@ -80,7 +106,7 @@ Create a normal single-parent commit, for example:
 
 ```bash
 git add AGENTS.md
-git commit -m "Sync upstream jb-main through ${agent_new_upstream:0:12}"
+git commit -m "Sync upstream ${agent_release_tag} through ${agent_new_upstream:0:12}"
 ```
 
 Restore saved work only after the integration commit succeeds:
@@ -95,11 +121,11 @@ Remove the temporary patch after it is no longer needed. Do not push unless the 
 
 ## Required ancestry checks
 
-Before pushing an upstream synchronization, verify that the upstream tip is not an ancestor of
+Before pushing an upstream synchronization, verify that the upstream release commit is not an ancestor of
 local `main`. A nonzero result from the first command is expected:
 
 ```bash
-if git merge-base --is-ancestor upstream/jb-main HEAD; then
+if git merge-base --is-ancestor "$agent_new_upstream" HEAD; then
   echo "ERROR: main contains unpushable upstream ancestry"
   exit 1
 fi
@@ -111,7 +137,7 @@ git status --short --branch
 
 Never use any of these on `main`:
 
-- `git merge upstream/jb-main`
+- Merging an upstream branch or release tag directly into `main`
 - `git pull upstream jb-main`
 - resetting `main` to an upstream commit
 - pushing the local backup branch that contains the original upstream merge

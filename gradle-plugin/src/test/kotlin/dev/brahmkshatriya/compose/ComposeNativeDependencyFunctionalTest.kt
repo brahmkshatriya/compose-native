@@ -92,7 +92,7 @@ class ComposeNativeDependencyFunctionalTest {
         )
         assertContains(
             result.output,
-            "org.jetbrains.compose.runtime:runtime:1.13.0-alpha01 -> androidx.compose.runtime:runtime:1.13.0-beta01",
+            "org.jetbrains.compose.runtime:runtime:1.13.0-alpha01 -> androidx.compose.runtime:runtime:1.13.0-rc01",
         )
         assertContains(
             result.output,
@@ -241,7 +241,7 @@ class ComposeNativeDependencyFunctionalTest {
         )
         assertContains(
             supportResult.output,
-            "REQUEST=androidx.compose.runtime:runtime-annotation:1.13.0-beta01",
+            "REQUEST=androidx.compose.runtime:runtime-annotation:1.13.0-rc01",
         )
         assertFalse(
             supportResult.output.contains(
@@ -322,7 +322,7 @@ class ComposeNativeDependencyFunctionalTest {
         assertContains(result.output, "REQUEST=org.jetbrains.compose.ui:ui-uikit:1.13.0-alpha01")
         assertContains(
             result.output,
-            "REQUEST=androidx.compose.runtime:runtime-annotation:1.13.0-beta01",
+            "REQUEST=androidx.compose.runtime:runtime-annotation:1.13.0-rc01",
         )
         assertFalse(
             result.output.contains("REQUEST=dev.brahmkshatriya.compose.ui:ui-uikit:1.13.0-alpha06")
@@ -396,7 +396,7 @@ class ComposeNativeDependencyFunctionalTest {
         )
         assertContains(
             result.output,
-            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06 -> org.jetbrains.compose.ui:ui:1.13.0-beta01",
+            "dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha06 -> org.jetbrains.compose.ui:ui:1.13.0-rc01",
         )
         assertFalse(
             result.output.contains(

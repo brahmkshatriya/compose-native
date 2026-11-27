@@ -170,7 +170,6 @@ internal class KeyboardInsetsCustomInputViewsTest {
         val focusRequester = FocusRequester()
 
         setContent {
-            @Suppress("DEPRECATION")
             TextField(
                 value = "",
                 onValueChange = {},
@@ -194,7 +193,6 @@ internal class KeyboardInsetsCustomInputViewsTest {
         val focusRequester = FocusRequester()
 
         setContent {
-            @Suppress("DEPRECATION")
             TextField(
                 value = "",
                 onValueChange = {},

@@ -50,6 +50,8 @@ import platform.UIKit.UITextWritingDirection
 internal interface TextEditingDelegate {
     val isInteractive: Boolean
 
+    val isEditable: Boolean
+
     val inputTraits: SkikoUITextInputTraits
 
     fun onFocus()
@@ -168,10 +170,7 @@ internal interface TextEditingDelegate {
      *   the position is invalid.
      */
     fun caretDpRectForPosition(position: Int): DpRect?
-}
 
-/** Extension of [TextEditingDelegate] for the Native iOS Text Input path. */
-internal interface NativeTextEditingDelegate : TextEditingDelegate {
     /**
      * Returns the selection rectangles that enclose a range of text.
      * https://developer.apple.com/documentation/uikit/uitextinput/selectionrects(for:)
@@ -189,7 +188,10 @@ internal interface NativeTextEditingDelegate : TextEditingDelegate {
      * @return The first selection rectangle, in dp, or `null` if the range is invalid or empty.
      */
     fun firstSelectionRectForRange(range: TextRange): DpRect?
+}
 
+/** Extension of [TextEditingDelegate] for the Native iOS Text Input path. */
+internal interface NativeTextEditingDelegate : TextEditingDelegate {
     /**
      * Returns the text position that is closest to the specified point.
      * https://developer.apple.com/documentation/uikit/uitextinput/closestposition(to:)
@@ -235,6 +237,8 @@ internal class DetachedTextEditingDelegate(
     override val inputTraits: SkikoUITextInputTraits = EmptyInputTraits,
 ) : NativeTextEditingDelegate {
     override val isInteractive: Boolean = false
+
+    override val isEditable: Boolean = false
 
     override fun onFocus() = Unit
 

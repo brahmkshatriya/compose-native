@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.use
 import kotlin.math.ceil
 import kotlin.test.*
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -141,7 +140,10 @@ class DragGestureTest {
 
         ImageComposeScene(width = 100, height = 100, density = density).use { scene ->
             var dragStartResult: Offset? = null
+            var dragCanceled = false
+            var dragEnded = false
             var onDragCounter = 0
+            var dragOffset = Offset.Zero
 
             scene.setContent {
                 Box(
@@ -151,9 +153,12 @@ class DragGestureTest {
                                 enabled = true,
                                 matcher = PointerMatcher.mouse(PointerButton.Secondary),
                                 onDragStart = { offset -> dragStartResult = offset },
-                                onDragCancel = {},
-                                onDragEnd = {},
-                                onDrag = { onDragCounter++ },
+                                onDragCancel = { dragCanceled = true },
+                                onDragEnd = { dragEnded = true },
+                                onDrag = {
+                                    dragOffset = it
+                                    onDragCounter++
+                                },
                             )
                 )
             }
@@ -340,7 +345,10 @@ class DragGestureTest {
 
         ImageComposeScene(width = 100, height = 100, density = density).use { scene ->
             var dragStartResult: Offset? = null
+            var dragCanceled = false
+            var dragEnded = false
             var onDragCounter = 0
+            var dragOffset = Offset.Zero
 
             scene.setContent {
                 Box(
@@ -350,9 +358,12 @@ class DragGestureTest {
                                 enabled = true,
                                 matcher = PointerMatcher.touch,
                                 onDragStart = { offset -> dragStartResult = offset },
-                                onDragCancel = {},
-                                onDragEnd = {},
-                                onDrag = { onDragCounter++ },
+                                onDragCancel = { dragCanceled = true },
+                                onDragEnd = { dragEnded = true },
+                                onDrag = {
+                                    dragOffset = it
+                                    onDragCounter++
+                                },
                             )
                 )
             }
@@ -423,7 +434,7 @@ class DragGestureTest {
                     buttons = downButtons,
                 )
 
-                delay(viewConfiguration.longPressTimeoutMillis.milliseconds * 2)
+                delay(viewConfiguration.longPressTimeoutMillis * 2)
 
                 assertEquals(Offset(5f, 5f), dragStartResult)
                 assertEquals(0, onDragCounter)

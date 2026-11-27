@@ -572,6 +572,8 @@ internal class NativeTextInputView(initialInput: NativeTextEditingDelegate) :
     override fun writingToolsBehavior(): UIWritingToolsBehavior =
         input.inputTraits.writingToolsBehavior()
 
+    override fun isEditable(): Boolean = input.isEditable
+
     /** Call when something changes in text data */
     fun textWillChange() {
         _inputDelegate?.textWillChange(this)

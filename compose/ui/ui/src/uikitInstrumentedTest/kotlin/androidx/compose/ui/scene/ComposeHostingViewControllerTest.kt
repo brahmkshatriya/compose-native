@@ -37,6 +37,7 @@ import platform.UIKit.didMoveToParentViewController
 
 class ComposeHostingViewControllerTest {
     @Test
+    @OptIn(ExperimentalForeignApi::class)
     fun testOpaqueBackground() = runBlocking {
         val size = 100.dp
         val appDelegate = makeOpacityTestAppDelegate(size = size, opaque = true)
@@ -60,6 +61,7 @@ class ComposeHostingViewControllerTest {
     }
 
     @Test
+    @OptIn(ExperimentalForeignApi::class)
     fun testTransparentBackground() = runBlocking {
         val size = 100.dp
         val appDelegate = makeOpacityTestAppDelegate(size = size, opaque = false)
@@ -83,7 +85,7 @@ class ComposeHostingViewControllerTest {
     }
 
     @OptIn(ExperimentalForeignApi::class)
-    private fun makeOpacityTestAppDelegate(size: Dp, opaque: Boolean): MockAppDelegate {
+    private suspend fun makeOpacityTestAppDelegate(size: Dp, opaque: Boolean): MockAppDelegate {
         val appDelegate = MockAppDelegate()
         val contentController =
             UIViewController().also { it.view.backgroundColor = UIColor.redColor }

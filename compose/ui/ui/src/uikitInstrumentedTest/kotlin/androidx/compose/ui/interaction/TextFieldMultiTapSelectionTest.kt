@@ -86,8 +86,8 @@ class TextFieldMultiTapSelectionTest {
                 .multiTapCharacter(offset = WORD_OFFSET, count = 2) // double tap is enough
             delay(200)
             assertEquals(
-                null,
                 findFirstDescendant { it.isLoupeView },
+                null,
                 "[${textFieldOption.name}] Magnifier should not appear during multi-tap selection",
             )
             if (textFieldOption.nativeInput) dropNativeSelection()
@@ -171,7 +171,6 @@ private class TextFieldFactory(val type: BasicTextFieldType, val nativeInput: Bo
                     val valueState = mutableStateOf(TextFieldValue(text))
                     test.setContent {
                         Box(Modifier.fillMaxSize()) {
-                            @Suppress("DEPRECATION")
                             BasicTextField(
                                 value = valueState.value,
                                 onValueChange = { valueState.value = it },

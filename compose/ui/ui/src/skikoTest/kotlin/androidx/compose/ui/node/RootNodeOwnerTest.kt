@@ -247,7 +247,7 @@ private class TestInputRequest : PlatformTextInputMethodRequest {
     override val onEditCommand: (List<EditCommand>) -> Unit
         get() = error("Test method")
 
-    override val onImeAction: ((ImeAction) -> Unit)
+    override val onImeAction: ((ImeAction) -> Unit)?
         get() = error("Test method")
 
     override val textLayoutResult: () -> TextLayoutResult?

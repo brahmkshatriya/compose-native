@@ -351,7 +351,6 @@ class WindowInsetsTest {
 @Composable
 private fun TestContent(onComposition: () -> Unit, onTextFieldPositioned: (Rect) -> Unit) {
     Box(modifier = Modifier.fillMaxSize().imePadding()) {
-        @Suppress("DEPRECATION")
         TextField(
             value = "",
             onValueChange = {},

@@ -19,6 +19,7 @@ package androidx.compose.ui.interop
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.UIKitInstrumentedTest
 import androidx.compose.ui.test.runUIKitInstrumentedTest
@@ -38,7 +39,7 @@ import platform.UIKit.UIViewNoIntrinsicMetric
 import platform.UIKit.addChildViewController
 import platform.UIKit.didMoveToParentViewController
 
-@OptIn(ExperimentalForeignApi::class)
+@OptIn(ExperimentalForeignApi::class, ExperimentalComposeUiApi::class)
 internal abstract class ComposeSizeThatFitsTest(
     private val runUIKitInstrumentedTest: (UIKitInstrumentedTest.() -> Unit) -> Unit
 ) {
@@ -154,13 +155,11 @@ internal abstract class ComposeSizeThatFitsTest(
     }
 }
 
-@Suppress("unused")
 internal class ComposeSizeThatFitsInHostingViewTest :
     ComposeSizeThatFitsTest(
         runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = true, it) }
     )
 
-@Suppress("unused")
 internal class ComposeSizeThatFitsInHostingViewControllerTest :
     ComposeSizeThatFitsTest(
         runUIKitInstrumentedTest = { runUIKitInstrumentedTest(useHostingView = false, it) }

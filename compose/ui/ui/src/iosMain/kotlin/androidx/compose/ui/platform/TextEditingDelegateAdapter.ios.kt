@@ -28,6 +28,8 @@ internal class InactiveTextInputAdapter(private val delegate: TextInputContainer
     NativeTextEditingDelegate {
     override val isInteractive: Boolean = false
 
+    override val isEditable: Boolean = false
+
     private val text: String
         get() = delegate.text
 

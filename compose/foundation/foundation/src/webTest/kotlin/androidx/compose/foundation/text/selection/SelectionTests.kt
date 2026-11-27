@@ -79,6 +79,7 @@ class WebSelectionTests {
         }
     }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectLineStart() =
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { node, state ->
@@ -95,6 +96,7 @@ class WebSelectionTests {
             assertThat(state.value.selection).isEqualTo(TextRange(8, 7))
         }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectTextStart() =
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { node, state ->
@@ -112,6 +114,7 @@ class WebSelectionTests {
             assertThat(state.value.selection).isEqualTo(TextRange(8, 0))
         }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectTextEnd() =
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { node, state ->
@@ -126,6 +129,7 @@ class WebSelectionTests {
             assertThat(state.value.selection).isEqualTo(TextRange(8, 34))
         }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectLineEnd() =
         textFieldSemanticInteraction("line 1\nline 2\nline 3\nline 4\nline 5") { node, state ->
@@ -141,6 +145,7 @@ class WebSelectionTests {
             assertThat(state.value.selection).isEqualTo(TextRange(8, 13))
         }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun deleteAll() =
         textFieldSemanticInteraction("") { node, state ->
@@ -148,6 +153,7 @@ class WebSelectionTests {
             assertThat(state.value.text).isEqualTo("")
         }
 
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun selectAll() =
         textFieldSemanticInteraction("Select this text") { node, state ->

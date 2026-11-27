@@ -443,6 +443,7 @@ internal class ImeOptionsTest {
         assertSame(customInputAccessoryView, input.inputAccessoryView)
     }
 
+    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testTextInputSessionDoesNotRestartWithChangedInput() = runUIKitInstrumentedTest {
         val inputState = mutableStateOf("")
@@ -464,7 +465,6 @@ internal class ImeOptionsTest {
             InterceptPlatformTextInput(
                 interceptor = { request, _ -> testTextInputSession.startInputMethod(request) },
                 content = {
-                    @Suppress("DEPRECATION")
                     TextField(
                         modifier = Modifier.testTag("TextField"),
                         value = input,
@@ -562,7 +562,6 @@ internal class ImeOptionsTest {
         val focusRequester = FocusRequester()
 
         setContent {
-            @Suppress("DEPRECATION")
             TextField(
                 value = "",
                 onValueChange = {},

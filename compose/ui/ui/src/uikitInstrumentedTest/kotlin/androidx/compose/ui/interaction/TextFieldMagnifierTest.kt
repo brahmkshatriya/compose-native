@@ -49,9 +49,9 @@ class TextFieldMagnifierTest {
 
     private val params =
         listOf(
-            TextFieldMagnifierParam(useNativeTextInput = false) { fr -> BTF1(fr, false) },
+            TextFieldMagnifierParam(useNativeTextInput = false) { fr -> BTF(fr, false) },
             TextFieldMagnifierParam(useNativeTextInput = false) { fr -> BFT2(fr, false) },
-            TextFieldMagnifierParam(useNativeTextInput = true) { fr -> BTF1(fr, true) },
+            TextFieldMagnifierParam(useNativeTextInput = true) { fr -> BTF(fr, true) },
             TextFieldMagnifierParam(useNativeTextInput = true) { fr -> BFT2(fr, true) },
         )
 
@@ -124,9 +124,8 @@ class TextFieldMagnifierTest {
     @Test
     fun testMagnifierHidesOnDragOutsideTextField() =
         runUIKitInstrumentedTest(
-            params =
-                nonNativeParams // magnifier is not visible but its object still remains after
-                                // dragging outside text field with NITI
+            params = nonNativeParams // magnifier is not visible but its object still remains after
+            // dragging outside text field with NITI
         ) { factory ->
             val focusRequester = FocusRequester()
 
@@ -160,9 +159,8 @@ class TextFieldMagnifierTest {
     private fun modifier(focusRequester: FocusRequester): Modifier =
         Modifier.testTag("textField").height(40.dp).fillMaxWidth().focusRequester(focusRequester)
 
-    @Suppress("DEPRECATION")
     @Composable
-    private fun BTF1(focusRequester: FocusRequester, useNativeTextInput: Boolean) =
+    private fun BTF(focusRequester: FocusRequester, useNativeTextInput: Boolean) =
         BasicTextField(
             textValue,
             onValueChange = {},

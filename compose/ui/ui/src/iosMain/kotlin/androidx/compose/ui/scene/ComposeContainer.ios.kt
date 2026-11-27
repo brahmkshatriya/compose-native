@@ -19,7 +19,6 @@ package androidx.compose.ui.scene
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.LocalSystemTheme
 import androidx.compose.ui.asComposeSystemTheme
 import androidx.compose.ui.graphics.SkiaCanvasHolder
@@ -27,7 +26,6 @@ import androidx.compose.ui.navigationevent.IosBackNavigationEventInput
 import androidx.compose.ui.platform.DefaultArchitectureComponentsOwner
 import androidx.compose.ui.platform.FrameChoreographer
 import androidx.compose.ui.platform.IosUiMediaScope
-import androidx.compose.ui.platform.MotionDurationScaleImpl
 import androidx.compose.ui.platform.PlatformContext
 import androidx.compose.ui.platform.WindowContext
 import androidx.compose.ui.platform.registerSkikoComposeImplementation
@@ -47,7 +45,6 @@ import androidx.compose.ui.window.ComposeContainerLifecycleDelegate
 import androidx.compose.ui.window.ComposeContainerView
 import androidx.compose.ui.window.FocusedViewsList
 import androidx.compose.ui.window.MetalView
-import androidx.compose.ui.window.SceneActiveStateListener
 import androidx.compose.ui.window.onDraw
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelStore
@@ -56,7 +53,6 @@ import androidx.savedstate.SavedState
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.cinterop.COpaquePointer
-import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.IntVar
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.nativeHeap
@@ -66,7 +62,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
-import platform.UIKit.UIAccessibilityIsReduceMotionEnabled
 import platform.UIKit.UIApplication
 import platform.UIKit.UIResponder
 import platform.UIKit.UIUserInterfaceLayoutDirection
@@ -100,7 +95,6 @@ internal class ComposeContainer(
 
     private var mediator: ComposeSceneMediator? = null
 
-    @OptIn(InternalComposeUiApi::class)
     var rootForTestListener: PlatformContext.RootForTestListener? = null
         set(value) {
             field = value
@@ -127,8 +121,6 @@ internal class ComposeContainer(
             navigationEventInput?.layoutDirection = value
         }
 
-    private val motionDurationScale = MotionDurationScaleImpl()
-    private var activeStateListener: SceneActiveStateListener? = null
     private var sceneJob: Job =
         Job().also {
             // The initial state of the container considered as "not active".
@@ -149,6 +141,8 @@ internal class ComposeContainer(
         FontScaleProvider(view = view, onFontScaleChanged = ::onFontScaleChanged)
     val hasInteropViews: Boolean
         get() = mediator?.hasInteropViews ?: false
+
+    private var measureAndLayoutMutex = 0
 
     private val focusedViewsList = FocusedViewsList()
 
@@ -189,7 +183,19 @@ internal class ComposeContainer(
             layersHolder?.layersViewController?.hasInvalidations == true
     }
 
-    private fun onLayoutSubviews() {
+    // Used to filter out unexpected layout calls that may happen outside the standard layout-draw
+    // paths.
+    private fun skippingMeasureAndLayout(actions: () -> Unit = {}) {
+        measureAndLayoutMutex++
+        actions()
+        measureAndLayoutMutex--
+    }
+
+    private fun onLayoutSubviews(frameChoreographer: FrameChoreographer) {
+        if (measureAndLayoutMutex > 0) {
+            frameChoreographer.requestFrame()
+            return
+        }
         windowContext.updateWindowContainerSize()
 
         mediator?.updateKeyboardOverlap()
@@ -209,7 +215,6 @@ internal class ComposeContainer(
 
         layersHolder?.layersViewController?.containerWindow = view.window
         windowContext.window = window
-        updateMotionSpeed()
         lifecycleDelegate.windowScene = window.windowScene
     }
 
@@ -240,8 +245,7 @@ internal class ComposeContainer(
         val frameChoreographer =
             view.window?.let(FrameChoreographer::choreographerForWindow) ?: error("No window found")
 
-        val containerCoroutineContext =
-            frameChoreographer.coroutineContext + motionDurationScale + sceneJob
+        val containerCoroutineContext = frameChoreographer.coroutineContext + sceneJob
 
         val layoutInvalidationHandler =
             LayoutInvalidationHandler(containerCoroutineContext) {
@@ -329,7 +333,7 @@ internal class ComposeContainer(
                     view.updateMetalView(
                         metalView = metalView,
                         onDidMoveToWindow = ::onDidMoveToWindow,
-                        onLayoutSubviews = ::onLayoutSubviews,
+                        onLayoutSubviews = { onLayoutSubviews(frameChoreographer) },
                         onTraitCollectionDidChange = ::onTraitCollectionDidChange,
                         onDraw = { needsSynchronousDraw ->
                             metalView.redrawer.onDraw(
@@ -342,19 +346,13 @@ internal class ComposeContainer(
                     )
                     view.embedSubview(mediator.overlayView)
 
+                    layoutInvalidationHandler.invalidateLayoutIfNeeded()
                     mediator.setContent(
                         parentCompositionContext = view.findParentCompositionContext()
                     ) {
                         ProvideContainerCompositionLocals(content)
                     }
                 }
-
-        activeStateListener =
-            SceneActiveStateListener(getScene = ::windowScene) { isSceneActive ->
-                if (isSceneActive) {
-                    updateMotionSpeed()
-                }
-            }
 
         mediaScope.startObserving()
 
@@ -382,9 +380,6 @@ internal class ComposeContainer(
         navigationEventInput = null
 
         mediator = null
-
-        activeStateListener?.dispose()
-        activeStateListener = null
 
         layersHolder = null
 
@@ -443,7 +438,11 @@ internal class ComposeContainer(
                     )
 
                 layer.rootForTestListener = rootForTestListener
-                layersHolder.getLayersViewController().attach(layer)
+                skippingMeasureAndLayout {
+                    // Attaching a new layer may cause unwanted layout call for ComposeContainerView
+                    // beside the default layout and rendering path.
+                    layersHolder.getLayersViewController().attach(layer)
+                }
                 onFontScaleChanged(fontScaleProvider.fontScale)
                 onFocusConditionsChanged()
 
@@ -494,17 +493,6 @@ internal class ComposeContainer(
                 mediaScope.systemTheme.asComposeSystemTheme(),
             content = content,
         )
-
-    private fun updateMotionSpeed() {
-        motionDurationScale.scaleFactor =
-            if (UIAccessibilityIsReduceMotionEnabled()) {
-                // 0f would cause motion to finish in the next frame callback.
-                // See [MotionDurationScale.scaleFactor] for more details.
-                0f
-            } else {
-                1f / (view.window?.layer?.speed?.takeIf { it > 0 } ?: 1f)
-            }
-    }
 
     private val windowScene: UIWindowScene?
         get() = view.window?.windowScene
@@ -591,10 +579,8 @@ internal class LayoutInvalidationHandler(
     }
 }
 
-@OptIn(ExperimentalForeignApi::class)
 private val compositionContextAssociationKey: COpaquePointer = nativeHeap.alloc<IntVar>().ptr
 
-@OptIn(ExperimentalForeignApi::class)
 internal var UIResponder.attachedCompositionContext: CompositionContext?
     get() = objc_getAssociatedObject(this, compositionContextAssociationKey) as? CompositionContext
     set(value) {

@@ -43,6 +43,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import kotlin.test.Test
 
+@OptIn(ExperimentalTestApi::class)
 class TextFieldInputTest {
     @Test
     fun textField_backspace_withDiacritic() = runTextFieldInputTest {
@@ -85,6 +86,7 @@ class TextFieldInputTest {
     }
 }
 
+@OptIn(ExperimentalTestApi::class)
 private abstract class TextFieldInputTestScope(val uiTest: ComposeUiTest) :
     SemanticsNodeInteractionsProvider by uiTest {
     protected val textFieldTag = "TextField"
@@ -106,6 +108,7 @@ private abstract class TextFieldInputTestScope(val uiTest: ComposeUiTest) :
     }
 }
 
+@OptIn(ExperimentalTestApi::class)
 private class TextField1InputTestScope(uiTest: ComposeUiTest) : TextFieldInputTestScope(uiTest) {
     private var textFieldValue by mutableStateOf(TextFieldValue())
 
@@ -115,7 +118,6 @@ private class TextField1InputTestScope(uiTest: ComposeUiTest) : TextFieldInputTe
     @Composable
     override fun TextField() {
         val focusRequester = FocusRequester()
-        @Suppress("DEPRECATION")
         BasicTextField(
             value = textFieldValue,
             onValueChange = { textFieldValue = it },
@@ -128,6 +130,7 @@ private class TextField1InputTestScope(uiTest: ComposeUiTest) : TextFieldInputTe
     override fun toString() = "TextField1"
 }
 
+@OptIn(ExperimentalTestApi::class)
 private class TextField2InputTestScope(uiTest: ComposeUiTest) : TextFieldInputTestScope(uiTest) {
     private var textFieldState by mutableStateOf(TextFieldState())
 

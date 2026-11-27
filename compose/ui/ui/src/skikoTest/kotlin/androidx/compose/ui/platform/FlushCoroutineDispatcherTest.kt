@@ -22,7 +22,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -81,7 +80,7 @@ class FlushCoroutineDispatcherTest {
     fun delayed_tasks_are_cancelled() = runTest {
         val coroutineScope = CoroutineScope(Dispatchers.Unconfined)
         val dispatcher = FlushCoroutineDispatcher(coroutineScope)
-        val job = launch(dispatcher) { delay(1.days) }
+        val job = launch(dispatcher) { delay(Long.MAX_VALUE / 2) }
         assertTrue(dispatcher.hasDelayedTasks())
         job.cancel()
         assertFalse(
@@ -114,7 +113,7 @@ class FlushCoroutineDispatcherTest {
             val job =
                 launch(dispatcher) {
                     ignoreDispatch = true
-                    delay(1.days)
+                    delay(Long.MAX_VALUE / 2)
                 }
             // Needed because the cancellation notification is itself dispatched with the coroutine
             // dispatcher. Additionally, it's needed *before* the assertion, because if the

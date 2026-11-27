@@ -52,6 +52,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -82,7 +83,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastFold
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.time.times
 import org.junit.Assert.assertEquals
 import org.junit.Ignore
 import org.junit.Rule
@@ -445,7 +445,6 @@ class ScrollbarTest {
     }
 
     // TODO(demin): enable after we resolve b/171889442
-    @Suppress("unused")
     @Ignore("Enable after we resolve b/171889442")
     @Theory
     fun `vertical mouseScroll over horizontal scrollbar `(scrollbarProvider: ScrollbarProvider) {
@@ -486,7 +485,7 @@ class ScrollbarTest {
         }
 
         // Give enough time for many scrolls
-        rule.mainClock.advanceTimeBy(millisecondsUntilScrollsByPressOnTrack(10))
+        rule.mainClock.advanceTimeBy(timeUntilScrollsByPressOnTrack(10))
         rule.onNodeWithTag("scrollbar").performMouseInput { release() }
 
         // Expect only one page-down scroll
@@ -507,7 +506,7 @@ class ScrollbarTest {
         }
 
         // 3 page-down scrolls are required to reach the end.
-        rule.mainClock.advanceTimeBy(millisecondsUntilScrollsByPressOnTrack(3))
+        rule.mainClock.advanceTimeBy(timeUntilScrollsByPressOnTrack(3))
         rule.onNodeWithTag("scrollbar").performMouseInput { release() }
 
         rule.onNodeWithTag("box0").assertTopPositionInRootIsEqualTo(-300.dp)
@@ -528,7 +527,7 @@ class ScrollbarTest {
         }
 
         // 2 page-down scrolls are required to reach 50-75 thumb range
-        rule.mainClock.advanceTimeBy(millisecondsUntilScrollsByPressOnTrack(2))
+        rule.mainClock.advanceTimeBy(timeUntilScrollsByPressOnTrack(2))
         rule.onNodeWithTag("scrollbar").performMouseInput { release() }
 
         rule.onNodeWithTag("box0").assertTopPositionInRootIsEqualTo(-200.dp)
@@ -549,7 +548,7 @@ class ScrollbarTest {
         }
 
         // Give enough time for many scrolls
-        rule.mainClock.advanceTimeBy(millisecondsUntilScrollsByPressOnTrack(10))
+        rule.mainClock.advanceTimeBy(timeUntilScrollsByPressOnTrack(10))
         rule.onNodeWithTag("scrollbar").performMouseInput { release() }
 
         // Expect only one scroll to have occurred
@@ -573,7 +572,7 @@ class ScrollbarTest {
         }
 
         // 3 scrolls are needed to move to the bottom
-        rule.mainClock.advanceTimeBy(millisecondsUntilScrollsByPressOnTrack(3))
+        rule.mainClock.advanceTimeBy(timeUntilScrollsByPressOnTrack(3))
         rule.onNodeWithTag("scrollbar").performMouseInput { release() }
 
         rule.onNodeWithTag("box0").assertTopPositionInRootIsEqualTo(-300.dp)
@@ -806,7 +805,7 @@ class ScrollbarTest {
     }
 
     @Test
-    @OptIn(ExperimentalFoundationApi::class)
+    @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
     fun `basic text field with vertical scrolling test`() {
         val scrollState = TextFieldScrollState(Orientation.Vertical)
         rule.setContent {
@@ -895,7 +894,7 @@ class ScrollbarTest {
     }
 
     @Test
-    @OptIn(ExperimentalFoundationApi::class)
+    @OptIn(ExperimentalFoundationApi::class, ExperimentalComposeUiApi::class)
     fun `basic text field with horizontal scrolling test`() {
         val scrollState = TextFieldScrollState(Orientation.Horizontal)
         rule.setContent {
@@ -1066,6 +1065,7 @@ class ScrollbarTest {
         )
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     @Test
     fun `basic lazy list with sticky headers test`() {
         rule.setContent {
@@ -1542,11 +1542,9 @@ private val PointerEvent.totalScrollDelta
  * Returns the time needed for the given number of page-scrolls when pressing the scrollbar track
  * outside the thumb.
  */
-private fun millisecondsUntilScrollsByPressOnTrack(count: Int) =
+private fun timeUntilScrollsByPressOnTrack(count: Int) =
     when {
         count <= 1 -> 0L
-        count == 2 -> DelayBeforeSecondScrollOnTrackPress.inWholeMilliseconds
-        else ->
-            (DelayBeforeSecondScrollOnTrackPress + (count - 2) * DelayBetweenScrollsOnTrackPress)
-                .inWholeMilliseconds
+        count == 2 -> DelayBeforeSecondScrollOnTrackPress
+        else -> DelayBeforeSecondScrollOnTrackPress + (count - 2) * DelayBetweenScrollsOnTrackPress
     }

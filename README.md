@@ -28,7 +28,7 @@ Apply the plugin alongside the official Compose plugin:
 plugins {
     kotlin("multiplatform") version "2.3.20"
     id("org.jetbrains.kotlin.plugin.compose") version "2.3.20"
-    id("org.jetbrains.compose") version "1.13.0-alpha01"
+    id("org.jetbrains.compose") version "1.13.0-rc01"
     id("dev.brahmkshatriya.compose") version "VERSION"
 }
 ```
@@ -52,9 +52,9 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation("org.jetbrains.compose.ui:ui:1.13.0-alpha01")
-            implementation("org.jetbrains.compose.foundation:foundation:1.13.0-alpha01")
-            implementation("org.jetbrains.compose.material3:material3:1.13.0-alpha01")
+            implementation("org.jetbrains.compose.ui:ui:1.13.0-rc01")
+            implementation("org.jetbrains.compose.foundation:foundation:1.13.0-rc01")
+            implementation("org.jetbrains.compose.material3:material3:1.13.0-rc01")
         }
 
         desktopNativeMain.dependencies {
@@ -90,7 +90,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation("org.jetbrains.compose.ui:ui:1.13.0-alpha01")
+            implementation("org.jetbrains.compose.ui:ui:1.13.0-rc01")
             implementation("dev.brahmkshatriya.compose.foundation:foundation:$composeNativeVersion")
             implementation("dev.brahmkshatriya.compose.material3:material3:$composeNativeVersion")
         }
@@ -282,7 +282,7 @@ notarization.
 | Component | Version |
 | --- | --- |
 | Compose Native Gradle plugin / fork artifacts | Maven Central badge above |
-| JetBrains Compose plugin | `1.13.0-alpha01` |
+| JetBrains Compose plugin | `1.13.0-rc01` |
 | Kotlin / Compose compiler | `2.3.20` |
 | Native Skiko | `0.156.1` |
 | Official Skiko (JVM, iOS, JS, Wasm) | `0.156.1` |

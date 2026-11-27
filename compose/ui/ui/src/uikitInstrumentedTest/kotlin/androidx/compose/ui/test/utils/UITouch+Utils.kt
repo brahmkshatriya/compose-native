@@ -59,13 +59,11 @@ internal fun UIWindow.mouseDown(location: DpOffset): UITouch {
 }
 
 @OptIn(ExperimentalForeignApi::class)
-@Suppress("UnusedReceiverParameter")
 internal fun UIWindow.getTouchesEvent(): UIEvent {
     return UITouch.getTouchesEvent()
 }
 
 @OptIn(ExperimentalForeignApi::class)
-@Suppress("UnusedReceiverParameter")
 internal fun UIWindow.resetTouches() {
     UITouch.endAllTouches()
 }

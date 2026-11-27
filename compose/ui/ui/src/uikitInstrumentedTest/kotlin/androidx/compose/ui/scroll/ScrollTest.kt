@@ -801,6 +801,7 @@ internal class ScrollTest {
             assertEquals(DpOffset(x = 0.dp, y = 250.dp), contentOffset())
         }
 
+    @OptIn(ExperimentalForeignApi::class)
     @Test
     fun testUIKitScrollViewInsideComposeScrollView_DragFromCompose() =
         runUIKitInstrumentedTestWithInterop { overlay ->
@@ -987,10 +988,10 @@ internal class ScrollTest {
             }
 
             touchDown(DpOffset(screenSize.center.x, 250.dp))
-                .dragBy(dx = -(50 + CUPERTINO_TOUCH_SLOP).dp, dy = (-50).dp)
-                .dragBy(dx = 20.dp, dy = (-50).dp)
-                .dragBy(dx = (-70).dp, dy = 50.dp)
-                .dragBy(dy = (-150).dp)
+                .dragBy(dx = -(50 + CUPERTINO_TOUCH_SLOP).dp, dy = -50.dp)
+                .dragBy(dx = 20.dp, dy = -50.dp)
+                .dragBy(dx = -70.dp, dy = 50.dp)
+                .dragBy(dy = -150.dp)
                 .also { delay(500) }
                 .up()
 
@@ -1033,7 +1034,7 @@ internal class ScrollTest {
             findNodeWithTag("UIKit.UIScrollView")
                 .touchDown()
                 .dragBy(dx = -(5 + CUPERTINO_TOUCH_SLOP).dp, dy = -(50 + CUPERTINO_TOUCH_SLOP).dp)
-                .dragBy(dx = (-50).dp, dy = (-50).dp)
+                .dragBy(dx = -50.dp, dy = -50.dp)
                 .also { delay(500) }
                 .up()
 
@@ -1119,7 +1120,7 @@ internal class ScrollTest {
 
         // Perform 3 separate scroll gestures — each touchDown consumes slop independently
         val scrollAmount = 150.dp
-        repeat(3) {
+        repeat(3) { attempt ->
             touchDown(screenSize.center)
                 .dragBy(dy = -scrollAmount, duration = 100.milliseconds)
                 .wait(100.milliseconds)
@@ -1222,8 +1223,8 @@ private fun VerticalUIKitScrollInsideVerticalScroll(
                 val scrollView = UIScrollView()
                 scrollView.setContentSize(CGSizeMake(scrollViewSize.width.value.toDouble(), 1000.0))
                 scrollView.backgroundColor = UIColor.lightGrayColor
-                uiKitScrollViewRectInWindow { scrollView.dpRectInWindow() }
-                uiKitContentOffset { scrollView.contentOffset.toDpOffset() }
+                uiKitScrollViewRectInWindow({ scrollView.dpRectInWindow() })
+                uiKitContentOffset({ scrollView.contentOffset.toDpOffset() })
                 scrollView
             },
             update = { scrollView ->
@@ -1267,8 +1268,8 @@ private fun VerticalScrollWithHorizontalUIKitScroll(
                     CGSizeMake(uiKitScrollViewContentWidth, uiKitScrollViewHeight.value.toDouble())
                 )
                 scrollView.backgroundColor = UIColor.lightGrayColor
-                uiKitScrollViewRectInWindow { scrollView.dpRectInWindow() }
-                uiKitContentOffset { scrollView.contentOffset.toDpOffset() }
+                uiKitScrollViewRectInWindow({ scrollView.dpRectInWindow() })
+                uiKitContentOffset({ scrollView.contentOffset.toDpOffset() })
                 scrollView
             },
             modifier =
@@ -1305,7 +1306,7 @@ private fun HorizontalScrollContent(
                                 else Modifier
                             )
                     ) {
-                        Text("Text $it")
+                        Text("Text ${it}")
                     }
                 }
             }

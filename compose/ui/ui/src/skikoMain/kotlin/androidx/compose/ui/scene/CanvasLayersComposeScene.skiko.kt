@@ -53,7 +53,6 @@ import androidx.compose.ui.util.fastForEachReversed
 import androidx.compose.ui.util.fastLastOrNull
 import androidx.compose.ui.viewinterop.InteropView
 import androidx.compose.ui.window.getDialogScrimBlendMode
-import kotlin.collections.mutableListOf
 import kotlin.coroutines.CoroutineContext
 import kotlin.math.max
 
@@ -99,31 +98,6 @@ fun CanvasLayersComposeScene(
         invalidateLayout = invalidateLayout,
         invalidateDraw = invalidateDraw,
     )
-
-/**
- * Creates an overlay above all regular layers. Overlays are stacked in creation order, with the
- * newest on top. Intended for UI normally drawn by the platform above application content, such as
- * text selection toolbars.
- *
- * The layer is initially non-focusable and passes pointer input outside
- * [ComposeSceneLayer.boundsInWindow] to underlying layers. Set these bounds to the content's
- * bounds.
- */
-internal fun ComposeScene.createOverlayLayer(
-    density: Density,
-    layoutDirection: LayoutDirection,
-): ComposeSceneLayer {
-    check(this is CanvasLayersComposeSceneImpl) {
-        "Overlay layers are only supported by CanvasLayersComposeScene"
-    }
-    return createLayer(
-        density = density,
-        layoutDirection = layoutDirection,
-        focusable = false,
-        consumePointerInputOutside = false,
-        isOverlay = true,
-    )
-}
 
 private class CanvasLayersComposeSceneImpl(
     frameRecomposer: FrameRecomposer,
@@ -189,7 +163,7 @@ private class CanvasLayersComposeSceneImpl(
     override val rootDragAndDropNode = ComposeSceneDragAndDropNode { focusedOwner.dragAndDropOwner }
 
     private val layers = mutableListOf<AttachedComposeSceneLayer>()
-    private val _layersCopyCache = CopiedList(layers)
+    private val _layersCopyCache = CopiedList { it.addAll(layers) }
     private val _ownersCopyCache = CopiedList {
         it.add(mainOwner)
         layers.fastForEach { layer -> it.add(layer.owner) }
@@ -515,28 +489,12 @@ private class CanvasLayersComposeSceneImpl(
         focusable: Boolean,
         consumePointerInputOutside: Boolean,
     ): ComposeSceneLayer =
-        createLayer(
-            density = density,
-            layoutDirection = layoutDirection,
-            focusable = focusable,
-            consumePointerInputOutside = consumePointerInputOutside,
-            isOverlay = false,
-        )
-
-    fun createLayer(
-        density: Density,
-        layoutDirection: LayoutDirection,
-        focusable: Boolean,
-        consumePointerInputOutside: Boolean,
-        isOverlay: Boolean,
-    ): ComposeSceneLayer =
         AttachedComposeSceneLayer(
             coroutineContext = frameRecomposer.compositionContext.effectCoroutineContext,
             density = density,
             layoutDirection = layoutDirection,
             focusable = focusable,
             consumePointerInputOutside = consumePointerInputOutside,
-            isOverlay = isOverlay,
         )
 
     private fun onOwnerAppended(owner: RootNodeOwner) {
@@ -555,12 +513,7 @@ private class CanvasLayersComposeSceneImpl(
 
     private fun attachLayer(layer: AttachedComposeSceneLayer) {
         check(!isClosed) { "attachLayer called after ComposeScene is closed" }
-        if (layer.isOverlay) {
-            layers.add(layer)
-        } else {
-            val index = layers.indexOfLast { !it.isOverlay } + 1
-            layers.add(index, layer)
-        }
+        layers.add(layer)
 
         if (layer.focusable) {
             requestFocus(layer)
@@ -606,7 +559,6 @@ private class CanvasLayersComposeSceneImpl(
         layoutDirection: LayoutDirection,
         focusable: Boolean,
         override var consumePointerInputOutside: Boolean,
-        val isOverlay: Boolean = false,
     ) : ComposeSceneLayer {
         val owner =
             RootNodeOwner(
@@ -758,14 +710,11 @@ private val PointerInputEvent.isGestureInProgress
 
 private fun PointerInputEvent.isMouseOrSingleTouch() = button != null || pointers.size == 1
 
-internal class CopiedList<T>(private val populate: (MutableList<T>) -> Unit) {
-    constructor(origin: List<T>) : this(populate = { it.addAll(origin) })
-
-    private val reusableList = mutableListOf<T>()
-
+internal class CopiedList<T>(private val populate: (MutableList<T>) -> Unit) :
+    MutableList<T> by mutableListOf() {
     inline fun withCopy(block: (List<T>) -> Unit) {
         // In case of recursive calls, allocate new list
-        val copy = if (reusableList.isEmpty()) reusableList else mutableListOf()
+        val copy = if (isEmpty()) this else mutableListOf()
         populate(copy)
         try {
             block(copy)

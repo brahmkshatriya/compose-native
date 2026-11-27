@@ -18,7 +18,6 @@ package androidx.compose.ui
 
 import kotlin.test.Test
 import kotlin.test.assertTrue
-import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
@@ -31,7 +30,7 @@ class CurrentTimeTest {
         var time = currentTimeMillis()
 
         suspend fun realDelay() {
-            withContext(Dispatchers.Default) { delay(2.milliseconds) }
+            withContext(Dispatchers.Default) { delay(2) }
         }
 
         repeat(100) {

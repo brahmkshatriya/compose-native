@@ -24,6 +24,10 @@ import org.gradle.api.Project
 import org.gradle.api.component.SoftwareComponentFactory
 import org.gradle.api.tasks.testing.AbstractTestTask
 import org.gradle.kotlin.dsl.withType
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsPlugin
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
+import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 
 class JetBrainsAndroidXRootImplPlugin
 @Inject
@@ -38,6 +42,20 @@ constructor(val componentFactory: SoftwareComponentFactory) : Plugin<Project> {
             subproject.configureComposeNativeSkikoResolution()
             subproject.configureDesktopNativeComposeSourceBuiltResolution()
             subproject.configureMacosSourceBuiltCompatibilityResolution()
+
+            // TODO https://youtrack.jetbrains.com/issue/CMP-11110 Remove compromised root
+            // certificate workaround after updating to Kotlin 2.5.0
+            // Override the node version to fix https://youtrack.jetbrains.com/issue/CMP-11011
+            // Workaround is from https://youtrack.jetbrains.com/issue/KT-90732
+            subproject.plugins.withType<NodeJsPlugin>().configureEach {
+                subproject.extensions.getByType(NodeJsEnvSpec::class.java).version.set("26.12.1")
+            }
+            subproject.plugins.withType<WasmNodeJsPlugin>().configureEach {
+                subproject.extensions
+                    .getByType(WasmNodeJsEnvSpec::class.java)
+                    .version
+                    .set("26.12.1")
+            }
 
             subproject.tasks.configureEach {
                 if (it.name == "kotlinStoreYarnLock") it.enabled = false

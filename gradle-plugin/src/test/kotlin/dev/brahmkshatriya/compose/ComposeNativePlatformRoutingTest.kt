@@ -99,7 +99,7 @@ class ComposeNativePlatformRoutingTest {
             )
         )
         assertEquals(
-            "org.jetbrains.compose.ui:ui:1.13.0-beta01",
+            "org.jetbrains.compose.ui:ui:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.ui",
                 "ui",
@@ -107,7 +107,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.ui:ui:1.13.0-beta01",
+            "org.jetbrains.compose.ui:ui:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.ui",
                 "ui",
@@ -116,7 +116,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.ui:ui-uikit:1.13.0-beta01",
+            "org.jetbrains.compose.ui:ui-uikit:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.ui",
                 "ui-uikit",
@@ -157,7 +157,7 @@ class ComposeNativePlatformRoutingTest {
             )
         )
         assertEquals(
-            "org.jetbrains.compose.animation:animation:1.13.0-beta01",
+            "org.jetbrains.compose.animation:animation:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.animation",
                 "animation",
@@ -165,7 +165,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime:1.13.0-beta01",
+            "androidx.compose.runtime:runtime:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime",
@@ -173,7 +173,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime:1.13.0-beta01",
+            "androidx.compose.runtime:runtime:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime",
@@ -189,7 +189,7 @@ class ComposeNativePlatformRoutingTest {
             )
         )
         assertEquals(
-            "org.jetbrains.compose.animation:animation-wasm-js:1.13.0-beta01",
+            "org.jetbrains.compose.animation:animation-wasm-js:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.animation",
                 "animation-wasm-js",
@@ -198,7 +198,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "androidx.compose.runtime:runtime-wasm-js:1.13.0-beta01",
+            "androidx.compose.runtime:runtime-wasm-js:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.runtime",
                 "runtime-wasm-js",
@@ -207,7 +207,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.ui:ui-android:1.13.0-beta01",
+            "org.jetbrains.compose.ui:ui-android:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.ui",
                 "ui-android",
@@ -215,7 +215,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.animation:animation:1.13.0-beta01",
+            "org.jetbrains.compose.animation:animation:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.animation",
                 "animation",
@@ -223,7 +223,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.foundation:foundation-layout:1.13.0-beta01",
+            "org.jetbrains.compose.foundation:foundation-layout:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.foundation",
                 "foundation-layout",
@@ -231,7 +231,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.material:material-ripple:1.13.0-beta01",
+            "org.jetbrains.compose.material:material-ripple:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.material",
                 "material-ripple",
@@ -239,7 +239,7 @@ class ComposeNativePlatformRoutingTest {
             ),
         )
         assertEquals(
-            "org.jetbrains.compose.material3:material3-ripple:1.13.0-beta01",
+            "org.jetbrains.compose.material3:material3-ripple:1.13.0-rc01",
             nonDesktopForkSupportCoordinateOrNull(
                 "dev.brahmkshatriya.compose.material3",
                 "material3-ripple",

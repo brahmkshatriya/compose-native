@@ -460,7 +460,7 @@ class MouseMoveTest {
     @Test
     fun `only one rect can be hovered in random moves in random rects`() =
         ImageComposeScene(width = 8, height = 8).use { scene ->
-            @Suppress("unused") fun log(obj: Any) = Unit
+            fun log(obj: Any) = Unit
             //        fun log(obj: Any) = println(obj)
 
             operator fun Constraints.contains(position: IntOffset) =
@@ -497,7 +497,7 @@ class MouseMoveTest {
                             .size(rect.width.dp, rect.height.dp)
                             .onPointerEvent(PointerEventType.Enter) {
                                 log("Enter $rect")
-                                require(enteredIndex == -1) {
+                                check(enteredIndex == -1) {
                                     "There is already entered rect: $enteredIndex"
                                 }
                                 enteredIndex = index
@@ -505,7 +505,7 @@ class MouseMoveTest {
                             .onPointerEvent(PointerEventType.Exit) {
                                 log("Exit $rect")
                                 // Because
-                                require(enteredIndex == index) {
+                                check(enteredIndex == index) {
                                     "Exit fired on different rect $index. Entered rect: $enteredIndex"
                                 }
                                 enteredIndex = -1
@@ -537,13 +537,11 @@ class MouseMoveTest {
                         -1
                     }
 
-                assertEquals(
-                    expectedEnteredIndex,
-                    enteredIndex,
+                check(expectedEnteredIndex == enteredIndex) {
                     "Entered rect is different.\n" +
                         "Expected: $expectedEnteredIndex\n" +
-                        "Actual: $enteredIndex",
-                )
+                        "Actual: $enteredIndex"
+                }
             }
         }
 

@@ -24,6 +24,7 @@ import androidx.compose.ui.ProvideSystemTheme
 import androidx.compose.ui.pollSystemTheme
 import androidx.compose.ui.systemThemePollingJob
 import androidx.compose.ui.systemThemeSubscriberCount
+import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.v2.runComposeUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,6 +32,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class SystemThemeTest {
+    @OptIn(ExperimentalTestApi::class)
     @Test
     fun testSystemThemePollingState() {
         val prevValue = ComposeUiFlags.pollSystemTheme
