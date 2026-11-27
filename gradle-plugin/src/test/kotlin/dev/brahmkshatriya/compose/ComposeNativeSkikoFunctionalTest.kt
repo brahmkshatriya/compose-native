@@ -4,6 +4,8 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertContains
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import org.gradle.testkit.runner.GradleRunner
 
 class ComposeNativeSkikoFunctionalTest {
@@ -15,6 +17,87 @@ class ComposeNativeSkikoFunctionalTest {
     @Test
     fun respectsExplicitDesktopNativeVersionWithoutChangingUpstreamPlatforms() {
         verifySkikoSelection(explicitVersion = "0.153.1")
+    }
+
+    @Test
+    fun requestsTheSkikoVersionPublishedByComposeInTheGeneratedSourceSet() {
+        val projectDir = createTempDirectory("compose-native-shared-skiko-test").toFile()
+        projectDir.deleteOnExit()
+        val repository = projectDir.resolve("repository")
+        val uiGroup = "${OFFICIAL_COMPOSE_GROUP_PREFIX}ui"
+        val composeVersion = requireNotNull(ComposeNativeUpstreamVersions.compose("ui"))
+        val skikoVersion = "0.199.2"
+        val variants =
+            mapOf(
+                "metadata" to
+                    mapOf(
+                        "org.gradle.usage" to "kotlin-metadata",
+                        "org.jetbrains.kotlin.platform.type" to "common",
+                    ),
+                "wasm" to
+                    mapOf(
+                        "org.gradle.usage" to "kotlin-runtime",
+                        "org.jetbrains.kotlin.platform.type" to "wasm",
+                        "org.jetbrains.kotlin.wasm.target" to "js",
+                    ),
+            )
+        publishModule(repository, OFFICIAL_SKIKO_GROUP, "skiko", skikoVersion, variants)
+        publishModule(repository, uiGroup, "ui-graphics", composeVersion, variants)
+        publishModule(repository, uiGroup, "ui-skiko", composeVersion, variants) {
+            """{"group":"$OFFICIAL_SKIKO_GROUP","module":"skiko","version":{"requires":"$skikoVersion"}}"""
+        }
+        projectDir
+            .resolve("gradle.properties")
+            .writeText("kotlin.stdlib.default.dependency=false\n")
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement { repositories { mavenCentral(); gradlePluginPortal() } }
+                dependencyResolutionManagement { repositories { maven { url = uri("repository") } } }
+                rootProject.name = "shared-skiko-test"
+                """
+                    .trimIndent()
+            )
+        projectDir
+            .resolve("build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    kotlin("multiplatform") version "$functionalTestKotlinVersion"
+                    id("org.jetbrains.kotlin.plugin.compose")
+                    id("org.jetbrains.compose")
+                    id("dev.brahmkshatriya.compose")
+                }
+                kotlin {
+                    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+                    wasmJs()
+                }
+                """
+                    .trimIndent()
+            )
+
+        val result =
+            GradleRunner.create()
+                .withProjectDir(projectDir)
+                .withPluginClasspath()
+                .withArguments(
+                    "checkWasmJsMainComposeLibrariesCompatibility",
+                    "dependencies",
+                    "--configuration",
+                    "wasmJsRuntimeClasspath",
+                    "--no-configuration-cache",
+                )
+                .build()
+
+        val expectedSkiko = "$OFFICIAL_SKIKO_GROUP:skiko:$skikoVersion"
+        assertTrue(
+            result.output.lineSequence().any {
+                it == "+--- $expectedSkiko" || it == "\\--- $expectedSkiko"
+            },
+            result.output,
+        )
+        assertFalse(result.output.contains("Skiko dependencies' versions are incompatible."))
     }
 
     private fun verifySkikoSelection(explicitVersion: String?) {

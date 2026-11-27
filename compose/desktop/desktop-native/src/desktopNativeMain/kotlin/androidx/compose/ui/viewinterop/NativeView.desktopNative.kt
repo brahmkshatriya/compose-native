@@ -50,6 +50,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.window.nativeRenderApi
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.toKString
 import nativedesktop.kgl_layer_create
@@ -75,8 +76,7 @@ internal val LocalNativeViewInvalidationDispatcher =
  */
 @ExperimentalComposeUiApi
 @Composable
-fun isOpenGlInteropAvailable(): Boolean =
-    LocalGpuInteropRegistry.current?.isAvailable == true
+fun isOpenGlInteropAvailable(): Boolean = LocalGpuInteropRegistry.current?.isAvailable == true
 
 internal class GpuInteropRegistry(private val layer: SkiaLayer) {
     val rendererDescription: String =
@@ -87,7 +87,7 @@ internal class GpuInteropRegistry(private val layer: SkiaLayer) {
     fun create(view: InteropView): GpuNativeViewLayer = GpuNativeViewLayer(this, view)
 
     internal val isAvailable: Boolean
-        get() = layer.renderApi == GraphicsApi.OPENGL
+        get() = layer.nativeRenderApi == GraphicsApi.OPENGL
 
     internal fun withExternalGl(block: () -> Boolean): Boolean {
         if (!isAvailable) return false

@@ -23,7 +23,10 @@ class DesktopNativeLibrariesTest {
         val mac = desktopNativeLibraryDirectories("macosArm64", "linuxX64", environment::get)
         assertTrue("/host/sdl" in host)
         assertTrue("/host/other" in host)
+        assertTrue("/usr/lib/x86_64-linux-gnu" in host)
         assertEquals(listOf("/cross/sdl", "/cross/system"), arm.take(2))
+        assertTrue("/usr/lib/aarch64-linux-gnu" in arm)
+        assertFalse("/usr/lib/x86_64-linux-gnu" in arm)
         assertFalse(arm.any { it.startsWith("/host") || it == "/usr/lib" })
         assertFalse(
             mac.any {

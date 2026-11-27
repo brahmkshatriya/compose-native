@@ -99,7 +99,8 @@ echo "Resolving native Skiko from Maven Central"
     -Pcompose.platforms=LinuxX64,Js \
     "-Pjetbrains.publication.groupPrefix=$group_prefix" \
     "-PcomposeNativeVersion=$version" \
-    :mpp:publishComposeForkRootsToMavenLocal
+    :mpp:publishComposeForkRootsToMavenLocal \
+    :compose:ui:ui-test:publishKotlinMultiplatformPublicationToMavenLocal
 
 # Compile the shared API and commonized headers separately from native binary publication.
 # The second native target is used only for metadata; no second platform KLIB is published.

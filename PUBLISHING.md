@@ -204,7 +204,10 @@ The tag workflow `.github/workflows/publish-compose-native-central.yml` builds a
 - aggregate KMP root metadata
 - the Gradle plugin implementation and plugin marker
 
-It signs and uploads the complete set as one automatically released Central Portal deployment.
+The `ui-test` root is compiled with Linux, Windows, and JS targets. JS keeps common KMP metadata
+available, and the aggregate root links only the platform binaries included in the release.
+
+The workflow signs and uploads the complete set as one automatically released Central Portal deployment.
 The workflow finishes after Central accepts the upload; validation and automatic publication then
 continue asynchronously in Central Portal. The platform build jobs do not receive publication
 secrets; only the final merge job can sign and upload the bundle.

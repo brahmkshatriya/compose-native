@@ -5,32 +5,42 @@ import org.gradle.api.Project
 import org.gradle.api.tasks.Exec
 import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
 
-internal fun Project.configureDesktopNativeExecutable(executableSpec: DesktopNativeExecutable) {
-    executableSpec.requiredEntryPoint()
+internal fun Project.selectDesktopNativeExecutableTargets(): List<DesktopNativeTarget> {
+    val targetNames = kotlinNativeTargets().names
+    return DESKTOP_NATIVE_TARGETS.filter { it.sourceSetPrefix in targetNames }
+        .ifEmpty {
+            createDesktopNativeTargets()
+            DESKTOP_NATIVE_TARGETS
+        }
+}
+
+internal fun Project.configureDesktopNativeExecutable(
+    executableSpec: DesktopNativeExecutable,
+    executableTargets: List<DesktopNativeTarget>,
+) {
     val targets = kotlinNativeTargets()
     val hostTarget =
         hostDesktopNativeTarget(System.getProperty("os.name"), System.getProperty("os.arch"))
-    DESKTOP_NATIVE_TARGET_SOURCE_SETS.forEach { (nativeTarget, conventionalTargetName) ->
-        val isHostTarget = nativeTarget == hostTarget?.nativeTarget
-        val target = targets.getByName(conventionalTargetName)
-        target.configureNativeExecutable(
-            executableSpec = executableSpec,
-            buildTypes =
-                if (isHostTarget) {
-                    setOf(NativeBuildType.DEBUG, NativeBuildType.RELEASE)
-                } else {
-                    setOf(NativeBuildType.RELEASE)
-                },
-        )
+    executableTargets.forEach { target ->
+        targets
+            .getByName(target.sourceSetPrefix)
+            .configureNativeExecutable(
+                executableSpec = executableSpec,
+                buildTypes =
+                    if (target.konanName == hostTarget?.nativeTarget) {
+                        setOf(NativeBuildType.DEBUG, NativeBuildType.RELEASE)
+                    } else {
+                        setOf(NativeBuildType.RELEASE)
+                    },
+            )
     }
     if (hostTarget != null) configureHostDesktopRunAliases(hostTarget)
 }
 
 internal fun Project.createDesktopNativeTargets() {
-    pluginManager.withPlugin(KOTLIN_MULTIPLATFORM_PLUGIN_ID) {
-        DESKTOP_NATIVE_TARGET_SOURCE_SETS.values.forEach { targetName ->
-            createKotlinNativeTarget(targetName)
-        }
+    val targets = kotlinNativeTargets()
+    DESKTOP_NATIVE_TARGET_SOURCE_SETS.values.forEach { targetName ->
+        if (targetName !in targets.names) createKotlinNativeTarget(targetName)
     }
 }
 

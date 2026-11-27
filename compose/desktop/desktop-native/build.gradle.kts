@@ -762,6 +762,9 @@ kotlin {
     }
 
     if (composePlatformEnabled(ComposePlatforms.MingwX64)) mingwX64 {
+        binaries.all {
+            linkerOpts("-L${windowsSdlX64Root.get().dir("lib").asFile.absolutePath}")
+        }
         compilerOptions {
             freeCompilerArgs.add("-Xbackend-threads=0")
             freeCompilerArgs.addAll(

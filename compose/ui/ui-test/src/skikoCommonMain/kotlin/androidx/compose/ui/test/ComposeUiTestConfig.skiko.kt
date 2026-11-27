@@ -106,3 +106,23 @@ public actual constructor(
             }
     }
 }
+
+private val defaultComposeUiTestConfig = ComposeUiTestConfig()
+
+private fun ComposeUiTestConfig.checkFieldIsNotSet(
+    name: String,
+    getFieldValue: ComposeUiTestConfig.() -> Any,
+) {
+    if (getFieldValue() != defaultComposeUiTestConfig.getFieldValue()) {
+        println("ComposeUiTestConfig: $name is not supported in Compose Multiplatform")
+    }
+}
+
+internal fun ComposeUiTestConfig.checkSupported() {
+    // TODO https://youtrack.jetbrains.com/issue/CMP-10712
+    checkFieldIsNotSet("inputMode", ComposeUiTestConfig::inputMode)
+    // TODO https://youtrack.jetbrains.com/issue/CMP-10711
+    checkFieldIsNotSet("failurePolicy", ComposeUiTestConfig::failurePolicy)
+    // TODO https://youtrack.jetbrains.com/issue/CMP-10797
+    checkFieldIsNotSet("boundsAssertionTolerance", ComposeUiTestConfig::boundsAssertionTolerance)
+}

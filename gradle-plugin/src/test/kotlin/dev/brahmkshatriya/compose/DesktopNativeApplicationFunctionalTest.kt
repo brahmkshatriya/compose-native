@@ -72,12 +72,11 @@ class DesktopNativeApplicationFunctionalTest {
                     kotlinForVerification.javaClass.methods
                         .first { it.name == "getTargets" && it.parameterCount == 0 }
                         .invoke(kotlinForVerification) as org.gradle.api.NamedDomainObjectContainer<Any>
-                val linuxX64TargetForVerification = targetsForVerification.getByName("linuxX64")
-
                 tasks.register("linuxX64AggregateResources")
 
                 tasks.register("verifyDesktopNativeExecutables") {
                     doLast {
+                        val linuxX64TargetForVerification = targetsForVerification.getByName("linuxX64")
                         val sourceSets =
                             (project.extensions.getByName("kotlin") as KotlinSourceSetContainer)
                                 .sourceSets
@@ -310,6 +309,72 @@ class DesktopNativeApplicationFunctionalTest {
                 "compileKotlinLinuxArm64",
                 "--no-configuration-cache",
             )
+            .build()
+    }
+
+    @Test
+    fun registersExecutablesOnlyForDeclaredDesktopTargets() {
+        val projectDir = createTempDirectory("compose-native-selected-targets-test").toFile()
+        projectDir.deleteOnExit()
+        projectDir
+            .resolve("settings.gradle.kts")
+            .writeText(
+                """
+                pluginManagement {
+                    repositories {
+                        mavenCentral()
+                        gradlePluginPortal()
+                    }
+                }
+                dependencyResolutionManagement { repositories { mavenCentral() } }
+                rootProject.name = "compose-native-selected-targets-test"
+                """
+                    .trimIndent()
+            )
+        projectDir
+            .resolve("build.gradle.kts")
+            .writeText(
+                """
+                plugins {
+                    id("dev.brahmkshatriya.compose")
+                    kotlin("multiplatform") version "$functionalTestKotlinVersion"
+                }
+
+                kotlin {
+                    desktopNative {
+                        binaries.executable { entryPoint = "com.example.main" }
+                        linuxX64()
+                        mingwX64()
+                    }
+                    jvm()
+                }
+
+                tasks.register("verifySelectedExecutables") {
+                    doLast {
+                        val desktopTargets = setOf("linuxX64", "mingwX64")
+                        check(kotlin.targets.names - setOf("metadata", "jvm") == desktopTargets) {
+                            kotlin.targets.names
+                        }
+                        val releaseLinks = project.tasks.names.filter {
+                            it.startsWith("linkReleaseExecutable")
+                        }.toSet()
+                        val expectedLinks = setOf(
+                            "linkReleaseExecutableLinuxX64",
+                            "linkReleaseExecutableMingwX64",
+                        )
+                        check(releaseLinks == expectedLinks) { releaseLinks }
+                        check("prepareLinuxX64ReleaseAppDir" in project.tasks.names)
+                        check("prepareWindowsX64ReleaseDistribution" in project.tasks.names)
+                    }
+                }
+                """
+                    .trimIndent()
+            )
+
+        GradleRunner.create()
+            .withProjectDir(projectDir)
+            .withPluginClasspath()
+            .withArguments("verifySelectedExecutables", "--no-configuration-cache")
             .build()
     }
 

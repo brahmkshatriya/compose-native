@@ -36,6 +36,11 @@ uses the compatible version for this plugin release (currently `0.156.1`).
   source sets are excluded. Its `src/skiaTargetMain/kotlin` directory has one IDE owner. Use it for
   shared Skia APIs; APIs defined only by platform actuals, such as `ClipEntry.withPlainText`,
   belong in their platform source sets.
+- For a custom source set that calls Compose's Skia conversion APIs, declare
+  `org.jetbrains.compose.ui:ui-skiko` and `org.jetbrains.compose.ui:ui-graphics` on that source set
+  using the project's Compose version. Declare `org.jetbrains.skiko:skiko` there when the code
+  uses Skia types directly. These requests let Kotlin resolve shared upstream metadata and let
+  Compose Native select the fork's binaries for desktop-native targets.
 - IDE imports unpack published shared Kotlin fragments and nested CInterop metadata into separate
   KLIB dependencies. This exposes native window APIs and SDL bindings in `desktopNativeMain` while
   retaining each library’s published target information. OS-specific fragments stay in their target
@@ -54,6 +59,8 @@ Applications can configure one entry point for all declared targets:
 ```kotlin
 kotlin {
     desktopNative {
+        linuxX64()
+        mingwX64()
         binaries.executable {
             entryPoint = "com.example.main"
         }
@@ -61,7 +68,8 @@ kotlin {
 }
 ```
 
-Library modules use plain `desktopNative()`, which creates no executable binaries.
+If no desktop targets are declared, `binaries.executable` adds all five. Library modules can use
+plain `desktopNative()` to declare all five without creating executable binaries.
 
 Compose dependency substitution is driven by explicitly versioned fork dependencies. Skiko alignment
 is scoped to desktop Native root and platform modules; it excludes AWT, iOS, and Web artifacts.

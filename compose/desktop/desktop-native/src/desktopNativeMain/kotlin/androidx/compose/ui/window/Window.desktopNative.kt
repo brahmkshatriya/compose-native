@@ -139,7 +139,6 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import nativedesktop.*
 import org.jetbrains.skiko.SkiaLayer
-import org.jetbrains.skiko.SkikoRenderDelegate
 import sdl3.SDL_BUTTON_LEFT
 import sdl3.SDL_BUTTON_MIDDLE
 import sdl3.SDL_BUTTON_RIGHT
@@ -246,7 +245,9 @@ enum class WindowPlacement {
     /** The window can be moved and resized by the user and does not occupy all available space. */
     Floating,
 
-    /** The window occupies the available work area, excluding system UI such as taskbars or docks. */
+    /**
+     * The window occupies the available work area, excluding system UI such as taskbars or docks.
+     */
     Maximized,
 
     /** The window occupies the full display, including the area normally reserved for system UI. */
@@ -516,8 +517,7 @@ interface WindowScope {
 }
 
 /** Receiver scope used by [Window]. */
-@Stable
-interface FrameWindowScope : WindowScope
+@Stable interface FrameWindowScope : WindowScope
 
 /**
  * Native desktop window created by Compose.
@@ -732,25 +732,25 @@ private val LocalNativeWindowHost = staticCompositionLocalOf<NativeWindowHost?> 
  * composition it was created. Use [modalityType] to change that behavior.
  *
  * @param onCloseRequest called when the user requests that the dialog close. The callback must
- * decide what should happen, for example by removing [DialogWindow] from the composition.
+ *   decide what should happen, for example by removing [DialogWindow] from the composition.
  * @param state the state object used to control and observe the dialog position and size
  * @param visible whether the dialog is visible. Hiding a dialog preserves its state and native
- * resources until it leaves the composition.
+ *   resources until it leaves the composition.
  * @param title the title shown by the platform window decoration
  * @param icon the window icon on platforms that support per-window icons
  * @param undecorated whether the platform decoration is disabled
  * @param transparent whether the dialog background may be transparent. Transparent dialogs must be
- * undecorated.
+ *   undecorated.
  * @param resizable whether the user can resize the dialog. The application can still resize it by
- * changing [state].
+ *   changing [state].
  * @param enabled whether the dialog reacts to input events
  * @param focusable whether the dialog can receive input focus
  * @param alwaysOnTop whether the dialog stays above other application windows and dialogs
  * @param modalityType which application windows are blocked while this dialog is visible
  * @param onPreviewKeyEvent invoked before a key event is dispatched to [content]. Return true to
- * consume the event.
+ *   consume the event.
  * @param onKeyEvent invoked after a key event was offered to [content], if it was not consumed.
- * Return true to consume the event.
+ *   Return true to consume the event.
  * @param content composable content of the dialog
  */
 @Composable
@@ -821,24 +821,24 @@ private val LocalNativeApplication =
  * @param onCloseRequest called when the user requests that the window close
  * @param state the state object used to control and observe the window
  * @param visible whether the window is visible. Hiding a window preserves its state and native
- * resources until it leaves the composition.
+ *   resources until it leaves the composition.
  * @param title the title shown by the platform window decoration
  * @param icon the window icon on platforms that support per-window icons
  * @param undecorated whether the platform decoration is disabled
  * @param transparent whether the window background may be transparent. Transparent windows must be
- * undecorated.
+ *   undecorated.
  * @param resizable whether the user can resize the window. The application can still resize it by
- * changing [state].
+ *   changing [state].
  * @param enabled whether the window reacts to input events
  * @param focusable whether the window can receive input focus
  * @param alwaysOnTop whether the window stays above other application windows and dialogs
  * @param titleBar how the title bar is presented. [TitleBar.Native] keeps the system title bar.
- * [TitleBar.Auto] and [TitleBar.Custom] extend the client area into the title bar and draw caption
- * controls in Compose. This has no effect on undecorated windows.
+ *   [TitleBar.Auto] and [TitleBar.Custom] extend the client area into the title bar and draw
+ *   caption controls in Compose. This has no effect on undecorated windows.
  * @param onPreviewKeyEvent invoked before a key event is dispatched to [content]. Return true to
- * consume the event.
+ *   consume the event.
  * @param onKeyEvent invoked after a key event was offered to [content], if it was not consumed.
- * Return true to consume the event.
+ *   Return true to consume the event.
  * @param content composable content of the window
  */
 @Composable
@@ -1197,17 +1197,17 @@ private val NativeWindowSelfTestContent: @Composable ApplicationScope.() -> Unit
  * @param icon the window icon on platforms that support per-window icons
  * @param undecorated whether the platform decoration is disabled
  * @param transparent whether the window background may be transparent. Transparent windows must be
- * undecorated.
+ *   undecorated.
  * @param resizable whether the user can resize the window. The application can still resize it by
- * changing [state].
+ *   changing [state].
  * @param enabled whether the window reacts to input events
  * @param focusable whether the window can receive input focus
  * @param alwaysOnTop whether the window stays above other application windows and dialogs
  * @param titleBar how the title bar is presented. See [TitleBar].
  * @param onPreviewKeyEvent invoked before a key event is dispatched to [content]. Return true to
- * consume the event.
+ *   consume the event.
  * @param onKeyEvent invoked after a key event was offered to [content], if it was not consumed.
- * Return true to consume the event.
+ *   Return true to consume the event.
  * @param exitProcessOnExit whether the process is terminated after the application exits
  * @param content composable content of the window
  */
@@ -1297,6 +1297,9 @@ internal class NativeApplication : ApplicationScope {
     private val running = atomic(true)
     private val frameRequested = atomic(true)
     private val applicationLayoutDirty = atomic(true)
+    var frameDispatchInProgress = false
+        private set
+
     private val performanceFrequency = SDL_GetPerformanceFrequency().coerceAtLeast(1uL)
     private val performanceStart = SDL_GetPerformanceCounter()
     private val configuredMaximumFramesPerSecond =
@@ -1347,7 +1350,10 @@ internal class NativeApplication : ApplicationScope {
     // The next SDL frame on the host thread would then crash with the
     // SnapshotStateObserver multi-threaded access exception.
     val frameRecomposer =
-        FrameRecomposer(coroutineContext = NativeApplicationDispatcher(this), invalidate = ::requestFrame)
+        FrameRecomposer(
+            coroutineContext = NativeApplicationDispatcher(this),
+            invalidate = ::requestFrame,
+        )
 
     init {
         NativeDesktopIntegration.updateSystemTheme(systemDarkThemeState.value)
@@ -1416,7 +1422,12 @@ internal class NativeApplication : ApplicationScope {
     }
 
     fun performFrame(counter: ULong = SDL_GetPerformanceCounter()) {
-        frameRecomposer.performFrame(currentTimeNanos(counter))
+        frameDispatchInProgress = true
+        try {
+            frameRecomposer.performFrame(currentTimeNanos(counter))
+        } finally {
+            frameDispatchInProgress = false
+        }
     }
 
     fun dispatchToHost(block: () -> Unit) {
@@ -1445,7 +1456,8 @@ internal class NativeApplication : ApplicationScope {
         return result.value as T
     }
 
-    fun hasPendingTestWork(host: NativeWindowHost): Boolean = host.hasPendingHostWork
+    fun hasPendingTestWork(host: NativeWindowHost): Boolean =
+        frameRecomposer.hasPendingWork() || applicationLayoutDirty.value || host.hasPendingHostWork
 
     private fun hasHostTasks(): Boolean = synchronized(hostTaskLock) { hostTasks.isNotEmpty() }
 
@@ -2118,6 +2130,13 @@ internal class NativeWindowHost(
                     scene?.hasInvalidations() == true)
 
     fun renderExposedFrame(widthHint: Int, heightHint: Int) {
+        // Native window updates in a SideEffect can synchronously dispatch expose
+        // events. Defer their forced repaint until pending composition is applied.
+        if (application.frameDispatchInProgress) {
+            forcedRenderScheduled.value = true
+            requestRender()
+            return
+        }
         if (!exposedFrameRendering.compareAndSet(expect = false, update = true)) return
         try {
             val window = sdlWindow ?: return
@@ -2211,7 +2230,7 @@ internal class NativeWindowHost(
             if (initialSize.height.isSpecified)
                 initialSize.height.value.roundToInt().coerceAtLeast(1)
             else 600
-        val nativeLayer = SkiaLayer()
+        val nativeLayer = createNativeSkiaLayer()
         configureNativeGraphics(nativeLayer)
         val needsTransparentClientFrame =
             IsLinuxHost && titleBar !is TitleBar.Native && !undecorated
@@ -2325,7 +2344,7 @@ internal class NativeWindowHost(
         nativePlatformViewHost?.onRenderLayerAttached()
         skiaLayer = nativeLayer
         gpuInteropRegistry =
-            if (nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
+            if (nativeLayer.nativeRenderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
                 GpuInteropRegistry(nativeLayer)
             } else {
                 null
@@ -2388,7 +2407,7 @@ internal class NativeWindowHost(
                 )
             )
         }
-        nativeLayer.renderDelegate = SkikoRenderDelegate { canvas, _, _, _ ->
+        nativeLayer.setNativeRenderDelegate { canvas, _, _, _ ->
             canvas.clear(if (hasTransparentWindowBuffer) 0x00000000 else 0xFF000000.toInt())
             val currentMetrics = metrics
             if (currentMetrics == null || currentMetrics.frameInsetsPx == ClientFrameInsets.Zero) {
@@ -3241,7 +3260,10 @@ internal class NativeWindowHost(
             if (composeNeedsDraw) {
                 if (hadPendingLayout) nativeScene.measureAndLayout()
                 val rendered = nativeLayer.nativeRender(force = true)
-                if (!rendered && nativeLayer.renderApi == org.jetbrains.skiko.GraphicsApi.METAL) {
+                if (
+                    !rendered &&
+                        nativeLayer.nativeRenderApi == org.jetbrains.skiko.GraphicsApi.METAL
+                ) {
                     forcedRenderScheduled.value = true
                     renderScheduled.value = true
                     application.requestFrame()
@@ -3586,7 +3608,7 @@ internal class NativeWindowHost(
         if (closed) return
         closed = true
         val nativeLayer = skiaLayer
-        if (nativeLayer?.renderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
+        if (nativeLayer?.nativeRenderApi == org.jetbrains.skiko.GraphicsApi.OPENGL) {
             nativeLayer.withNativeOpenGlContext { scene?.close() }
         } else {
             scene?.close()

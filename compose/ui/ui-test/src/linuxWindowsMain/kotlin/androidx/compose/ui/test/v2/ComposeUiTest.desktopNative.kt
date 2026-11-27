@@ -17,7 +17,9 @@
 package androidx.compose.ui.test.v2
 
 import androidx.compose.ui.test.ComposeUiTest
+import androidx.compose.ui.test.ComposeUiTestConfig
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.checkSupported
 import androidx.compose.ui.test.runDesktopNativeComposeUiTest
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.Duration
@@ -30,3 +32,21 @@ actual fun runComposeUiTest(
     testTimeout: Duration,
     block: suspend ComposeUiTest.() -> Unit,
 ): TestResult = runDesktopNativeComposeUiTest(effectContext, runTestContext, testTimeout, block)
+
+@ExperimentalTestApi
+actual fun runComposeUiTest(
+    config: ComposeUiTestConfig,
+    block: suspend ComposeUiTest.() -> Unit,
+): TestResult {
+    config.checkSupported()
+    return runDesktopNativeComposeUiTest(
+        effectContext = config.effectContext,
+        runTestContext = config.runTestContext,
+        testTimeout = config.testTimeout,
+        block = block,
+    )
+}
+
+@OptIn(ExperimentalTestApi::class)
+actual fun runComposeUiTest(block: suspend ComposeUiTest.() -> Unit): TestResult =
+    runComposeUiTest(ComposeUiTestConfig(), block)

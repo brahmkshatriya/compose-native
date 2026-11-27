@@ -142,6 +142,16 @@ jobs:
               :mpp:publishComposeForkRootsToMavenLocal \
               -x checkKotlinGradlePluginConfigurationErrors \
               --rerun-tasks
+            # UI testing depends on the desktop SDL interops. Compile its root with the
+            # Linux and Windows targets we publish, plus JS to retain common KMP metadata.
+            "$gradle_command" \
+              --no-daemon --no-configuration-cache --configure-on-demand \
+              "-Dmaven.repo.local=$repository" \
+              -Pcompose.platforms=LinuxX64,LinuxArm64,MingwX64,Js \
+              -Pcompose.native.publish.sharedMetadata=true \
+              -Pjetbrains.publication.groupPrefix=dev.brahmkshatriya \
+              "-PcomposeNativeVersion=$RELEASE_VERSION" \
+              :compose:ui:ui-test:publishKotlinMultiplatformPublicationToMavenLocal
             # Shared desktop API metadata is compiled independently of platform binaries.
             # Only header commonization needs a second native target here.
             shared_metadata="$RUNNER_TEMP/compose-native-shared-metadata"
@@ -683,6 +693,17 @@ jobs:
           for module in ui-linuxx64 ui-linuxarm64 ui-mingwx64 ui-macosx64 ui-macosarm64; do
             test -d "$group_root/compose/ui/$module/$RELEASE_VERSION"
           done
+          ui_test_root="$group_root/compose/ui/ui-test/$RELEASE_VERSION/ui-test-$RELEASE_VERSION.module"
+          jq -e 'any(.variants[]; .name == "metadataApiElements" and (.files | length) > 0)' "$ui_test_root" >/dev/null
+          jq -e --arg version "$RELEASE_VERSION" '
+            any(.variants[] | select(.name == "metadataApiElements") | .dependencies[];
+              .group == "dev.brahmkshatriya.compose.desktop" and
+              .module == "desktop-native" and .version.requires == $version)
+          ' "$ui_test_root" >/dev/null
+          for module in ui-test-linuxx64 ui-test-linuxarm64 ui-test-mingwx64; do
+            jq -e --arg module "$module" 'any(.variants[]; ."available-at".module == $module)' "$ui_test_root" >/dev/null
+            test -s "$group_root/compose/ui/$module/$RELEASE_VERSION/$module-$RELEASE_VERSION.klib"
+          done
           for family in foundation material3; do
             root="$group_root/compose/$family/$family/$RELEASE_VERSION/$family-$RELEASE_VERSION.module"
             for target in ios_arm64 ios_simulator_arm64; do
@@ -931,6 +952,7 @@ jobs:
               .variants[] |
               select((.name // "") | startswith("metadata")) |
               (.dependencies[]?, .dependencyConstraints[]?) |
+              select(.group != "dev.brahmkshatriya.compose.desktop" or .module != "desktop-native") |
               select(
                 (.group // "") | startswith("dev.brahmkshatriya.compose.") or
                   startswith("dev.brahmkshatriya.androidx.")

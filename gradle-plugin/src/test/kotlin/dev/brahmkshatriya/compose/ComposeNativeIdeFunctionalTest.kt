@@ -254,7 +254,9 @@ class ComposeNativeIdeFunctionalTest {
     }
 
     @Test
-    fun keepsOfficialUiSkikoInCustomIntermediateMetadata() {
+    fun compilesSkiaGraphicsInCustomSourceSetsAcrossJvmAndLinux() {
+        val composeVersion = requireNotNull(ComposeNativeUpstreamVersions.compose("ui"))
+        val runtimeVersion = requireNotNull(ComposeNativeUpstreamVersions.androidx("compose"))
         val projectDir = createTempDirectory("compose-native-skia-metadata-test").toFile()
         projectDir.deleteOnExit()
         projectDir
@@ -303,26 +305,28 @@ class ComposeNativeIdeFunctionalTest {
                 """
                 plugins {
                     kotlin("multiplatform") version "$functionalTestKotlinVersion"
+                    id("org.jetbrains.kotlin.plugin.compose") version "$functionalTestKotlinVersion"
                     id("dev.brahmkshatriya.compose")
                 }
 
                 kotlin {
                     jvm()
-                    desktopNative()
+                    desktopNative { linuxX64() }
 
                     sourceSets {
                         val skiaMain by creating {
                             dependsOn(commonMain.get())
                             dependencies {
-                                implementation("androidx.compose.runtime:runtime:1.13.0-alpha03")
-                                implementation("org.jetbrains.compose.ui:ui:1.13.0-alpha01")
-                                implementation("org.jetbrains.skiko:skiko:0.152.0-alpha02")
+                                implementation("androidx.compose.runtime:runtime:$runtimeVersion")
+                                implementation("org.jetbrains.compose.ui:ui-graphics:$composeVersion")
+                                implementation("org.jetbrains.compose.ui:ui-skiko:$composeVersion")
+                                implementation("org.jetbrains.skiko:skiko")
                             }
                         }
                         jvmMain.get().dependsOn(skiaMain)
                         linuxX64Main.get().dependsOn(skiaMain)
                         desktopNativeMain.dependencies {
-                            implementation("dev.brahmkshatriya.compose.ui:ui:1.13.0-alpha05")
+                            implementation("dev.brahmkshatriya.compose.ui:ui:1.13.0-beta01")
                         }
                     }
                 }
@@ -334,7 +338,12 @@ class ComposeNativeIdeFunctionalTest {
             GradleRunner.create()
                 .withProjectDir(projectDir)
                 .withPluginClasspath()
-                .withArguments("compileSkiaMainKotlinMetadata", "--no-configuration-cache")
+                .withArguments(
+                    "compileSkiaMainKotlinMetadata",
+                    "compileKotlinJvm",
+                    "compileKotlinLinuxX64",
+                    "--no-configuration-cache",
+                )
                 .build()
 
         assertContains(result.output, "BUILD SUCCESSFUL")

@@ -7,7 +7,30 @@ import org.gradle.api.Project
 import org.gradle.api.Task
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.artifacts.component.ModuleComponentSelector
+import org.gradle.api.artifacts.result.ResolvedDependencyResult
+import org.gradle.api.attributes.Usage
+import org.gradle.api.provider.Provider
 import org.gradle.api.publish.tasks.GenerateModuleMetadata
+
+internal fun Project.upstreamSkikoDependency(uiSkiko: String): Provider<String> {
+    val metadata = configurations.detachedConfiguration(dependencies.create(uiSkiko))
+    metadata.attributes.attribute(
+        Usage.USAGE_ATTRIBUTE,
+        objects.named(Usage::class.java, "kotlin-metadata"),
+    )
+
+    return metadata.incoming.resolutionResult.rootComponent.map { root ->
+        val ui = root.dependencies.singleOrNull() as? ResolvedDependencyResult
+        // Read the version Compose was built against, before platform-specific substitution.
+        val skiko =
+            ui?.let { it.selected.getDependenciesForVariant(it.resolvedVariant) }
+                ?.mapNotNull { it.requested as? ModuleComponentSelector }
+                ?.firstOrNull { it.group == OFFICIAL_SKIKO_GROUP && it.module == SKIKO_MODULE }
+        skiko?.version?.takeIf(String::isNotBlank)?.let {
+            "$OFFICIAL_SKIKO_GROUP:$SKIKO_MODULE:$it"
+        }
+    }
+}
 
 internal fun Project.configureSkikoResolution() {
     dependencies.components.all { details ->

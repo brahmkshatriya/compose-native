@@ -149,7 +149,7 @@ internal fun Project.composeNativeIdeMetadataConfiguration(sourceSetName: String
     val modules = FORK_DESKTOP_IDE_MODULES
     val desktopDependencyNotations =
         if (sourceSetName == DESKTOP_NATIVE_MAIN_SOURCE_SET) {
-            officialComposeVersion()
+            (officialComposeVersion() ?: ComposeNativeUpstreamVersions.compose("components"))
                 ?.let { officialVersion ->
                     listOf(
                         "$OFFICIAL_COMPOSE_COMPONENTS_GROUP:$COMPONENTS_RESOURCES_MODULE:$officialVersion"
@@ -280,8 +280,8 @@ private const val COMMON_MAIN_DEPENDENCY_CONFIGURATION_PREFIX = "commonMain"
 internal const val COMPOSE_FORK_GROUP_PREFIX = "dev.brahmkshatriya.compose."
 private const val OFFICIAL_COMPOSE_UI_GROUP = "org.jetbrains.compose.ui"
 private const val OFFICIAL_COMPOSE_RUNTIME_GROUP = "org.jetbrains.compose.runtime"
-private const val OFFICIAL_COMPOSE_COMPONENTS_GROUP = "org.jetbrains.compose.components"
-private const val COMPONENTS_RESOURCES_MODULE = "components-resources"
+internal const val OFFICIAL_COMPOSE_COMPONENTS_GROUP = "org.jetbrains.compose.components"
+internal const val COMPONENTS_RESOURCES_MODULE = "components-resources"
 private val PLATFORM_ONLY_COMPOSE_UI_MODULES = setOf("ui-uikit", "ui-skiko")
 private val REDIRECTED_IDE_RUNTIME_MODULES =
     setOf("runtime", "runtime-annotation", "runtime-retain", "runtime-saveable")
@@ -295,7 +295,6 @@ private val FORK_DESKTOP_IDE_MODULES =
         "material" to "material",
         "material" to "material-ripple",
         "material3" to "material3",
-        "components" to "components-resources",
         "desktop" to "desktop-native",
         "runtime" to "runtime",
         "runtime" to "runtime-saveable",

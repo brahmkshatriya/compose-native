@@ -26,6 +26,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.InternalTestApi
 import androidx.compose.ui.test.MainTestClock
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.checkSupported
 import androidx.compose.ui.unit.Density
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -198,24 +199,4 @@ fun runInternalSkikoComposeUiTest(
             useStandardTestDispatcherForComposition = true,
         )
         .runTest(block)
-}
-
-private val defaultComposeUiTestConfig = ComposeUiTestConfig()
-
-private fun ComposeUiTestConfig.checkFieldIsNotSet(
-    name: String,
-    getFieldValue: ComposeUiTestConfig.() -> Any,
-) {
-    if (getFieldValue() != defaultComposeUiTestConfig.getFieldValue()) {
-        println("ComposeUiTestConfig: $name is not supported in Compose Multiplatform")
-    }
-}
-
-private fun ComposeUiTestConfig.checkSupported() {
-    // TODO https://youtrack.jetbrains.com/issue/CMP-10712
-    checkFieldIsNotSet("inputMode", ComposeUiTestConfig::inputMode)
-    // TODO https://youtrack.jetbrains.com/issue/CMP-10711
-    checkFieldIsNotSet("failurePolicy", ComposeUiTestConfig::failurePolicy)
-    // TODO https://youtrack.jetbrains.com/issue/CMP-10797
-    checkFieldIsNotSet("boundsAssertionTolerance", ComposeUiTestConfig::boundsAssertionTolerance)
 }

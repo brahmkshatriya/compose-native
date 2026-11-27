@@ -3,29 +3,18 @@ package dev.brahmkshatriya.compose
 import org.gradle.api.Action
 import org.gradle.api.Project
 
-/** Adds all desktop-native Kotlin targets when invoked from the `kotlin` block. */
+/**
+ * Configures desktop-native executables and provides a shortcut to declare every desktop target.
+ */
 open class DesktopNativeTargets internal constructor(private val project: Project) {
-    private var targetsCreated = false
-    private val binaryContainer = DesktopNativeBinaries { executable ->
-        createTargets()
-        project.configureDesktopNativeExecutable(executable)
-    }
-    val binaries: DesktopNativeBinaries
-        get() = binaryContainer
+    val binaries = DesktopNativeBinaries()
 
     operator fun invoke() {
-        createTargets()
-    }
-
-    private fun createTargets() {
-        if (targetsCreated) return
-        targetsCreated = true
         project.createDesktopNativeTargets()
     }
 }
 
-open class DesktopNativeBinaries
-internal constructor(private val onExecutable: (DesktopNativeExecutable) -> Unit) {
+open class DesktopNativeBinaries internal constructor() {
     internal var executable: DesktopNativeExecutable? = null
         private set
 
@@ -33,8 +22,10 @@ internal constructor(private val onExecutable: (DesktopNativeExecutable) -> Unit
         check(executable == null) {
             "desktopNative.binaries.executable may only be configured once"
         }
-        executable = DesktopNativeExecutable().also(action::execute)
-        onExecutable(executable!!)
+        val spec = DesktopNativeExecutable()
+        action.execute(spec)
+        spec.requiredEntryPoint()
+        executable = spec
     }
 }
 

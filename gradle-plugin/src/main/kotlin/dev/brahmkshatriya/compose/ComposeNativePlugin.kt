@@ -6,9 +6,8 @@ import org.gradle.api.Project
 class ComposeNativePlugin : Plugin<Project> {
     override fun apply(project: Project) {
         project.enableRequestedCoordinateMatching()
-        project.addDesktopNativeSourceSets()
         project.createComposeNativeApplicationExtension()
-        project.configureDesktopNativeApplicationConventions()
+        project.configureDesktopNative()
         project.configureMetadataCompilation()
         project.configureIdeDependencyResolution()
         project.configureSkikoResolution()

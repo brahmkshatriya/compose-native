@@ -122,6 +122,17 @@ private fun Project.configureLocalDependencySubstitutions(
                 val selector = details.requested as? ModuleComponentSelector ?: return@all
                 if (
                     isMetadataTransformation &&
+                        usesNativeOverlay &&
+                        selector.module == COMPONENTS_RESOURCES_MODULE &&
+                        (selector.group == OFFICIAL_COMPOSE_COMPONENTS_GROUP ||
+                            selector.group == "${FORK_COMPOSE_GROUP_PREFIX}components")
+                ) {
+                    // The fork publishes platform resources. Shared metadata is published upstream.
+                    selector.officialMetadataCoordinateOrNull()?.let { details.useTarget(it) }
+                    return@all
+                }
+                if (
+                    isMetadataTransformation &&
                         !usesNativeOverlay &&
                         selector.isRedirectedCommonMetadataModule()
                 ) {

@@ -17,6 +17,7 @@ import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Classpath
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
+import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 
 @CacheableTask
 abstract class RepairCommonMetadataLibraries : DefaultTask() {
@@ -127,27 +128,18 @@ internal fun Project.configureMetadataCompilation() {
                     repair.outputDirectory.get().asFileTree.matching { it.include("*.klib") }
                 }
             )
-        val representativeNativeLibraries = objects.fileCollection()
-
         configurations.configureEach { configuration ->
-            when (configuration.name) {
-                COMMON_MAIN_RESOLVABLE_METADATA_CONFIGURATION -> {
-                    val officialMetadata =
-                        configuration.incoming
-                            .artifactView { view ->
-                                view.componentFilter { component ->
-                                    component is ModuleComponentIdentifier &&
-                                        isOfficialCommonIdeDependency(
-                                            component.group,
-                                            component.module,
-                                        )
-                                }
+            if (configuration.name == COMMON_MAIN_RESOLVABLE_METADATA_CONFIGURATION) {
+                val officialMetadata =
+                    configuration.incoming
+                        .artifactView { view ->
+                            view.componentFilter { component ->
+                                component is ModuleComponentIdentifier &&
+                                    isOfficialCommonIdeDependency(component.group, component.module)
                             }
-                            .files
-                    repairCommonMetadata.configure { it.metadataArtifacts.from(officialMetadata) }
-                }
-                REPRESENTATIVE_NATIVE_COMPILE_LIBRARIES_CONFIGURATION ->
-                    representativeNativeLibraries.from(configuration)
+                        }
+                        .files
+                repairCommonMetadata.configure { it.metadataArtifacts.from(officialMetadata) }
             }
         }
 
@@ -163,8 +155,14 @@ internal fun Project.configureMetadataCompilation() {
                     )
                 }
             }
-            if (task.name == COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK) {
-                val cinteropLibraries = representativeNativeLibraries.filter(::isCInteropKlib)
+            if (
+                task.name == COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK &&
+                    task is KotlinNativeCompile
+            ) {
+                val target = DESKTOP_NATIVE_TARGET_SOURCE_SETS[task.target] ?: return@configureEach
+                val cinteropLibraries =
+                    files(configurations.named("${target}CompileKlibraries"))
+                        .filter(::isCInteropKlib)
                 task.addNativeLibraryCompilerArguments(
                     this,
                     cinteropLibraries,
@@ -274,7 +272,5 @@ private fun sanitizeFileName(value: String): String =
 private const val METADATA_KOTLIN_MULTIPLATFORM_PLUGIN_ID = "org.jetbrains.kotlin.multiplatform"
 private const val COMMON_MAIN_RESOLVABLE_METADATA_CONFIGURATION =
     "commonMainResolvableDependenciesMetadata"
-private const val REPRESENTATIVE_NATIVE_COMPILE_LIBRARIES_CONFIGURATION =
-    "linuxX64CompileKlibraries"
 private const val COMPILE_DESKTOP_NATIVE_MAIN_METADATA_TASK =
     "compileDesktopNativeMainKotlinMetadata"

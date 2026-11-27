@@ -308,10 +308,17 @@ def fork_group_for_official_compose_dependency(
     return f"{group_prefix}.compose.{group.removeprefix(compose_prefix)}"
 
 
-def upstream_group_for_fork_dependency(group: str, group_prefix: str) -> str | None:
+def upstream_group_for_fork_dependency(
+    group: str, module: str | None, group_prefix: str
+) -> str | None:
     compose_prefix = f"{group_prefix}.compose."
     navigation3_prefix = f"{group_prefix}.androidx.navigation3"
     androidx_prefix = f"{group_prefix}.androidx."
+    if (
+        group == f"{group_prefix}{DESKTOP_NATIVE_GROUP_SUFFIX}"
+        and module == DESKTOP_NATIVE_MODULE
+    ):
+        return None
     if group.startswith(compose_prefix):
         return f"org.jetbrains.compose.{group.removeprefix(compose_prefix)}"
     if group == navigation3_prefix or group.startswith(f"{navigation3_prefix}."):
@@ -396,7 +403,7 @@ def rewrite_module_dependency_groups(
                     group = "androidx.navigation3"
                     rewritten += 1
                 upstream_group = upstream_group_for_fork_dependency(
-                    group, group_prefix
+                    group, dependency.get("module"), group_prefix
                 )
                 was_fork_dependency = upstream_group is not None
                 if was_fork_dependency and is_root_metadata_publication:
@@ -468,11 +475,11 @@ def rewrite_pom_dependency_groups(
         group = group_match.group(1)
         legacy_navigation3_group = group == "org.jetbrains.androidx.navigation3"
         artifact_match = re.search(r"<artifactId>([^<]+)</artifactId>", dependency)
+        module = artifact_match.group(1) if artifact_match else None
         if (
             is_desktop_native
             and group == OFFICIAL_SKIKO_GROUP
-            and artifact_match is not None
-            and artifact_match.group(1) == SKIKO_MODULE
+            and module == SKIKO_MODULE
         ):
             dependency = dependency.replace(
                 f"<groupId>{group}</groupId>",
@@ -509,7 +516,7 @@ def rewrite_pom_dependency_groups(
             )
             group = "androidx.navigation3"
             rewritten += 1
-        upstream_group = upstream_group_for_fork_dependency(group, group_prefix)
+        upstream_group = upstream_group_for_fork_dependency(group, module, group_prefix)
         if upstream_group is not None and is_root_metadata_publication:
             dependency = dependency.replace(
                 f"<groupId>{group}</groupId>",

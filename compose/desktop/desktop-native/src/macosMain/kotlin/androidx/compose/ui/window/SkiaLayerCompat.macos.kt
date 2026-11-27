@@ -3,7 +3,18 @@
 package androidx.compose.ui.window
 
 import org.jetbrains.skia.Bitmap
+import org.jetbrains.skiko.GraphicsApi
 import org.jetbrains.skiko.SkiaLayer
+import org.jetbrains.skiko.SkikoRenderDelegate
+
+internal actual fun createNativeSkiaLayer(): SkiaLayer = SkiaLayer()
+
+internal actual val SkiaLayer.nativeRenderApi: GraphicsApi
+    get() = renderApi
+
+internal actual fun SkiaLayer.setNativeRenderDelegate(delegate: SkikoRenderDelegate) {
+    renderDelegate = delegate
+}
 
 internal actual val SkiaLayer.nativeRendererDescription: String
     get() = rendererDescription

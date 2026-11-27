@@ -235,7 +235,12 @@ private fun Project.configureComposeNativeSkikoResolution() {
                 "mingwx64" in lowerName ||
                 "macosx64" in lowerName ||
                 "macosarm64" in lowerName
-        val sharedDesktopNativeMetadata = desktopNativeRequested && "nativemain" in lowerName
+        val sharedDesktopNativeMetadata =
+            desktopNativeRequested &&
+                ("nativemain" in lowerName ||
+                    "linuxmain" in lowerName ||
+                    "linuxwindowsmain" in lowerName ||
+                    "macosmain" in lowerName)
         if (!desktopNativeTarget && !sharedDesktopNativeMetadata) {
             return@configureEach
         }

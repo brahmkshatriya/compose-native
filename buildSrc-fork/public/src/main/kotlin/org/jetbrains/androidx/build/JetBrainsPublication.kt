@@ -273,7 +273,7 @@ object JetBrainsPublication {
     /** The complete target-level graph required by the desktop-native Compose backend. */
     val nativeComponents: List<ComposeComponent>
         get() =
-            nativeComponentPaths.map { path ->
+            (nativeComponentPaths + ":compose:ui:ui-test").map { path ->
                 projectPathToComponent[path]?.copy(
                     supportedPlatforms =
                         ComposePlatforms.LINUX_NATIVE + ComposePlatforms.WINDOWS_NATIVE
@@ -288,8 +288,8 @@ object JetBrainsPublication {
     /**
      * The core fork dependency graph with each component's original platform support preserved.
      *
-     * This is used by Android/JS/Wasm platform shards so transitive fork dependencies are
-     * published at the same release version without pulling in unrelated tooling/test modules.
+     * This is used by Android/JS/Wasm platform shards so transitive fork dependencies are published
+     * at the same release version without pulling in unrelated tooling/test modules.
      */
     val platformGraphComponents: List<ComposeComponent>
         get() = nativeComponentPaths.mapNotNull(projectPathToComponent::get)

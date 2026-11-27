@@ -142,12 +142,15 @@ tasks.register("publishComposeMacosToMavenLocal", ComposePublishingTask::class) 
 
 tasks.register("publishComposeForkRootsToMavenLocal") {
     group = "Compose Multiplatform"
-    description = "Publishes fork KMP roots, including their common metadata artifacts"
+    description = "Publishes fork KMP roots shared across the release target matrix"
 
     JetBrainsPublication.nativeComponents
         .filterNot {
+            // UI testing depends on the desktop SDL interops. Publish its root with the
+            // Linux and Windows targets that ship the fork's ui-test binaries.
             it.path == ":compose:desktop:desktop-native" ||
-                it.path == ":compose:components:components-resources"
+                it.path == ":compose:components:components-resources" ||
+                it.path == ":compose:ui:ui-test"
         }
         .forEach { component ->
             rootProject.findProject(component.path)

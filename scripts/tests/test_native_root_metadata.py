@@ -125,6 +125,32 @@ class NativeRootMetadataTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "genuinely commonized"):
             metadata.create_desktop_native_metadata(self.repository, GROUP, "desktop-native", VERSION, self.shared)
 
+    def test_ui_test_root_keeps_fork_only_desktop_backend(self):
+        root = self.repository / "ui-test.module"
+        root.write_text(json.dumps({
+            "variants": [{
+                "name": "metadataApiElements",
+                "dependencies": [
+                    {"group": GROUP, "module": "desktop-native", "version": {"requires": VERSION}},
+                    {"group": "dev.brahmkshatriya.compose.ui", "module": "ui", "version": {"requires": VERSION}},
+                ],
+            }],
+        }))
+        upstream = "1.13.0-rc01"
+        metadata.rewrite_module_dependency_groups(
+            root, "dev.brahmkshatriya", VERSION, {"compose": upstream},
+            "dev.brahmkshatriya.skiko", "0.156.1",
+        )
+        desktop, ui = json.loads(root.read_text())["variants"][0]["dependencies"]
+        self.assertEqual(
+            {"group": GROUP, "module": "desktop-native", "version": {"requires": VERSION}},
+            desktop,
+        )
+        self.assertEqual(
+            {"group": "org.jetbrains.compose.ui", "module": "ui", "version": {"requires": upstream}},
+            ui,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
