@@ -37,7 +37,7 @@ The AndroidX version merged into `jb-main` does not establish a Compose Multipla
 - Flattened local snapshot base: `c1f04f0b9b7acda3849d76fe0d271f7255ad827c`
 - Upstream release tag: `v1.13.0-rc01`
 - Last integrated upstream tip: `f39822e6a77eea5d194e4f9bb56cb6961321b849`
-- Local single-parent integration commit: `fa267407f6ee01add3ea5896feb7922ad6051a80`
+- Local single-parent integration commit: `f71201e9b382d99d554e6d8c031973bf205def6f`
 
 Record the release tag, the commit it points to, and the local integration commit after each sync.
 
